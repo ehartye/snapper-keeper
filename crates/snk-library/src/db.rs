@@ -15,11 +15,12 @@ impl Db {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let conn = Connection::open(path)?;
+        let mut conn = Connection::open(path)?;
         // WAL gives us concurrent readers + a writer without DB-level locks fighting us.
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
+        crate::migrate::migrate(&mut conn)?;
         info!(path = %path.display(), "opened db");
         Ok(Self { conn: Mutex::new(conn) })
     }
