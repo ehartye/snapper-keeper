@@ -1,9 +1,21 @@
 [package]
 name = "snapper-keeper-app"
-version = "0.0.0"
+version = "0.0.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[build-dependencies]
+tauri-build.workspace = true
+
 [dependencies]
+tauri = { workspace = true, features = ["tray-icon"] }
+tauri-plugin-global-shortcut.workspace = true
+snk-library = { path = "../../crates/snk-library" }
+snk-hotkeys = { path = "../../crates/snk-hotkeys" }
+snk-capture = { path = "../../crates/snk-capture" }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

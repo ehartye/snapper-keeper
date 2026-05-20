@@ -8,6 +8,9 @@ dist/
 # Rust
 target/
 
+# Tauri auto-generated (regenerated on every build)
+app/src-tauri/gen/
+
 # OS
 .DS_Store
 Thumbs.db

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://schema.tauri.app/capabilities/2",
+  "identifier": "default",
+  "description": "Default permissions for the library window",
+  "windows": ["library"],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:event:default",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister",
+    "global-shortcut:allow-is-registered"
+  ]
+}

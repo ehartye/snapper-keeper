@@ -1,0 +1,39 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "snapper-keeper",
+  "version": "0.0.1",
+  "identifier": "com.snapper-keeper.app",
+  "build": {
+    "beforeDevCommand": "pnpm --filter @snk/app dev",
+    "beforeBuildCommand": "pnpm --filter @snk/app build",
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "library",
+        "title": "snapper-keeper",
+        "width": 1100,
+        "height": 720,
+        "minWidth": 700,
+        "minHeight": 500,
+        "resizable": true,
+        "visible": true,
+        "decorations": true
+      }
+    ],
+    "security": {
+      "csp": null
+    },
+    "trayIcon": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": ["icons/icon.png"]
+  }
+}
