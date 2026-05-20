@@ -24,7 +24,13 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": {
+          "allow": ["$APPDATA/**", "$APPLOCALDATA/**"]
+        }
+      }
     },
     "trayIcon": {
       "iconPath": "icons/icon.png",

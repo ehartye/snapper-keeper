@@ -2371,8 +2371,25 @@ git commit -m "feat(app): library window with capture grid and hotkey wiring"
 ## Task 18: Tauri asset protocol allow-list for the library directory
 
 **Files:**
+- Modify: `app/src-tauri/Cargo.toml` — add `protocol-asset` to the `tauri` crate's features
 - Modify: `app/src-tauri/tauri.conf.json`
 - Modify: `app/src-tauri/capabilities/default.json`
+
+**Step 0: Enable the `protocol-asset` feature on the `tauri` crate**
+
+`tauri-build` validates that any feature enabled in `tauri.conf.json` is also enabled on the `tauri` crate dependency. Without this, the next step will fail at build time with: `The 'tauri' dependency features on the 'Cargo.toml' file does not match the allowlist defined under 'tauri.conf.json'. Please run 'tauri dev' or 'tauri build' or add the 'protocol-asset' feature.`
+
+In `app/src-tauri/Cargo.toml`, find:
+
+```toml
+tauri = { workspace = true, features = ["tray-icon"] }
+```
+
+Replace with:
+
+```toml
+tauri = { workspace = true, features = ["tray-icon", "protocol-asset"] }
+```
 
 **Step 1: Allow asset access to the app data dir — modify `app/src-tauri/tauri.conf.json`**
 
@@ -2398,7 +2415,11 @@ Replace with:
     },
 ```
 
-**Step 2: Grant the library window permission to use the asset protocol — modify `app/src-tauri/capabilities/default.json`**
+**Step 2: Grant `core:path:default` so the frontend can resolve the app data dir — modify `app/src-tauri/capabilities/default.json`**
+
+Note: the asset protocol itself does NOT need a separate Tauri permission. It's gated entirely by the `protocol-asset` Cargo feature (Step 0) and the `assetProtocol` scope in `tauri.conf.json` (Step 1). The webview resolves `asset://` URLs against that scope directly, without going through a Tauri command. There is no `core:asset:default` permission in Tauri 2.
+
+We do need `core:path:default` because `CaptureGrid.tsx` calls `path.appDataDir()` (via `@tauri-apps/api`) to compute the library root for building asset URLs.
 
 Replace the existing `"permissions"` array with:
 
@@ -2408,7 +2429,6 @@ Replace the existing `"permissions"` array with:
     "core:window:default",
     "core:event:default",
     "core:path:default",
-    "core:asset:default",
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister",
     "global-shortcut:allow-is-registered"

@@ -10,7 +10,7 @@ publish.workspace = true
 tauri-build.workspace = true
 
 [dependencies]
-tauri = { workspace = true, features = ["tray-icon"] }
+tauri = { workspace = true, features = ["tray-icon", "protocol-asset"] }
 tauri-plugin-global-shortcut.workspace = true
 snk-library = { path = "../../crates/snk-library" }
 snk-hotkeys = { path = "../../crates/snk-hotkeys" }
