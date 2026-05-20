@@ -1773,7 +1773,9 @@ git commit -m "feat(app): scaffold Vite + React + Tailwind frontend"
 - Create: `app/src-tauri/tauri.conf.json`
 - Create: `app/src-tauri/src/main.rs`
 - Create: `app/src-tauri/icons/icon.png` (placeholder — see Step 6)
+- Create: `app/src-tauri/icons/icon.ico` (Windows-required — `tauri-build` fails the build on Windows without it; generate alongside the PNG)
 - Create: `app/src-tauri/capabilities/default.json`
+- Modify: `.gitignore` — add `app/src-tauri/gen/` (the directory `tauri-build` generates schemas into on every build; standard Tauri 2 convention to ignore it)
 
 **Step 1: Write `app/src-tauri/Cargo.toml`**
 
@@ -1959,14 +1961,14 @@ The Tauri CLI requires an icon. Run from repo root:
 pnpm --filter @snk/app tauri icon https://tauri.app/_astro/tauri_logo.svg
 ```
 
-If you don't have network access, generate a placeholder 512×512 solid-color PNG yourself:
+If you don't have network access, generate a placeholder PNG **and ICO** yourself (Windows builds need the `.ico`):
 
 ```bash
 # Python one-liner (or use any image tool you prefer):
-python -c "from PIL import Image; Image.new('RGBA',(512,512),(48,80,135,255)).save('app/src-tauri/icons/icon.png')"
+python -c "from PIL import Image; img = Image.new('RGBA',(512,512),(48,80,135,255)); img.save('app/src-tauri/icons/icon.png'); img.save('app/src-tauri/icons/icon.ico', sizes=[(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)])"
 ```
 
-Expected: `app/src-tauri/icons/icon.png` exists. (`tauri icon` will also generate platform-specific assets; that's a bonus.)
+Expected: both `app/src-tauri/icons/icon.png` and `app/src-tauri/icons/icon.ico` exist. (`tauri icon` will also generate platform-specific assets; that's a bonus.) Without the `.ico`, `cargo build -p snapper-keeper-app` on Windows fails with: `\`icons/icon.ico\` not found; required for generating a Windows Resource file during tauri-build`.
 
 **Step 7: Verify it compiles**
 
