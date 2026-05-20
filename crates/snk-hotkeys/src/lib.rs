@@ -1,1 +1,67 @@
-//! Placeholder. Real implementation lands in Task 10.
+//! snk-hotkeys — register global hotkeys and emit events when triggered.
+//!
+//! Phase 1 wires a fixed set of action ids → default chords. A later phase
+//! reads bindings from `snk-library` (settings) and supports remapping.
+
+use serde::{Deserialize, Serialize};
+use tauri::plugin::{Builder, TauriPlugin};
+use tauri::{Emitter, Manager, Runtime};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+use tracing::{info, warn};
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum HotkeyAction {
+    CaptureFullScreen,
+}
+
+impl HotkeyAction {
+    pub fn event_name(self) -> &'static str {
+        match self {
+            HotkeyAction::CaptureFullScreen => "hotkey:capture-full-screen",
+        }
+    }
+
+    pub fn default_chord(self) -> &'static str {
+        #[cfg(target_os = "macos")]
+        match self {
+            HotkeyAction::CaptureFullScreen => "Cmd+Shift+3",
+        }
+        #[cfg(not(target_os = "macos"))]
+        match self {
+            HotkeyAction::CaptureFullScreen => "CmdOrCtrl+Shift+3",
+        }
+    }
+}
+
+pub fn init<R: Runtime>() -> TauriPlugin<R> {
+    Builder::<R>::new("snk-hotkeys")
+        .setup(|app, _api| {
+            // Defer registration until global-shortcut plugin is initialized.
+            let handle = app.app_handle().clone();
+            app.run_on_main_thread(move || {
+                if let Err(e) = register_defaults(&handle) {
+                    warn!(error = %e, "failed to register default hotkeys");
+                }
+            })
+            .ok();
+            Ok(())
+        })
+        .build()
+}
+
+fn register_defaults<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
+    let actions = [HotkeyAction::CaptureFullScreen];
+    for action in actions {
+        let chord = action.default_chord();
+        let app2 = app.clone();
+        app.global_shortcut()
+            .on_shortcut(chord, move |_app, _sc, ev| {
+                if matches!(ev.state(), ShortcutState::Pressed) {
+                    let _ = app2.emit(action.event_name(), ());
+                }
+            })
+            .map_err(|e| format!("register {chord}: {e}"))?;
+        info!(%chord, "registered hotkey");
+    }
+    Ok(())
+}
