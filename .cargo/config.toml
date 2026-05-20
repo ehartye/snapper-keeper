@@ -1,0 +1,6 @@
+[build]
+# Build artifacts go into a single shared target dir
+target-dir = "target"
+
+[net]
+git-fetch-with-cli = true
