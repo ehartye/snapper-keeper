@@ -176,10 +176,11 @@ git commit -m "chore: initialize Cargo workspace"
   "devDependencies": {
     "@types/node": "^20.11.0",
     "eslint": "^9.0.0",
-    "@typescript-eslint/eslint-plugin": "^7.0.0",
-    "@typescript-eslint/parser": "^7.0.0",
+    "@eslint/js": "^9.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
     "eslint-plugin-react": "^7.34.0",
-    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
     "prettier": "^3.2.0",
     "typescript": "^5.4.0"
   }
@@ -2500,31 +2501,89 @@ If anything failed, fix the underlying issue and commit the fix separately. Comm
 
 ---
 
-## Task 20: Frontend lint + typecheck scripts
+## Task 20: Frontend lint + typecheck green
 
-**Files:**
-- Modify: `packages/snk-library/package.json`
-- Modify: `packages/snk-capture/package.json`
-- Modify: `app/package.json`
+**Files (may include):**
+- Delete: `.eslintrc.cjs`
+- Create: `eslint.config.js` (ESLint v9 flat config)
+- Modify: any TS/TSX file with real lint findings
 
-(Most of these scripts already exist; this task verifies they all work end-to-end and adds anything missing.)
+(Most package.json scripts already exist; this task verifies they work end-to-end and fixes anything that doesn't.)
 
-**Step 1: Run lint**
-
-Run: `pnpm lint`
-Expected: no errors. If there are unused-import or any-type warnings, fix them inline (do not suppress).
-
-**Step 2: Run typecheck**
+**Step 1: Run typecheck**
 
 Run: `pnpm typecheck`
-Expected: clean.
+Expected: clean across all 3 TS workspaces.
+
+**Step 2: Run lint**
+
+Run: `pnpm lint`
+
+**If ESLint complains about missing `eslint.config.js`:** Task 2 shipped `.eslintrc.cjs` (legacy format), but the installed ESLint (`^9.0.0`) dropped support for `.eslintrc.*` entirely. Migrate to flat config:
+
+1. Delete `.eslintrc.cjs`.
+2. Add the `globals` dev dep (browser globals are not bundled in v9 flat config): `pnpm add -D -w globals`.
+3. Create `eslint.config.mjs` (note the `.mjs` extension — using `.js` triggers a `MODULE_TYPELESS_PACKAGE_JSON` warning on every invocation because the root `package.json` has no `"type": "module"`) at repo root:
+
+```js
+import js from '@eslint/js';
+import tsParser from '@typescript-eslint/parser';
+import tsPlugin from '@typescript-eslint/eslint-plugin';
+import reactPlugin from 'eslint-plugin-react';
+import reactHooks from 'eslint-plugin-react-hooks';
+import globals from 'globals';
+
+export default [
+  {
+    ignores: ['**/dist/**', '**/node_modules/**', '**/target/**', '**/src-tauri/gen/**'],
+  },
+  js.configs.recommended,
+  {
+    files: ['**/*.{ts,tsx}'],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: { ecmaVersion: 2022, sourceType: 'module', ecmaFeatures: { jsx: true } },
+    },
+    plugins: { '@typescript-eslint': tsPlugin },
+    rules: {
+      ...tsPlugin.configs.recommended.rules,
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    },
+  },
+  {
+    // React rules only apply to .tsx files. Splitting them into their own block
+    // avoids "React version was set to 'detect' but the 'react' package is not
+    // installed" warnings when linting non-React TS packages (snk-library, snk-capture).
+    files: ['**/*.tsx'],
+    languageOptions: {
+      globals: { ...globals.browser },
+    },
+    plugins: { react: reactPlugin, 'react-hooks': reactHooks },
+    settings: { react: { version: 'detect' } },
+    rules: {
+      ...reactPlugin.configs.recommended.rules,
+      ...reactHooks.configs.recommended.rules,
+      'react/react-in-jsx-scope': 'off',
+    },
+  },
+];
+```
+
+4. Re-run `pnpm lint`.
+
+**Once lint runs**, fix any real findings inline (no `eslint-disable`, no `as any`).
 
 **Step 3: Commit any fixes**
 
+Stage explicitly. If you migrated to flat config, the commit includes `.eslintrc.cjs` deletion, `eslint.config.js` creation, root `package.json` update, `pnpm-lock.yaml`, and any source fixes:
+
 ```bash
-git add -A
-git commit -m "chore: lint + typecheck baseline green" || echo "nothing to commit"
+git add eslint.config.js package.json pnpm-lock.yaml <any modified source files>
+git rm .eslintrc.cjs
+git commit -m "chore: lint + typecheck baseline green"
 ```
+
+If lint and typecheck were already green, no commit needed.
 
 ---
 
