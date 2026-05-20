@@ -336,8 +336,8 @@ pub enum LibraryError {
     #[error("database error: {message}")]
     Database { message: String, retryable: bool },
 
-    #[error("io error at {path}: {kind}")]
-    Io { path: String, kind: String },
+    #[error("io error at {path}: {reason}")]
+    Io { path: String, reason: String },
 
     #[error("migration failed from {from} to {to}")]
     Migration { from: u32, to: u32, recoverable: bool },
@@ -362,7 +362,7 @@ impl From<std::io::Error> for LibraryError {
     fn from(e: std::io::Error) -> Self {
         LibraryError::Io {
             path: String::new(),
-            kind: e.kind().to_string(),
+            reason: e.kind().to_string(),
         }
     }
 }
@@ -700,7 +700,7 @@ pub fn insert(db: &Db, new: NewCapture) -> Result<Capture> {
         .to_str()
         .ok_or_else(|| crate::LibraryError::Io {
             path: new.file_path.display().to_string(),
-            kind: "non-utf8 path".into(),
+            reason: "non-utf8 path".into(),
         })?
         .to_string();
 
