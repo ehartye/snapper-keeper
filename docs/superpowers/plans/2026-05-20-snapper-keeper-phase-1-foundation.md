@@ -2291,7 +2291,6 @@ import { listen } from '@tauri-apps/api/event';
 
 import { CAPTURE_FULL_SCREEN_EVENT, captureFullScreen } from '@snk/capture';
 
-import { queryKeys } from '../../lib/queryKeys';
 import { CaptureGrid } from './CaptureGrid';
 
 export function LibraryWindow() {
