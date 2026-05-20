@@ -5,5 +5,7 @@
 //! in later phases.
 
 pub mod error;
+pub mod grab;
 
 pub use error::{CaptureError, Result};
+pub use grab::{grab_primary_monitor, GrabResult};
