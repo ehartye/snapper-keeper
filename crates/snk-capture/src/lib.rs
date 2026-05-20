@@ -4,8 +4,12 @@
 //! window capture, timed capture, and the floating post-capture toolbar come
 //! in later phases.
 
+pub mod commands;
 pub mod error;
 pub mod grab;
+pub mod orchestrate;
+pub mod plugin;
 
 pub use error::{CaptureError, Result};
 pub use grab::{grab_primary_monitor, GrabResult};
+pub use plugin::init;
