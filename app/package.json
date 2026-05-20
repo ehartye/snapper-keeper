@@ -12,6 +12,8 @@
     "test": "echo 'no frontend tests yet'"
   },
   "dependencies": {
+    "@snk/library": "workspace:*",
+    "@snk/capture": "workspace:*",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-global-shortcut": "^2.0.0",
     "@tanstack/react-query": "^5.40.0",

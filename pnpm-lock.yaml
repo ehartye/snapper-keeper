@@ -35,6 +35,12 @@ importers:
 
   app:
     dependencies:
+      '@snk/capture':
+        specifier: workspace:*
+        version: link:../packages/snk-capture
+      '@snk/library':
+        specifier: workspace:*
+        version: link:../packages/snk-library
       '@tanstack/react-query':
         specifier: ^5.40.0
         version: 5.100.11(react@18.3.1)
@@ -81,6 +87,29 @@ importers:
       vite:
         specifier: ^5.2.0
         version: 5.4.21(@types/node@20.19.41)
+
+  packages/snk-capture:
+    dependencies:
+      '@snk/library':
+        specifier: workspace:*
+        version: link:../snk-library
+      '@tauri-apps/api':
+        specifier: ^2.0.0
+        version: 2.11.0
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
+  packages/snk-library:
+    dependencies:
+      '@tauri-apps/api':
+        specifier: ^2.0.0
+        version: 2.11.0
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
 
 packages:
 

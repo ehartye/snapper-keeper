@@ -1,0 +1,18 @@
+export interface Capture {
+  id: string;
+  file_path: string;
+  annotated_path: string | null;
+  width: number;
+  height: number;
+  source_app: string | null;
+  source_window_title: string | null;
+  monitor: string | null;
+  created_at: number;
+  deleted_at: number | null;
+  pinned: boolean;
+}
+
+export interface ListCapturesQuery {
+  limit?: number;
+  include_deleted?: boolean;
+}
