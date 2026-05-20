@@ -76,6 +76,62 @@ pub fn insert(db: &Db, new: NewCapture) -> Result<Capture> {
     })
 }
 
+fn row_to_capture(row: &rusqlite::Row<'_>) -> rusqlite::Result<Capture> {
+    Ok(Capture {
+        id: row.get("id")?,
+        file_path: row.get("file_path")?,
+        annotated_path: row.get("annotated_path")?,
+        width: row.get::<_, i64>("width")? as u32,
+        height: row.get::<_, i64>("height")? as u32,
+        source_app: row.get("source_app")?,
+        source_window_title: row.get("source_window_title")?,
+        monitor: row.get("monitor")?,
+        created_at: row.get("created_at")?,
+        deleted_at: row.get("deleted_at")?,
+        pinned: row.get::<_, i64>("pinned")? != 0,
+    })
+}
+
+pub fn get(db: &Db, id: &str) -> Result<Capture> {
+    db.with_conn(|conn| {
+        let row = conn
+            .query_row(
+                "SELECT * FROM captures WHERE id = ?1 AND deleted_at IS NULL",
+                [id],
+                row_to_capture,
+            )
+            .map_err(|e| match e {
+                rusqlite::Error::QueryReturnedNoRows => crate::LibraryError::NotFound {
+                    what: format!("capture {id}"),
+                },
+                other => other.into(),
+            })?;
+        Ok(row)
+    })
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ListCapturesQuery {
+    pub limit: Option<u32>,
+    pub include_deleted: bool,
+}
+
+pub fn list(db: &Db, q: ListCapturesQuery) -> Result<Vec<Capture>> {
+    let limit = q.limit.unwrap_or(200).min(1000);
+    db.with_conn(|conn| {
+        let sql = if q.include_deleted {
+            "SELECT * FROM captures ORDER BY created_at DESC LIMIT ?1"
+        } else {
+            "SELECT * FROM captures WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT ?1"
+        };
+        let mut stmt = conn.prepare(sql)?;
+        let rows = stmt
+            .query_map([limit], row_to_capture)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -125,5 +181,52 @@ mod tests {
             Ok(())
         })
         .unwrap();
+    }
+
+    #[test]
+    fn get_returns_inserted() {
+        let db = fresh_db();
+        let new = NewCapture {
+            file_path: PathBuf::from("a.png"),
+            width: 10, height: 10,
+            source_app: None, source_window_title: None, monitor: None,
+        };
+        let inserted = insert(&db, new).unwrap();
+        let fetched = get(&db, &inserted.id).unwrap();
+        assert_eq!(fetched, inserted);
+    }
+
+    #[test]
+    fn get_returns_not_found_for_missing_id() {
+        let db = fresh_db();
+        match get(&db, "no-such-id") {
+            Err(crate::LibraryError::NotFound { .. }) => {}
+            other => panic!("expected NotFound, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn list_returns_newest_first_and_excludes_deleted() {
+        let db = fresh_db();
+        let mk = |i: u32| NewCapture {
+            file_path: PathBuf::from(format!("{i}.png")),
+            width: i, height: i,
+            source_app: None, source_window_title: None, monitor: None,
+        };
+        let a = insert(&db, mk(1)).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        let b = insert(&db, mk(2)).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        let c = insert(&db, mk(3)).unwrap();
+
+        // Soft-delete `b`
+        db.with_conn(|conn| {
+            conn.execute("UPDATE captures SET deleted_at=?1 WHERE id=?2", rusqlite::params![1_i64, &b.id])?;
+            Ok(())
+        }).unwrap();
+
+        let rows = list(&db, ListCapturesQuery::default()).unwrap();
+        let ids: Vec<&str> = rows.iter().map(|r| r.id.as_str()).collect();
+        assert_eq!(ids, vec![c.id.as_str(), a.id.as_str()]);
     }
 }
