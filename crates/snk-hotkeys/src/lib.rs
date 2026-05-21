@@ -3,6 +3,8 @@
 //! Phase 1 wires a fixed set of action ids → default chords. A later phase
 //! reads bindings from `snk-library` (settings) and supports remapping.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use serde::{Deserialize, Serialize};
 use tauri::plugin::{Builder, TauriPlugin};
 use tauri::{Emitter, Listener, Manager, Runtime};
@@ -56,7 +58,11 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             // pump is running — otherwise Windows' RegisterHotKey returns
             // error 1459 (interactive window station).
             let handle = app.app_handle().clone();
+            let registered = AtomicBool::new(false);
             app.listen_any("tauri://window-created", move |_event| {
+                if registered.swap(true, Ordering::SeqCst) {
+                    return;
+                }
                 if let Err(e) = register_defaults(&handle) {
                     warn!(error = %e, "failed to register default hotkeys");
                 }
