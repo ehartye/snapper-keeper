@@ -21,3 +21,12 @@ pub fn get_capture<R: Runtime>(
 ) -> Result<Capture> {
     captures::get(&state.db, &id)
 }
+
+#[tauri::command]
+pub fn soft_delete_capture<R: Runtime>(
+    state: State<'_, LibraryState>,
+    _app: tauri::AppHandle<R>,
+    id: String,
+) -> Result<()> {
+    captures::soft_delete(&state.db, &id)
+}

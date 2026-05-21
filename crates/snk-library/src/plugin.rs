@@ -16,6 +16,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         .invoke_handler(tauri::generate_handler![
             crate::commands::list_captures,
             crate::commands::get_capture,
+            crate::commands::soft_delete_capture,
         ])
         .setup(|app, _api| {
             let root = app

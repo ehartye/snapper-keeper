@@ -132,6 +132,22 @@ pub fn list(db: &Db, q: ListCapturesQuery) -> Result<Vec<Capture>> {
     })
 }
 
+pub fn soft_delete(db: &Db, id: &str) -> Result<()> {
+    let now = chrono::Utc::now().timestamp_millis();
+    db.with_conn(|conn| {
+        let changed = conn.execute(
+            "UPDATE captures SET deleted_at = ?1 WHERE id = ?2 AND deleted_at IS NULL",
+            rusqlite::params![now, id],
+        )?;
+        if changed == 0 {
+            return Err(crate::LibraryError::NotFound {
+                what: format!("capture {id}"),
+            });
+        }
+        Ok(())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -245,5 +261,42 @@ mod tests {
         let rows = list(&db, ListCapturesQuery::default()).unwrap();
         let ids: Vec<&str> = rows.iter().map(|r| r.id.as_str()).collect();
         assert_eq!(ids, vec![c.id.as_str(), a.id.as_str()]);
+    }
+
+    #[test]
+    fn soft_delete_sets_deleted_at() {
+        let db = fresh_db();
+        let new = NewCapture {
+            file_path: PathBuf::from("del.png"),
+            width: 1,
+            height: 1,
+            source_app: None,
+            source_window_title: None,
+            monitor: None,
+        };
+        let c = insert(&db, new).unwrap();
+        assert!(c.deleted_at.is_none());
+
+        soft_delete(&db, &c.id).unwrap();
+
+        let rows = list(
+            &db,
+            ListCapturesQuery {
+                limit: None,
+                include_deleted: true,
+            },
+        )
+        .unwrap();
+        let found = rows.iter().find(|r| r.id == c.id).unwrap();
+        assert!(found.deleted_at.is_some());
+    }
+
+    #[test]
+    fn soft_delete_nonexistent_returns_not_found() {
+        let db = fresh_db();
+        match soft_delete(&db, "no-such-id") {
+            Err(crate::LibraryError::NotFound { .. }) => {}
+            other => panic!("expected NotFound, got {other:?}"),
+        }
     }
 }
