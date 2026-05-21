@@ -2,6 +2,7 @@ import { useEffect, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { LogicalPosition } from '@tauri-apps/api/dpi';
 
 import {
   CAPTURE_FULL_SCREEN_EVENT,
@@ -10,6 +11,7 @@ import {
   CAPTURE_TIMED_EVENT,
   captureFullScreen,
 } from '@snk/capture';
+import { CLIPBOARD_HISTORY_EVENT, showPopup } from '@snk/clipboard';
 
 import { CaptureGrid } from './CaptureGrid';
 
@@ -81,6 +83,21 @@ export function LibraryWindow() {
     }, 5000);
   }, [refreshCaptures, showToolbar]);
 
+  const handleClipboardHistory = useCallback(async () => {
+    try {
+      const pos = await showPopup();
+      const popup = await WebviewWindow.getByLabel('clipboard-popup');
+      if (popup) {
+        await popup.setPosition(new LogicalPosition(pos.x, pos.y));
+        await popup.emit(CLIPBOARD_HISTORY_EVENT, {});
+        await popup.show();
+        await popup.setFocus();
+      }
+    } catch (e) {
+      console.error('clipboard popup failed', e);
+    }
+  }, []);
+
   useEffect(() => {
     const unlisteners: (() => void)[] = [];
     const setup = async () => {
@@ -88,16 +105,17 @@ export function LibraryWindow() {
       unlisteners.push(await listen(CAPTURE_REGION_EVENT, handleRegion));
       unlisteners.push(await listen(CAPTURE_WINDOW_EVENT, handleWindow));
       unlisteners.push(await listen(CAPTURE_TIMED_EVENT, handleTimed));
+      unlisteners.push(await listen(CLIPBOARD_HISTORY_EVENT, handleClipboardHistory));
     };
     setup().catch((e) => console.error('listen setup failed', e));
     return () => unlisteners.forEach((fn) => fn());
-  }, [handleFullScreen, handleRegion, handleWindow, handleTimed]);
+  }, [handleFullScreen, handleRegion, handleWindow, handleTimed, handleClipboardHistory]);
 
   return (
     <main className="h-full flex flex-col">
       <header className="px-4 py-2 border-b border-slate-800 flex items-center gap-3">
         <h1 className="text-sm font-semibold">snapper-keeper</h1>
-        <span className="text-xs text-slate-500">phase 3 · annotation editor</span>
+        <span className="text-xs text-slate-500">phase 4 · clipboard</span>
         <div className="flex-1" />
         <button
           className="bg-slate-800 hover:bg-slate-700 text-slate-100 px-3 py-1 rounded text-xs"
