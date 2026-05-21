@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useCallback, type MutableRefObject } from 'react';
 import { Stage, Layer, Image as KonvaImage, Rect } from 'react-konva';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import type Konva from 'konva';
 
 import { useAnnotateStore } from './store';
@@ -58,6 +59,11 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        useAnnotateStore.getState().reset();
+        getCurrentWindow().hide();
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
         e.preventDefault();
         if (e.shiftKey) {
