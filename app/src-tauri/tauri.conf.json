@@ -21,6 +21,18 @@
         "resizable": true,
         "visible": false,
         "decorations": true
+      },
+      {
+        "label": "capture-toolbar",
+        "title": "",
+        "width": 280,
+        "height": 48,
+        "resizable": false,
+        "alwaysOnTop": true,
+        "decorations": false,
+        "transparent": true,
+        "visible": false,
+        "skipTaskbar": true
       }
     ],
     "security": {
