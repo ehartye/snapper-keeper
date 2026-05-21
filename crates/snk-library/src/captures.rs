@@ -556,4 +556,24 @@ mod tests {
         assert_eq!(normal.len(), 1);
         assert_eq!(normal[0].id, a.id);
     }
+
+    #[test]
+    fn query_deserializes_from_empty_json() {
+        let q: ListCapturesQuery = serde_json::from_str("{}").unwrap();
+        assert_eq!(q.limit, None);
+        assert!(!q.include_deleted);
+        assert!(!q.pinned_only);
+        assert!(!q.deleted_only);
+        assert_eq!(q.since, None);
+        assert_eq!(q.tag_id, None);
+    }
+
+    #[test]
+    fn query_deserializes_from_partial_json() {
+        let q: ListCapturesQuery =
+            serde_json::from_str(r#"{"pinned_only": true}"#).unwrap();
+        assert!(q.pinned_only);
+        assert!(!q.include_deleted);
+        assert!(!q.deleted_only);
+    }
 }
