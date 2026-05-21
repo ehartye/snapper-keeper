@@ -92,6 +92,14 @@ fn row_to_capture(row: &rusqlite::Row<'_>) -> rusqlite::Result<Capture> {
     })
 }
 
+pub fn annotated_relative_path(original: &str) -> PathBuf {
+    let p = PathBuf::from(original);
+    match p.extension().and_then(|e| e.to_str()) {
+        Some(ext) => p.with_extension(format!("annotated.{ext}")),
+        None => PathBuf::from(format!("{original}.annotated")),
+    }
+}
+
 pub fn get(db: &Db, id: &str) -> Result<Capture> {
     db.with_conn(|conn| {
         let row = conn
@@ -138,6 +146,21 @@ pub fn soft_delete(db: &Db, id: &str) -> Result<()> {
         let changed = conn.execute(
             "UPDATE captures SET deleted_at = ?1 WHERE id = ?2 AND deleted_at IS NULL",
             rusqlite::params![now, id],
+        )?;
+        if changed == 0 {
+            return Err(crate::LibraryError::NotFound {
+                what: format!("capture {id}"),
+            });
+        }
+        Ok(())
+    })
+}
+
+pub fn set_annotated_path(db: &Db, id: &str, annotated_path: &str) -> Result<()> {
+    db.with_conn(|conn| {
+        let changed = conn.execute(
+            "UPDATE captures SET annotated_path = ?1 WHERE id = ?2 AND deleted_at IS NULL",
+            rusqlite::params![annotated_path, id],
         )?;
         if changed == 0 {
             return Err(crate::LibraryError::NotFound {
@@ -295,6 +318,47 @@ mod tests {
     fn soft_delete_nonexistent_returns_not_found() {
         let db = fresh_db();
         match soft_delete(&db, "no-such-id") {
+            Err(crate::LibraryError::NotFound { .. }) => {}
+            other => panic!("expected NotFound, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn annotated_relative_path_appends_annotated_suffix() {
+        let p = annotated_relative_path("captures/2026/05/abc.png");
+        assert_eq!(p, std::path::PathBuf::from("captures/2026/05/abc.annotated.png"));
+    }
+
+    #[test]
+    fn annotated_relative_path_handles_no_extension() {
+        let p = annotated_relative_path("captures/2026/05/abc");
+        assert_eq!(p, std::path::PathBuf::from("captures/2026/05/abc.annotated"));
+    }
+
+    #[test]
+    fn set_annotated_path_updates_column() {
+        let db = fresh_db();
+        let new = NewCapture {
+            file_path: PathBuf::from("a.png"),
+            width: 10,
+            height: 10,
+            source_app: None,
+            source_window_title: None,
+            monitor: None,
+        };
+        let c = insert(&db, new).unwrap();
+        assert!(c.annotated_path.is_none());
+
+        set_annotated_path(&db, &c.id, "a.annotated.png").unwrap();
+
+        let updated = get(&db, &c.id).unwrap();
+        assert_eq!(updated.annotated_path.as_deref(), Some("a.annotated.png"));
+    }
+
+    #[test]
+    fn set_annotated_path_nonexistent_returns_not_found() {
+        let db = fresh_db();
+        match set_annotated_path(&db, "no-such-id", "x.annotated.png") {
             Err(crate::LibraryError::NotFound { .. }) => {}
             other => panic!("expected NotFound, got {other:?}"),
         }
