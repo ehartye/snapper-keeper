@@ -1,14 +1,56 @@
+use std::fmt;
 use std::path::PathBuf;
 
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{Db, Result};
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ClipboardItemKind {
+    Text,
+    Image,
+}
+
+impl ClipboardItemKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ClipboardItemKind::Text => "text",
+            ClipboardItemKind::Image => "image",
+        }
+    }
+}
+
+impl fmt::Display for ClipboardItemKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl ToSql for ClipboardItemKind {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        Ok(ToSqlOutput::from(self.as_str()))
+    }
+}
+
+impl FromSql for ClipboardItemKind {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match value.as_str()? {
+            "text" => Ok(ClipboardItemKind::Text),
+            "image" => Ok(ClipboardItemKind::Image),
+            other => Err(FromSqlError::Other(
+                format!("unknown clipboard_item kind: {other}").into(),
+            )),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ClipboardItem {
     pub id: String,
-    pub kind: String,
+    pub kind: ClipboardItemKind,
     pub text_content: Option<String>,
     pub file_path: Option<String>,
     pub content_hash: String,
@@ -21,7 +63,7 @@ pub struct ClipboardItem {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewClipboardItem {
-    pub kind: String,
+    pub kind: ClipboardItemKind,
     pub text_content: Option<String>,
     pub file_path: Option<PathBuf>,
     pub content_hash: String,
@@ -208,7 +250,7 @@ mod tests {
 
     fn sample_item(hash: &str) -> NewClipboardItem {
         NewClipboardItem {
-            kind: "text".into(),
+            kind: ClipboardItemKind::Text,
             text_content: Some("hello world".into()),
             file_path: None,
             content_hash: hash.into(),
@@ -221,12 +263,31 @@ mod tests {
     fn insert_and_get() {
         let db = fresh_db();
         let item = insert(&db, sample_item("abc123")).unwrap();
-        assert_eq!(item.kind, "text");
+        assert_eq!(item.kind, ClipboardItemKind::Text);
         assert_eq!(item.content_hash, "abc123");
         assert!(!item.pinned);
 
         let fetched = get(&db, &item.id).unwrap();
         assert_eq!(fetched, item);
+    }
+
+    #[test]
+    fn kind_round_trips_through_sqlite() {
+        let db = fresh_db();
+        let mut img = sample_item("img-hash");
+        img.kind = ClipboardItemKind::Image;
+        let inserted = insert(&db, img).unwrap();
+        assert_eq!(inserted.kind, ClipboardItemKind::Image);
+        let fetched = get(&db, &inserted.id).unwrap();
+        assert_eq!(fetched.kind, ClipboardItemKind::Image);
+    }
+
+    #[test]
+    fn kind_serializes_as_lowercase_string() {
+        let json = serde_json::to_string(&ClipboardItemKind::Text).unwrap();
+        assert_eq!(json, "\"text\"");
+        let json = serde_json::to_string(&ClipboardItemKind::Image).unwrap();
+        assert_eq!(json, "\"image\"");
     }
 
     #[test]

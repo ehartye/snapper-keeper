@@ -5,7 +5,7 @@ use std::time::Duration;
 use arboard::Clipboard;
 use tracing::{debug, error, warn};
 
-use snk_library::clipboard::{self, NewClipboardItem};
+use snk_library::clipboard::{self, ClipboardItemKind, NewClipboardItem};
 use snk_library::{files, Db};
 
 use crate::hasher;
@@ -70,7 +70,7 @@ fn poll_text(clip: &mut Clipboard, db: &Db, last_hash: &mut Option<String>) -> b
         }
         Ok(None) => {
             let new_item = NewClipboardItem {
-                kind: "text".into(),
+                kind: ClipboardItemKind::Text,
                 text_content: Some(text),
                 file_path: None,
                 content_hash: hash,
@@ -117,7 +117,7 @@ fn poll_image(
                 return;
             }
             let new_item = NewClipboardItem {
-                kind: "image".into(),
+                kind: ClipboardItemKind::Image,
                 text_content: None,
                 file_path: Some(relative),
                 content_hash: hash,

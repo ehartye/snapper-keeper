@@ -10,7 +10,7 @@ pub mod migrate;
 pub mod plugin;
 
 pub use captures::{Capture, ListCapturesQuery, NewCapture};
-pub use clipboard::{ClipboardItem, ListClipboardQuery, NewClipboardItem};
+pub use clipboard::{ClipboardItem, ClipboardItemKind, ListClipboardQuery, NewClipboardItem};
 pub use db::Db;
 pub use error::{LibraryError, Result};
 pub use plugin::{init, LibraryState};
