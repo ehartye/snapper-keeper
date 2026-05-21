@@ -22,6 +22,7 @@ fn main() {
         .plugin(snk_capture::init())
         .plugin(snk_annotate::init())
         .plugin(snk_clipboard::init())
+        .plugin(snk_ocr::init())
         .setup(|app| {
             let capture_region = MenuItem::with_id(
                 app,

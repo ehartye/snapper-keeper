@@ -14,6 +14,7 @@
     "snk-library:default",
     "snk-capture:default",
     "snk-annotate:default",
-    "snk-clipboard:default"
+    "snk-clipboard:default",
+    "snk-ocr:default"
   ]
 }

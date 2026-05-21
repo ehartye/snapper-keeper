@@ -17,6 +17,7 @@ snk-hotkeys = { path = "../../crates/snk-hotkeys" }
 snk-capture = { path = "../../crates/snk-capture" }
 snk-annotate = { path = "../../crates/snk-annotate" }
 snk-clipboard = { path = "../../crates/snk-clipboard" }
+snk-ocr = { path = "../../crates/snk-ocr" }
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true

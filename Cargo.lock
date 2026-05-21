@@ -3583,6 +3583,7 @@ dependencies = [
  "snk-clipboard",
  "snk-hotkeys",
  "snk-library",
+ "snk-ocr",
  "tauri",
  "tauri-build",
  "tauri-plugin-global-shortcut",
