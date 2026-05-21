@@ -8,24 +8,23 @@ CREATE TABLE ocr_text (
     created_at  INTEGER NOT NULL  -- unix ms
 );
 
--- Contentless-delete FTS5 — we own population explicitly.
--- contentless_delete=1 enables DELETE by rowid/UNINDEXED column (requires SQLite 3.43+;
--- rusqlite 0.31 bundles 3.45+). Without this flag, DELETE is not supported on contentless tables.
+-- Regular FTS5 (not contentless). Contentless mode (content='') was considered but
+-- returns NULL for every column except rowid on SELECT, including UNINDEXED columns —
+-- making our capture_id/clipboard_id lookup pattern unworkable. The contentless_unindexed=1
+-- option fixes that but requires SQLite 3.47+; libsqlite3-sys 0.28 / rusqlite 0.31 bundles
+-- SQLite 3.45. Regular FTS5 stores the indexed text columns (small strings) and supports
+-- DELETE natively.
 CREATE VIRTUAL TABLE captures_fts USING fts5(
     capture_id UNINDEXED,
     source_app,
     window_title,
     ocr_text,
-    tag_names,
-    content='',
-    contentless_delete=1
+    tag_names
 );
 
 CREATE VIRTUAL TABLE clipboard_fts USING fts5(
     clipboard_id UNINDEXED,
     text_content,
     source_app,
-    window_title,
-    content='',
-    contentless_delete=1
+    window_title
 );
