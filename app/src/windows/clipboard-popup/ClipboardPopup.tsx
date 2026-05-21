@@ -6,7 +6,7 @@ import {
   listClipboardItems,
   pasteItem,
   toggleClipboardPin,
-  CLIPBOARD_HISTORY_EVENT,
+  CLIPBOARD_POPUP_SHOW_EVENT,
 } from '@snk/clipboard';
 
 import { useClipboardPopupStore } from './store';
@@ -39,7 +39,7 @@ export function ClipboardPopup() {
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
-    listen(CLIPBOARD_HISTORY_EVENT, async () => {
+    listen(CLIPBOARD_POPUP_SHOW_EVENT, async () => {
       reset();
       await loadItems();
       const win = getCurrentWindow();

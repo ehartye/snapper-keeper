@@ -5,6 +5,7 @@ import type { ClipboardItem, ListClipboardQuery, CaretPosition } from './types';
 export * from './types';
 
 export const CLIPBOARD_HISTORY_EVENT = 'hotkey:clipboard-history';
+export const CLIPBOARD_POPUP_SHOW_EVENT = 'clipboard-popup:show';
 
 export function listClipboardItems(query?: ListClipboardQuery): Promise<ClipboardItem[]> {
   return invoke<ClipboardItem[]>('plugin:snk-library|list_clipboard_items', { query });

@@ -11,7 +11,7 @@ import {
   CAPTURE_TIMED_EVENT,
   captureFullScreen,
 } from '@snk/capture';
-import { CLIPBOARD_HISTORY_EVENT, showPopup } from '@snk/clipboard';
+import { CLIPBOARD_HISTORY_EVENT, CLIPBOARD_POPUP_SHOW_EVENT, showPopup } from '@snk/clipboard';
 
 import { CaptureGrid } from './CaptureGrid';
 
@@ -89,7 +89,7 @@ export function LibraryWindow() {
       const popup = await WebviewWindow.getByLabel('clipboard-popup');
       if (popup) {
         await popup.setPosition(new LogicalPosition(pos.x, pos.y));
-        await popup.emit(CLIPBOARD_HISTORY_EVENT, {});
+        await popup.emit(CLIPBOARD_POPUP_SHOW_EVENT, {});
         await popup.show();
         await popup.setFocus();
       }
