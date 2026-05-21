@@ -132,19 +132,53 @@ pub fn get(db: &Db, id: &str) -> Result<Capture> {
 pub struct ListCapturesQuery {
     pub limit: Option<u32>,
     pub include_deleted: bool,
+    pub since: Option<i64>,
+    pub pinned_only: bool,
+    pub tag_id: Option<String>,
+    pub deleted_only: bool,
 }
 
 pub fn list(db: &Db, q: ListCapturesQuery) -> Result<Vec<Capture>> {
-    let limit = q.limit.unwrap_or(200).min(1000);
+    let limit = q.limit.unwrap_or(200).min(1000) as i64;
     db.with_conn(|conn| {
-        let sql = if q.include_deleted {
-            "SELECT * FROM captures ORDER BY created_at DESC LIMIT ?1"
+        let mut clauses: Vec<String> = Vec::new();
+        let mut values: Vec<rusqlite::types::Value> = Vec::new();
+
+        if q.deleted_only {
+            clauses.push("deleted_at IS NOT NULL".into());
+        } else if !q.include_deleted {
+            clauses.push("deleted_at IS NULL".into());
+        }
+
+        if let Some(since) = q.since {
+            values.push(rusqlite::types::Value::Integer(since));
+            clauses.push("created_at >= ?".into());
+        }
+
+        if q.pinned_only {
+            clauses.push("pinned = 1".into());
+        }
+
+        if let Some(ref tag_id) = q.tag_id {
+            values.push(rusqlite::types::Value::Text(tag_id.clone()));
+            clauses.push("id IN (SELECT capture_id FROM capture_tags WHERE tag_id = ?)".into());
+        }
+
+        let where_sql = if clauses.is_empty() {
+            String::new()
         } else {
-            "SELECT * FROM captures WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT ?1"
+            format!(" WHERE {}", clauses.join(" AND "))
         };
-        let mut stmt = conn.prepare(sql)?;
+
+        values.push(rusqlite::types::Value::Integer(limit));
+        let sql = format!(
+            "SELECT * FROM captures{} ORDER BY created_at DESC LIMIT ?",
+            where_sql
+        );
+
+        let mut stmt = conn.prepare(&sql)?;
         let rows = stmt
-            .query_map([limit], row_to_capture)?
+            .query_map(rusqlite::params_from_iter(values), row_to_capture)?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(rows)
     })
@@ -315,8 +349,8 @@ mod tests {
         let rows = list(
             &db,
             ListCapturesQuery {
-                limit: None,
                 include_deleted: true,
+                ..Default::default()
             },
         )
         .unwrap();
@@ -398,5 +432,130 @@ mod tests {
             crate::search::SearchResult::Capture { id, .. } => assert_eq!(id, &c.id),
             _ => panic!("expected Capture result"),
         }
+    }
+
+    #[test]
+    fn list_since_filters_by_date() {
+        let db = fresh_db();
+        let mk = |i: u32| NewCapture {
+            file_path: PathBuf::from(format!("{i}.png")),
+            width: i,
+            height: i,
+            source_app: None,
+            source_window_title: None,
+            monitor: None,
+        };
+        let _old = insert(&db, mk(1)).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let cutoff = chrono::Utc::now().timestamp_millis();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let recent = insert(&db, mk(2)).unwrap();
+
+        let rows = list(
+            &db,
+            ListCapturesQuery {
+                since: Some(cutoff),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, recent.id);
+    }
+
+    #[test]
+    fn list_pinned_only_filters() {
+        let db = fresh_db();
+        let mk = |i: u32| NewCapture {
+            file_path: PathBuf::from(format!("{i}.png")),
+            width: i,
+            height: i,
+            source_app: None,
+            source_window_title: None,
+            monitor: None,
+        };
+        let a = insert(&db, mk(1)).unwrap();
+        let _b = insert(&db, mk(2)).unwrap();
+
+        db.with_conn(|conn| {
+            conn.execute(
+                "UPDATE captures SET pinned = 1 WHERE id = ?1",
+                [&a.id],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+
+        let rows = list(
+            &db,
+            ListCapturesQuery {
+                pinned_only: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, a.id);
+    }
+
+    #[test]
+    fn list_by_tag_id_filters() {
+        let db = fresh_db();
+        let mk = |i: u32| NewCapture {
+            file_path: PathBuf::from(format!("{i}.png")),
+            width: i,
+            height: i,
+            source_app: None,
+            source_window_title: None,
+            monitor: None,
+        };
+        let a = insert(&db, mk(1)).unwrap();
+        let _b = insert(&db, mk(2)).unwrap();
+
+        let tag = crate::tags::create(&db, "test-tag", "#fff").unwrap();
+        crate::tags::assign(&db, &a.id, &tag.id).unwrap();
+
+        let rows = list(
+            &db,
+            ListCapturesQuery {
+                tag_id: Some(tag.id),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, a.id);
+    }
+
+    #[test]
+    fn list_deleted_only_shows_trashed() {
+        let db = fresh_db();
+        let mk = |i: u32| NewCapture {
+            file_path: PathBuf::from(format!("{i}.png")),
+            width: i,
+            height: i,
+            source_app: None,
+            source_window_title: None,
+            monitor: None,
+        };
+        let a = insert(&db, mk(1)).unwrap();
+        let b = insert(&db, mk(2)).unwrap();
+        soft_delete(&db, &b.id).unwrap();
+
+        let rows = list(
+            &db,
+            ListCapturesQuery {
+                deleted_only: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, b.id);
+        assert!(rows[0].deleted_at.is_some());
+
+        let normal = list(&db, ListCapturesQuery::default()).unwrap();
+        assert_eq!(normal.len(), 1);
+        assert_eq!(normal[0].id, a.id);
     }
 }
