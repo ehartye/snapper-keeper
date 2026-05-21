@@ -12,12 +12,18 @@ use tracing::{info, warn};
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum HotkeyAction {
     CaptureFullScreen,
+    CaptureRegion,
+    CaptureWindow,
+    CaptureTimedFullScreen,
 }
 
 impl HotkeyAction {
     pub fn event_name(self) -> &'static str {
         match self {
             HotkeyAction::CaptureFullScreen => "hotkey:capture-full-screen",
+            HotkeyAction::CaptureRegion => "hotkey:capture-region",
+            HotkeyAction::CaptureWindow => "hotkey:capture-window",
+            HotkeyAction::CaptureTimedFullScreen => "hotkey:capture-timed",
         }
     }
 
@@ -25,10 +31,16 @@ impl HotkeyAction {
         #[cfg(target_os = "macos")]
         match self {
             HotkeyAction::CaptureFullScreen => "Cmd+Shift+3",
+            HotkeyAction::CaptureRegion => "Cmd+Shift+4",
+            HotkeyAction::CaptureWindow => "Cmd+Shift+5",
+            HotkeyAction::CaptureTimedFullScreen => "Cmd+Shift+6",
         }
         #[cfg(not(target_os = "macos"))]
         match self {
             HotkeyAction::CaptureFullScreen => "CmdOrCtrl+Shift+3",
+            HotkeyAction::CaptureRegion => "CmdOrCtrl+Shift+4",
+            HotkeyAction::CaptureWindow => "CmdOrCtrl+Shift+5",
+            HotkeyAction::CaptureTimedFullScreen => "CmdOrCtrl+Shift+6",
         }
     }
 }
@@ -51,7 +63,12 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
 }
 
 fn register_defaults<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
-    let actions = [HotkeyAction::CaptureFullScreen];
+    let actions = [
+        HotkeyAction::CaptureFullScreen,
+        HotkeyAction::CaptureRegion,
+        HotkeyAction::CaptureWindow,
+        HotkeyAction::CaptureTimedFullScreen,
+    ];
     for action in actions {
         let chord = action.default_chord();
         let app2 = app.clone();
@@ -62,7 +79,7 @@ fn register_defaults<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String
                 }
             })
             .map_err(|e| format!("register {chord}: {e}"))?;
-        info!(%chord, "registered hotkey");
+        info!(%chord, action = ?action, "registered hotkey");
     }
     Ok(())
 }
