@@ -1,6 +1,6 @@
 export interface ClipboardItem {
   id: string;
-  kind: string;
+  kind: 'text' | 'image';
   text_content: string | null;
   file_path: string | null;
   content_hash: string;
