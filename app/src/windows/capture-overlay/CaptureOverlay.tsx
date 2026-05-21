@@ -47,13 +47,20 @@ export function CaptureOverlay() {
 
     try {
       const scaleFactor = window.devicePixelRatio || 1;
-      await captureRegion(
+      const capture = await captureRegion(
         0,
         Math.round(x * scaleFactor),
         Math.round(y * scaleFactor),
         Math.round(w * scaleFactor),
         Math.round(h * scaleFactor),
       );
+      const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+      const toolbar = await WebviewWindow.getByLabel('capture-toolbar');
+      if (toolbar) {
+        await toolbar.emit('toolbar:show', { captureId: capture.id });
+        await toolbar.show();
+        await toolbar.setFocus();
+      }
     } catch (e) {
       console.error('region capture failed', e);
     }
