@@ -1,7 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use tauri::{
-    menu::{Menu, MenuItem},
+    menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Emitter, Manager,
 };
@@ -21,18 +21,51 @@ fn main() {
         .plugin(snk_hotkeys::init())
         .plugin(snk_capture::init())
         .setup(|app| {
-            // Build tray menu
-            let capture_item = MenuItem::with_id(
+            let capture_region = MenuItem::with_id(
                 app,
-                "tray:capture-full-screen",
-                "Capture full screen",
+                "tray:capture-region",
+                "Capture region\tCtrl+Shift+4",
                 true,
                 None::<&str>,
             )?;
+            let capture_window = MenuItem::with_id(
+                app,
+                "tray:capture-window",
+                "Capture window\tCtrl+Shift+5",
+                true,
+                None::<&str>,
+            )?;
+            let capture_screen = MenuItem::with_id(
+                app,
+                "tray:capture-full-screen",
+                "Capture screen\tCtrl+Shift+3",
+                true,
+                None::<&str>,
+            )?;
+            let capture_timed = MenuItem::with_id(
+                app,
+                "tray:capture-timed",
+                "Timed (5s)\tCtrl+Shift+6",
+                true,
+                None::<&str>,
+            )?;
+            let sep = PredefinedMenuItem::separator(app)?;
             let open_lib =
                 MenuItem::with_id(app, "tray:open-library", "Open library", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "tray:quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&capture_item, &open_lib, &quit])?;
+
+            let menu = Menu::with_items(
+                app,
+                &[
+                    &capture_region,
+                    &capture_window,
+                    &capture_screen,
+                    &capture_timed,
+                    &sep,
+                    &open_lib,
+                    &quit,
+                ],
+            )?;
 
             let _tray = TrayIconBuilder::with_id("main")
                 .menu(&menu)
@@ -40,6 +73,15 @@ fn main() {
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "tray:capture-full-screen" => {
                         let _ = app.emit("hotkey:capture-full-screen", ());
+                    }
+                    "tray:capture-region" => {
+                        let _ = app.emit("hotkey:capture-region", ());
+                    }
+                    "tray:capture-window" => {
+                        let _ = app.emit("hotkey:capture-window", ());
+                    }
+                    "tray:capture-timed" => {
+                        let _ = app.emit("hotkey:capture-timed", ());
                     }
                     "tray:open-library" => {
                         if let Some(win) = app.get_webview_window("library") {
