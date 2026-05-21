@@ -25,9 +25,10 @@ export function Thumbnail({ capture, src }: Props) {
         <div className="text-xs text-slate-200 truncate">
           {new Date(capture.created_at).toLocaleTimeString()}
         </div>
-        <div className="text-[10px] text-slate-500">
+        <div className="text-[10px] text-slate-500 truncate">
           {capture.width}×{capture.height}
           {capture.monitor ? ` · ${capture.monitor}` : ''}
+          {capture.source_app ? ` · ${capture.source_app}` : ''}
         </div>
       </div>
     </div>
