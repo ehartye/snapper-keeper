@@ -1,6 +1,7 @@
 use tauri::{Runtime, State};
 
 use crate::captures::{self, Capture, ListCapturesQuery};
+use crate::clipboard::{self, ClipboardItem, ListClipboardQuery};
 use crate::plugin::LibraryState;
 use crate::Result;
 
@@ -29,4 +30,32 @@ pub fn soft_delete_capture<R: Runtime>(
     id: String,
 ) -> Result<()> {
     captures::soft_delete(&state.db, &id)
+}
+
+#[tauri::command]
+pub fn list_clipboard_items<R: Runtime>(
+    state: State<'_, LibraryState>,
+    _app: tauri::AppHandle<R>,
+    query: Option<ListClipboardQuery>,
+) -> Result<Vec<ClipboardItem>> {
+    clipboard::list(&state.db, query.unwrap_or_default())
+}
+
+#[tauri::command]
+pub fn get_clipboard_item<R: Runtime>(
+    state: State<'_, LibraryState>,
+    _app: tauri::AppHandle<R>,
+    id: String,
+) -> Result<ClipboardItem> {
+    clipboard::get(&state.db, &id)
+}
+
+#[tauri::command]
+pub fn toggle_clipboard_pin<R: Runtime>(
+    state: State<'_, LibraryState>,
+    _app: tauri::AppHandle<R>,
+    id: String,
+    pinned: bool,
+) -> Result<()> {
+    clipboard::set_pinned(&state.db, &id, pinned)
 }

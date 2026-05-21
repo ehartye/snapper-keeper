@@ -1,3 +1,10 @@
 [default]
-description = "Default permissions for snk-library: allows listing, getting, and deleting captures."
-permissions = ["allow-list-captures", "allow-get-capture", "allow-soft-delete-capture"]
+description = "Default permissions for snk-library: allows all capture and clipboard operations."
+permissions = [
+    "allow-list-captures",
+    "allow-get-capture",
+    "allow-soft-delete-capture",
+    "allow-list-clipboard-items",
+    "allow-get-clipboard-item",
+    "allow-toggle-clipboard-pin",
+]

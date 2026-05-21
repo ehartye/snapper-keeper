@@ -17,6 +17,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             crate::commands::list_captures,
             crate::commands::get_capture,
             crate::commands::soft_delete_capture,
+            crate::commands::list_clipboard_items,
+            crate::commands::get_clipboard_item,
+            crate::commands::toggle_clipboard_pin,
         ])
         .setup(|app, _api| {
             let root = app
