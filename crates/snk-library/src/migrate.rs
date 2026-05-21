@@ -4,9 +4,10 @@ use rusqlite_migration::{Migrations, M};
 use crate::Result;
 
 const V001: &str = include_str!("../migrations/V001__initial.sql");
+const V002: &str = include_str!("../migrations/V002__clipboard_items.sql");
 
 pub fn migrations() -> Migrations<'static> {
-    Migrations::new(vec![M::up(V001)])
+    Migrations::new(vec![M::up(V001), M::up(V002)])
 }
 
 pub fn migrate(conn: &mut Connection) -> Result<()> {
@@ -14,7 +15,7 @@ pub fn migrate(conn: &mut Connection) -> Result<()> {
         .to_latest(conn)
         .map_err(|e| crate::LibraryError::Migration {
             from: 0,
-            to: 1,
+            to: 2,
             recoverable: e.to_string().contains("Backup"),
         })?;
     Ok(())
@@ -53,5 +54,20 @@ mod tests {
         let mut conn = Connection::open_in_memory().unwrap();
         migrate(&mut conn).unwrap();
         migrate(&mut conn).unwrap();
+    }
+
+    #[test]
+    fn v002_creates_clipboard_items_table() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate(&mut conn).expect("apply migrations");
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='clipboard_items'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1, "clipboard_items table should exist");
     }
 }
