@@ -258,9 +258,7 @@ async fn do_update_check<R: Runtime>(app: AppHandle<R>) -> Result<UpdateStatus, 
                 }
             });
 
-            Ok(UpdateStatus::Available {
-                version: version.clone(),
-            })
+            Ok(status)
         }
         Ok(None) => {
             info!("no update available");
@@ -344,10 +342,10 @@ Add to `[dependencies]`:
 snk-updater = { path = "../../crates/snk-updater" }
 ```
 
-And add the `updater` feature to the `tauri` dependency:
+The `tauri` dependency does NOT need an `updater` feature — in Tauri 2, updater functionality lives entirely in `tauri-plugin-updater`. Leave the existing features as-is:
 
 ```toml
-tauri = { version = "2", features = ["tray-icon", "protocol-asset", "updater"] }
+tauri = { version = "2", features = ["tray-icon", "protocol-asset"] }
 ```
 
 **Step 8: Verify it compiles**
