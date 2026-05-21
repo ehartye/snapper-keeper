@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 use tauri::plugin::{Builder, TauriPlugin};
-use tauri::{Emitter, Manager, Runtime};
+use tauri::{Emitter, Listener, Manager, Runtime};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tracing::{info, warn};
 
@@ -36,14 +36,15 @@ impl HotkeyAction {
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::<R>::new("snk-hotkeys")
         .setup(|app, _api| {
-            // Defer registration until global-shortcut plugin is initialized.
+            // Defer registration until a window's HWND exists and the message
+            // pump is running — otherwise Windows' RegisterHotKey returns
+            // error 1459 (interactive window station).
             let handle = app.app_handle().clone();
-            app.run_on_main_thread(move || {
+            app.listen_any("tauri://window-created", move |_event| {
                 if let Err(e) = register_defaults(&handle) {
                     warn!(error = %e, "failed to register default hotkeys");
                 }
-            })
-            .ok();
+            });
             Ok(())
         })
         .build()
