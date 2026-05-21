@@ -120,6 +120,14 @@ pub fn insert(db: &Db, new: NewClipboardItem) -> Result<ClipboardItem> {
         Ok(())
     })?;
 
+    crate::search::index_clipboard(
+        db,
+        &id,
+        new.text_content.as_deref(),
+        new.source_app.as_deref(),
+        new.source_window_title.as_deref(),
+    )?;
+
     Ok(ClipboardItem {
         id,
         kind: new.kind,
@@ -364,6 +372,21 @@ mod tests {
         set_pinned(&db, &item.id, false).unwrap();
         let updated = get(&db, &item.id).unwrap();
         assert!(!updated.pinned);
+    }
+
+    #[test]
+    fn insert_populates_clipboard_fts_index() {
+        let db = fresh_db();
+        let mut item = sample_item("fts-hash");
+        item.text_content = Some("important search term".into());
+        item.source_app = Some("Terminal".into());
+        let inserted = insert(&db, item).unwrap();
+        let results = crate::search::search(&db, "important", 10).unwrap();
+        assert_eq!(results.len(), 1);
+        match &results[0] {
+            crate::search::SearchResult::Clipboard { id, .. } => assert_eq!(id, &inserted.id),
+            _ => panic!("expected Clipboard result"),
+        }
     }
 
     #[test]

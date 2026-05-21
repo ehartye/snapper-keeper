@@ -61,6 +61,16 @@ pub fn insert(db: &Db, new: NewCapture) -> Result<Capture> {
         Ok(())
     })?;
 
+    // OCR text and tags are populated later by snk-ocr / tag mutations.
+    crate::search::index_capture(
+        db,
+        &id,
+        new.source_app.as_deref(),
+        new.source_window_title.as_deref(),
+        None,
+        None,
+    )?;
+
     Ok(Capture {
         id,
         file_path,
@@ -367,6 +377,26 @@ mod tests {
         match set_annotated_path(&db, "no-such-id", "x.annotated.png") {
             Err(crate::LibraryError::NotFound { .. }) => {}
             other => panic!("expected NotFound, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn insert_populates_fts_index() {
+        let db = fresh_db();
+        let new = NewCapture {
+            file_path: PathBuf::from("fts.png"),
+            width: 800,
+            height: 600,
+            source_app: Some("VS Code".into()),
+            source_window_title: Some("main.rs — snapper-keeper".into()),
+            monitor: None,
+        };
+        let c = insert(&db, new).unwrap();
+        let results = crate::search::search(&db, "VS Code", 10).unwrap();
+        assert_eq!(results.len(), 1);
+        match &results[0] {
+            crate::search::SearchResult::Capture { id, .. } => assert_eq!(id, &c.id),
+            _ => panic!("expected Capture result"),
         }
     }
 }
