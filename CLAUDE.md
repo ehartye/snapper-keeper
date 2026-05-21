@@ -88,7 +88,7 @@ Don't let plan and code drift. The audit trail "plan was fixed because X" is muc
 | 4 | Clipboard plugin + popup + auto-paste | Done |
 | 5 | OCR + FTS5 search | Done |
 | 6 | Library polish (sidebar, tags, settings, first-run wizard) | Done |
-| 7 | Signing, notarization, auto-updater, release pipeline | Next |
+| 7 | Signing, notarization, auto-updater, release pipeline | Done |
 
 **Known limitation:** Smoke tests on Windows require an interactive desktop session. SSH-only environments can build and lint but can't smoke. CI's `build-app` job verifies the compile across all three OSes; runtime verification is manual.
 
