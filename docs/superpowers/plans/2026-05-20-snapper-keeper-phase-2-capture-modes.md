@@ -1184,7 +1184,7 @@ to:
 **Step 3: Write `app/src/windows/capture-overlay/CaptureOverlay.tsx`**
 
 ```tsx
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState, type MouseEvent } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { captureRegion } from '@snk/capture';
 
@@ -1198,20 +1198,19 @@ interface Rect {
 export function CaptureOverlay() {
   const [rect, setRect] = useState<Rect | null>(null);
   const [dragging, setDragging] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   const cancel = useCallback(async () => {
     const win = getCurrentWindow();
     await win.hide();
   }, []);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  const handleMouseDown = useCallback((e: MouseEvent) => {
     setDragging(true);
     setRect({ startX: e.clientX, startY: e.clientY, endX: e.clientX, endY: e.clientY });
   }, []);
 
   const handleMouseMove = useCallback(
-    (e: React.MouseEvent) => {
+    (e: MouseEvent) => {
       if (!dragging || !rect) return;
       setRect((prev) => (prev ? { ...prev, endX: e.clientX, endY: e.clientY } : null));
     },
@@ -1268,7 +1267,6 @@ export function CaptureOverlay() {
 
   return (
     <div
-      ref={containerRef}
       className="fixed inset-0 cursor-crosshair select-none"
       style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)' }}
       onMouseDown={handleMouseDown}
@@ -1704,15 +1702,17 @@ Display the source app name in capture thumbnails now that it's populated.
 
 **Step 1: Read the current file and add source_app display**
 
-In `Thumbnail.tsx`, add the source app to the metadata footer. After the monitor display line, add:
+In `Thumbnail.tsx`, extend the existing dimensions/monitor metadata line to include source app using inline interpolation (matches the existing `text-[10px]` pattern):
 
 ```tsx
-{capture.source_app && (
-  <span className="text-xs text-slate-500 truncate">{capture.source_app}</span>
-)}
+<div className="text-[10px] text-slate-500 truncate">
+  {capture.width}×{capture.height}
+  {capture.monitor ? ` · ${capture.monitor}` : ''}
+  {capture.source_app ? ` · ${capture.source_app}` : ''}
+</div>
 ```
 
-The full metadata footer section should show: time · dimensions · monitor · source app, all as small gray text items in the footer.
+The full metadata footer section should show: time · dimensions · monitor · source app, all as small gray text items in the footer at consistent `text-[10px]` sizing.
 
 **Step 2: Run typecheck**
 
