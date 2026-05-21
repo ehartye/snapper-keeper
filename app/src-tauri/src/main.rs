@@ -62,6 +62,8 @@ fn main() {
             let sep = PredefinedMenuItem::separator(app)?;
             let open_lib =
                 MenuItem::with_id(app, "tray:open-library", "Open library", true, None::<&str>)?;
+            let settings =
+                MenuItem::with_id(app, "tray:settings", "Settings…", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "tray:quit", "Quit", true, None::<&str>)?;
 
             let menu = Menu::with_items(
@@ -74,6 +76,7 @@ fn main() {
                     &clipboard_hist,
                     &sep,
                     &open_lib,
+                    &settings,
                     &quit,
                 ],
             )?;
@@ -99,6 +102,12 @@ fn main() {
                     }
                     "tray:open-library" => {
                         if let Some(win) = app.get_webview_window("library") {
+                            let _ = win.show();
+                            let _ = win.set_focus();
+                        }
+                    }
+                    "tray:settings" => {
+                        if let Some(win) = app.get_webview_window("settings") {
                             let _ = win.show();
                             let _ = win.set_focus();
                         }

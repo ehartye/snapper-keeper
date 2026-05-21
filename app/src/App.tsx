@@ -6,6 +6,7 @@ import { CaptureOverlay } from './windows/capture-overlay/CaptureOverlay';
 import { CaptureToolbar } from './windows/capture-toolbar/CaptureToolbar';
 import { AnnotateWindow } from './windows/annotate/AnnotateWindow';
 import { ClipboardPopup } from './windows/clipboard-popup/ClipboardPopup';
+import { SettingsWindow } from './windows/settings/SettingsWindow';
 
 function WindowRouter() {
   const [label, setLabel] = useState<string | null>(null);
@@ -27,6 +28,8 @@ function WindowRouter() {
       return <AnnotateWindow />;
     case 'clipboard-popup':
       return <ClipboardPopup />;
+    case 'settings':
+      return <SettingsWindow />;
     default:
       return <div>Unknown window: {label}</div>;
   }
