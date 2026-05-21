@@ -10,6 +10,7 @@ pub mod migrate;
 pub mod ocr;
 pub mod plugin;
 pub mod search;
+pub mod settings;
 
 pub use captures::{Capture, ListCapturesQuery, NewCapture};
 pub use clipboard::{ClipboardItem, ClipboardItemKind, ListClipboardQuery, NewClipboardItem};
