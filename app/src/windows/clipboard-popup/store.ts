@@ -31,6 +31,7 @@ export const useClipboardPopupStore = create<ClipboardPopupState>((set, get) => 
     const { items, selectedIndex } = get();
     if (items.length === 0) return;
     const next = Math.max(0, Math.min(items.length - 1, selectedIndex + delta));
+    if (next === selectedIndex) return;
     set({ selectedIndex: next });
   },
 
