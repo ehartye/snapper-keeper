@@ -65,6 +65,15 @@ fn main() {
                 })
                 .build(app)?;
 
+            // Defer window show until after the runtime + tray are online.
+            // On Windows, showing during synchronous setup races Win32
+            // window-station init, causing WebView2 "Invalid window handle"
+            // and breaking IPC bootstrap injection.
+            if let Some(win) = app.get_webview_window("library") {
+                let _ = win.show();
+                let _ = win.set_focus();
+            }
+
             info!("snapper-keeper started");
             Ok(())
         })
