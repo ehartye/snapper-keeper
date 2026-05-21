@@ -3553,6 +3553,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "snk-annotate"
+version = "0.0.1"
+dependencies = [
+ "image",
+ "serde",
+ "serde_json",
+ "snk-library",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 1.0.69",
+ "tracing",
+]
+
+[[package]]
 name = "snk-capture"
 version = "0.0.1"
 dependencies = [

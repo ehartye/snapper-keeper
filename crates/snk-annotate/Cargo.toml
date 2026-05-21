@@ -1,0 +1,20 @@
+[package]
+name = "snk-annotate"
+version = "0.0.1"
+links = "snk-annotate"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[build-dependencies]
+tauri-plugin = { workspace = true }
+
+[dependencies]
+snk-library = { path = "../snk-library" }
+tauri.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+image.workspace = true
