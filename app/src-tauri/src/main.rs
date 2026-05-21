@@ -23,6 +23,8 @@ fn main() {
         .plugin(snk_annotate::init())
         .plugin(snk_clipboard::init())
         .plugin(snk_ocr::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(snk_updater::init())
         .setup(|app| {
             let capture_region = MenuItem::with_id(
                 app,

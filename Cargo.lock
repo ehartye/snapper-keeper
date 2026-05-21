@@ -3836,6 +3836,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-global-shortcut",
+ "tauri-plugin-updater",
  "tracing",
  "tracing-subscriber",
 ]
