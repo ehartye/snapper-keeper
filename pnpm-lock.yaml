@@ -41,6 +41,9 @@ importers:
 
   app:
     dependencies:
+      '@snk/annotate':
+        specifier: workspace:*
+        version: link:../packages/snk-annotate
       '@snk/capture':
         specifier: workspace:*
         version: link:../packages/snk-capture
@@ -93,6 +96,19 @@ importers:
       vite:
         specifier: ^5.2.0
         version: 5.4.21(@types/node@20.19.41)
+
+  packages/snk-annotate:
+    dependencies:
+      '@snk/library':
+        specifier: workspace:*
+        version: link:../snk-library
+      '@tauri-apps/api':
+        specifier: ^2.0.0
+        version: 2.11.0
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
 
   packages/snk-capture:
     dependencies:
