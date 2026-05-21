@@ -129,6 +129,7 @@ pub fn get(db: &Db, id: &str) -> Result<Capture> {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ListCapturesQuery {
     pub limit: Option<u32>,
     pub include_deleted: bool,
