@@ -66,6 +66,13 @@ fn main() {
                 MenuItem::with_id(app, "tray:open-library", "Open library", true, None::<&str>)?;
             let settings =
                 MenuItem::with_id(app, "tray:settings", "Settings…", true, None::<&str>)?;
+            let check_update = MenuItem::with_id(
+                app,
+                "tray:check-update",
+                "Check for updates",
+                true,
+                None::<&str>,
+            )?;
             let quit = MenuItem::with_id(app, "tray:quit", "Quit", true, None::<&str>)?;
 
             let menu = Menu::with_items(
@@ -79,6 +86,7 @@ fn main() {
                     &sep,
                     &open_lib,
                     &settings,
+                    &check_update,
                     &quit,
                 ],
             )?;
@@ -113,6 +121,12 @@ fn main() {
                             let _ = win.show();
                             let _ = win.set_focus();
                         }
+                    }
+                    "tray:check-update" => {
+                        let handle = app.app_handle().clone();
+                        tauri::async_runtime::spawn(async move {
+                            let _ = snk_updater::plugin::check_for_update(handle).await;
+                        });
                     }
                     "tray:quit" => app.exit(0),
                     _ => {}
