@@ -39,19 +39,31 @@ export function TagDialog({ open, onClose }: Props) {
 
   const handleSave = async () => {
     if (!name.trim()) return;
-    if (editingId) {
-      await updateTag(editingId, name.trim(), color);
-    } else {
-      await createTag(name.trim(), color);
+    try {
+      if (editingId) {
+        await updateTag(editingId, name.trim(), color);
+      } else {
+        await createTag(name.trim(), color);
+      }
+      await queryClient.invalidateQueries({ queryKey: queryKeys.tags.all() });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.captures.all() });
+      setName('');
+      setEditingId(null);
+    } catch (e) {
+      console.error('tag save failed', e);
     }
-    await queryClient.invalidateQueries({ queryKey: queryKeys.tags.list() });
-    setName('');
-    setEditingId(null);
   };
 
   const handleDelete = async (id: string) => {
-    await deleteTag(id);
-    await queryClient.invalidateQueries({ queryKey: queryKeys.tags.list() });
+    const tag = (tags ?? []).find((t) => t.id === id);
+    if (!window.confirm(`Delete tag "${tag?.name ?? id}"? This cannot be undone.`)) return;
+    try {
+      await deleteTag(id);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.tags.all() });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.captures.all() });
+    } catch (e) {
+      console.error('tag delete failed', e);
+    }
   };
 
   return (

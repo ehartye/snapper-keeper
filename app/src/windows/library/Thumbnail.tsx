@@ -46,13 +46,17 @@ export function Thumbnail({ capture, src }: Props) {
   };
 
   const handleToggleTag = async (tagId: string, assigned: boolean) => {
-    if (assigned) {
-      await removeTag(capture.id, tagId);
-    } else {
-      await assignTag(capture.id, tagId);
+    try {
+      if (assigned) {
+        await removeTag(capture.id, tagId);
+      } else {
+        await assignTag(capture.id, tagId);
+      }
+      await queryClient.invalidateQueries({ queryKey: queryKeys.tags.forCapture(capture.id) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.captures.all() });
+    } catch (e) {
+      console.error('tag toggle failed', e);
     }
-    await queryClient.invalidateQueries({ queryKey: queryKeys.tags.forCapture(capture.id) });
-    await queryClient.invalidateQueries({ queryKey: ['captures'] });
   };
 
   const assignedIds = new Set((captureTags.data ?? []).map((t) => t.id));
