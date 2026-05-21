@@ -1300,28 +1300,32 @@ Create `packages/snk-ocr/package.json`:
 ```json
 {
   "name": "@snk/ocr",
-  "version": "0.0.1",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "lint": "eslint src --max-warnings 0",
+    "typecheck": "tsc -b --noEmit",
+    "test": "echo 'no tests yet'"
+  },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
   }
 }
 ```
 
 **Step 2: Create tsconfig.json**
 
-Create `packages/snk-ocr/tsconfig.json`:
+Create `packages/snk-ocr/tsconfig.json` (inherits everything from tsconfig.base.json — no local overrides, matching sibling packages):
 
 ```json
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "outDir": "dist",
-    "rootDir": "src"
-  },
   "include": ["src"]
 }
 ```
