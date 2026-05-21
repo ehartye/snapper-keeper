@@ -1,7 +1,8 @@
 use std::io::Cursor;
 
 use image::{codecs::png::PngEncoder, ColorType, ImageEncoder};
-use xcap::Monitor;
+use serde::{Deserialize, Serialize};
+use xcap::{Monitor, Window};
 
 use crate::Result;
 
@@ -32,5 +33,52 @@ pub fn grab_primary_monitor() -> Result<GrabResult> {
         width: w,
         height: h,
         monitor_name: name,
+    })
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WindowInfo {
+    pub id: u32,
+    pub app_name: String,
+    pub title: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+pub fn list_capturable_windows() -> Result<Vec<WindowInfo>> {
+    let windows = Window::all()?;
+    let infos = windows
+        .into_iter()
+        .filter(|w| !w.is_minimized() && w.width() > 0 && w.height() > 0)
+        .map(|w| WindowInfo {
+            id: w.id(),
+            app_name: w.app_name().to_string(),
+            title: w.title().to_string(),
+            width: w.width(),
+            height: w.height(),
+        })
+        .collect();
+    Ok(infos)
+}
+
+pub fn grab_window(window_id: u32) -> Result<GrabResult> {
+    let windows = Window::all()?;
+    let target = windows
+        .into_iter()
+        .find(|w| w.id() == window_id)
+        .ok_or(crate::CaptureError::WindowNotFound { id: window_id })?;
+
+    let monitor_name = target.current_monitor().name().to_string();
+    let image = target.capture_image()?;
+    let (w, h) = (image.width(), image.height());
+
+    let mut buf = Cursor::new(Vec::with_capacity((w * h * 4) as usize / 2));
+    PngEncoder::new(&mut buf).write_image(image.as_raw(), w, h, ColorType::Rgba8.into())?;
+
+    Ok(GrabResult {
+        png_bytes: buf.into_inner(),
+        width: w,
+        height: h,
+        monitor_name,
     })
 }

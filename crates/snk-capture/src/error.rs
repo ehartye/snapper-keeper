@@ -7,6 +7,9 @@ pub enum CaptureError {
     #[error("no monitors found")]
     NoMonitors,
 
+    #[error("window not found: {id}")]
+    WindowNotFound { id: u32 },
+
     #[error("xcap error: {message}")]
     Os { message: String },
 
