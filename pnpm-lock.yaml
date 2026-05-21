@@ -47,6 +47,9 @@ importers:
       '@snk/capture':
         specifier: workspace:*
         version: link:../packages/snk-capture
+      '@snk/clipboard':
+        specifier: workspace:*
+        version: link:../packages/snk-clipboard
       '@snk/library':
         specifier: workspace:*
         version: link:../packages/snk-library
@@ -117,6 +120,19 @@ importers:
         version: 5.9.3
 
   packages/snk-capture:
+    dependencies:
+      '@snk/library':
+        specifier: workspace:*
+        version: link:../snk-library
+      '@tauri-apps/api':
+        specifier: ^2.0.0
+        version: 2.11.0
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
+  packages/snk-clipboard:
     dependencies:
       '@snk/library':
         specifier: workspace:*

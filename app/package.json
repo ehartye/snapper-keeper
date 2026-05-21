@@ -14,6 +14,7 @@
   "dependencies": {
     "@snk/annotate": "workspace:*",
     "@snk/capture": "workspace:*",
+    "@snk/clipboard": "workspace:*",
     "@snk/library": "workspace:*",
     "@tanstack/react-query": "^5.40.0",
     "@tauri-apps/api": "^2.0.0",
