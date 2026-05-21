@@ -4,11 +4,9 @@ use snk_library::{captures, files, Capture, Db, NewCapture};
 use uuid::Uuid;
 
 use crate::foreground::get_foreground_info;
-use crate::grab::{grab_primary_monitor, GrabResult};
+use crate::grab::{self, GrabResult};
 use crate::Result;
 
-/// Capture the primary monitor, write the PNG to disk, and insert a row.
-/// Returns the persisted Capture row.
 pub fn capture_full_screen(db: &Arc<Db>, library_root: &std::path::Path) -> Result<Capture> {
     let fg = get_foreground_info();
     let GrabResult {
@@ -16,7 +14,41 @@ pub fn capture_full_screen(db: &Arc<Db>, library_root: &std::path::Path) -> Resu
         width,
         height,
         monitor_name,
-    } = grab_primary_monitor()?;
+    } = grab::grab_primary_monitor()?;
+    persist(db, library_root, &png_bytes, width, height, Some(monitor_name), fg)
+}
+
+pub fn capture_window(
+    db: &Arc<Db>,
+    library_root: &std::path::Path,
+    window_id: u32,
+) -> Result<Capture> {
+    let fg = get_foreground_info();
+    let GrabResult {
+        png_bytes,
+        width,
+        height,
+        monitor_name,
+    } = grab::grab_window(window_id)?;
+    persist(db, library_root, &png_bytes, width, height, Some(monitor_name), fg)
+}
+
+pub fn capture_region(
+    db: &Arc<Db>,
+    library_root: &std::path::Path,
+    monitor_id: u32,
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+) -> Result<Capture> {
+    let fg = get_foreground_info();
+    let GrabResult {
+        png_bytes,
+        width,
+        height,
+        monitor_name,
+    } = grab::grab_region(monitor_id, x, y, w, h)?;
     persist(db, library_root, &png_bytes, width, height, Some(monitor_name), fg)
 }
 
