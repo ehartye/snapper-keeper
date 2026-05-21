@@ -326,13 +326,19 @@ mod tests {
     #[test]
     fn annotated_relative_path_appends_annotated_suffix() {
         let p = annotated_relative_path("captures/2026/05/abc.png");
-        assert_eq!(p, std::path::PathBuf::from("captures/2026/05/abc.annotated.png"));
+        assert_eq!(
+            p,
+            std::path::PathBuf::from("captures/2026/05/abc.annotated.png")
+        );
     }
 
     #[test]
     fn annotated_relative_path_handles_no_extension() {
         let p = annotated_relative_path("captures/2026/05/abc");
-        assert_eq!(p, std::path::PathBuf::from("captures/2026/05/abc.annotated"));
+        assert_eq!(
+            p,
+            std::path::PathBuf::from("captures/2026/05/abc.annotated")
+        );
     }
 
     #[test]
