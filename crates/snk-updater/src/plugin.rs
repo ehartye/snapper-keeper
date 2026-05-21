@@ -143,7 +143,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             app.manage(UpdaterState::new());
 
             let handle = app.app_handle().clone();
-            tokio::spawn(async move {
+            tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(Duration::from_secs(5)).await;
                 if let Err(e) = do_update_check(handle.clone()).await {
                     warn!(error = %e, "startup update check failed");

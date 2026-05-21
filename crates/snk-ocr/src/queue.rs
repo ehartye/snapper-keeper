@@ -19,7 +19,7 @@ struct OcrJob {
 impl OcrQueue {
     pub fn start(db: Arc<Db>, library_root: std::path::PathBuf) -> Self {
         let (tx, rx) = mpsc::unbounded_channel();
-        tokio::spawn(worker(rx, db, library_root));
+        tauri::async_runtime::spawn(worker(rx, db, library_root));
         Self { tx }
     }
 

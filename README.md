@@ -1,27 +1,49 @@
 # snapper-keeper
 
-A cross-platform (Windows + macOS) desktop utility that combines screen capture and clipboard history in one app.
+A cross-platform (Windows + macOS) desktop utility that combines screen capture with annotation, clipboard history, and OCR-indexed search. Built with Tauri 2 (Rust + React/TypeScript), local-first, no servers, no telemetry.
 
-> **Status: phase 1 — foundation + vertical slice.** Not yet usable as a daily-driver utility. The current build proves the end-to-end pipeline (hotkey → capture → file write + DB row → thumbnail in a library window), the Tauri 2 plugin architecture, and the CI baseline. Phase 2+ adds the actual features (region select, annotation, clipboard popup, OCR, signed installers, auto-update).
+## Features
 
-## What it will do (v1 target)
+### Screen capture
+- **Full screen**, **active window**, **region drag-select**, and **timed** (5s delay) modes
+- Post-capture toolbar: save, copy, annotate, or discard
+- Hotkeys: `Ctrl+Shift+3` / `Cmd+Shift+3` (full screen), plus region, window, and timed variants
+- Tray menu access for all capture modes
 
-- **Screen capture** — region drag-select, active window, full screen, timed (5s delay), with light annotation (arrow, rectangle, ellipse, freehand, highlighter, text, blur, crop, numbered step markers)
-- **OCR-indexed search** over every capture (Tesseract sidecar, async on capture)
-- **Clipboard manager** with caret-anchored popup (`Ctrl/Cmd+Shift+V`), text/image/file tracking, sensitive-content filtering, pinning, and auto-paste into the previously-focused app
-- **Local-first** — single library directory on disk, SQLite + FTS5 for metadata and search; no servers, no accounts, no telemetry
-- **Signed installers** (Apple notarization + Windows code signing) with Ed25519-signed auto-update via GitHub Releases
+### Annotation editor
+- Tools: arrow, rectangle, ellipse, freehand, highlighter, text, blur/pixelate, crop, numbered step markers
+- Color picker, stroke width control, undo/redo
+- Save annotated copy alongside the original
 
-See [`docs/superpowers/specs/2026-05-20-snapper-keeper-design.md`](docs/superpowers/specs/2026-05-20-snapper-keeper-design.md) for the full design, decisions log, and what's deferred.
+### Clipboard history
+- Caret-anchored popup via `Ctrl+Shift+V` / `Cmd+Shift+V`
+- Tracks text and image clipboard entries
+- Filter, pin favorites, keyboard navigation, auto-paste into the previously focused app
+- Content-hash deduplication, configurable eviction limit
 
-## What's in this build (phase 1)
+### OCR + search
+- Tesseract sidecar runs asynchronously on every capture
+- FTS5 full-text search across OCR text, clipboard content, and tag names
+- Search bar in the library window with debounced queries
 
-- Cargo + pnpm workspace with one Tauri plugin per feature
-- `snk-library` — SQLite + migrations (V001 schema) + Capture model + queries + atomic file write + Tauri plugin (`list_captures`, `get_capture`)
-- `snk-hotkeys` — registers `Ctrl/Cmd+Shift+3` and emits an event when pressed
-- `snk-capture` — primary-monitor full-screen grab (xcap) + orchestrator that wires grab → file write → library insert
-- App shell — tray icon with menu, library window showing a thumbnail grid, three capture entry points (button, hotkey, tray menu)
-- CI matrix — lint + typecheck + Rust tests on Linux, build verification on Linux/macOS/Windows
+### Library
+- Thumbnail grid with smart sections (Today, Yesterday, This Week, Older)
+- Sidebar with tag filtering and clipboard history view
+- Soft-delete with trash, pinning, tag management (create, assign, color-code)
+- Settings window for capture, clipboard, and OCR configuration
+- First-run wizard
+
+### Auto-updater
+- Ed25519-signed update manifests via GitHub Releases
+- Checks on launch (5s delay) + every 24 hours
+- Tray menu "Check for updates" item
+- Download + prompt to restart (never auto-applied)
+
+### Release pipeline
+- GitHub Actions workflow triggered on `v*` tags
+- Build matrix: macOS (aarch64 + x86_64) + Windows (x86_64)
+- Apple code signing + notarization, Windows code signing
+- Generates `latest.json` manifest for the auto-updater
 
 ## Quick start
 
@@ -29,10 +51,11 @@ See [`docs/superpowers/specs/2026-05-20-snapper-keeper-design.md`](docs/superpow
 
 - **Rust** 1.78+ via [rustup](https://rustup.rs/)
 - **Node.js** 20+ and **pnpm** 9+
+- **Tesseract** (for OCR) — [install instructions](https://github.com/tesseract-ocr/tesseract#installing-tesseract)
 - Platform deps from <https://v2.tauri.app/start/prerequisites/>:
   - **Windows:** Microsoft Visual Studio C++ Build Tools, WebView2 (pre-installed on Win 10/11)
   - **macOS:** Xcode Command Line Tools (`xcode-select --install`)
-  - **Linux:** `libwebkit2gtk-4.1-dev`, `libappindicator3-dev`, `librsvg2-dev`, `libxdo-dev`
+  - **Linux:** `libwebkit2gtk-4.1-dev`, `libappindicator3-dev`, `librsvg2-dev`, `libxdo-dev`, `libssl-dev`
 
 ### Run in dev
 
@@ -41,18 +64,9 @@ pnpm install
 pnpm --filter @snk/app tauri dev
 ```
 
-> **Windows note:** The dev session must run from an **interactive desktop session** — not from an SSH terminal. Windows OpenSSH sessions are non-interactive window stations, which cause WebView2 attach failures and `RegisterHotKey` errors. Use RDP, the console, or any GUI terminal inside your interactive desktop.
+Vite starts on `localhost:5173`, the Rust crates compile (~3-5 min cold, seconds warm), the library window opens, and a tray icon appears.
 
-Expected on first run: Vite spins up on `localhost:5173`, the Rust crates compile (~3–5 min cold, seconds when warm), the library window opens, and a tray icon appears.
-
-Three ways to capture in this phase-1 build:
-1. Click **Capture full screen** in the window header
-2. Press `Ctrl+Shift+3` (Win) or `Cmd+Shift+3` (Mac)
-3. Click the tray icon → **Capture full screen**
-
-Captures land at:
-- **Windows:** `%APPDATA%\com.snapper-keeper.app\captures\YYYY\MM\<uuid>.png`
-- **macOS:** `~/Library/Application Support/com.snapper-keeper.app/captures/YYYY/MM/<uuid>.png`
+> **Windows note:** Must run from an **interactive desktop session** (not SSH). Windows OpenSSH sessions are non-interactive window stations, causing WebView2 and `RegisterHotKey` failures.
 
 ### Build a release bundle
 
@@ -60,73 +74,106 @@ Captures land at:
 pnpm --filter @snk/app tauri build
 ```
 
-Bundles land in `target/release/bundle/`. Not yet signed — that's a phase 7 deliverable.
+Bundles land in `target/release/bundle/`. See [`docs/release-signing.md`](docs/release-signing.md) for signing setup.
 
-### Lint, typecheck, test
+## Local testing
+
+### Full test suite
 
 ```bash
-pnpm lint               # ESLint v9 flat config; max-warnings 0
-pnpm typecheck          # tsc --noEmit across all 3 TS packages
-cargo test --workspace --exclude snapper-keeper-app  # 10 unit tests in snk-library
-cargo fmt --check
+# TypeScript
+pnpm lint               # ESLint v9 flat config, max-warnings 0, 7 packages
+pnpm typecheck          # tsc --noEmit across all 7 TS packages
+
+# Rust (65 unit tests + 2 integration tests)
+cargo test --workspace --exclude snapper-keeper-app --exclude snk-updater
+cargo fmt -- --check
 cargo clippy --workspace --exclude snapper-keeper-app -- -D warnings
+
+# App compilation (requires full Tauri build chain)
+cargo build -p snapper-keeper-app
 ```
 
-The `snapper-keeper-app` crate is excluded from the Rust test/clippy commands above because it requires the full Tauri build chain (icons, capabilities, etc.); CI's `build-app` job validates it on each OS.
+### Why some crates are excluded
+
+- **`snapper-keeper-app`** — requires the full Tauri build chain (icons, capabilities, codegen). CI's `build-app` job validates it on each OS.
+- **`snk-updater`** — on Windows, the test binary triggers UAC elevation (error 740) because Windows detects "update" in the filename. The 8 unit tests pass on macOS/Linux and in CI. On Windows, set `__COMPAT_LAYER=RunAsInvoker` in your shell env *before* running `cargo test -p snk-updater` to suppress the UAC prompt.
+
+### What to test manually
+
+Automated tests cover data layer logic and serde contracts. UI and OS integration require manual verification on an interactive desktop:
+
+- Capture modes (full screen, region, window, timed) produce thumbnails in the library
+- Annotation editor opens from the post-capture toolbar, saves annotated copy
+- Clipboard popup appears at the caret on `Ctrl+Shift+V` / `Cmd+Shift+V`
+- OCR text appears in search results after a few seconds
+- Tags can be created, assigned to captures, and filtered in the sidebar
+- Tray menu items work (all capture modes, settings, check for updates, quit)
+- Settings window persists changes across restart
 
 ## Architecture
 
-One **Tauri plugin per feature**. Plugins live as separate Rust crates under `crates/`; each ships paired TypeScript bindings under `packages/`. The `app/` shell composes plugins, declares windows, and owns the tray.
+One **Tauri plugin per feature**. Plugins are Rust crates under `crates/`, each with paired TypeScript bindings under `packages/`. The `app/` shell composes plugins, declares windows, and owns the tray.
 
 ```
 crates/
-  snk-library/      SQLite + migrations + Capture model + queries + Tauri plugin
+  snk-library/      SQLite + migrations + models + queries + Tauri commands
   snk-hotkeys/      Global hotkey registration + event emission
-  snk-capture/      xcap-based grab + orchestrator + Tauri plugin
-  snk-annotate/     (phase 3) canvas + tool model + export
-  snk-clipboard/    (phase 4) watcher + popup + paste synthesis
-  snk-ocr/          (phase 5) Tesseract sidecar + index
-  snk-tray/         (later phase) extracted from app/src-tauri
-  snk-updater/      (phase 7) signed auto-update
+  snk-capture/      xcap grabs + orchestrator (region, window, timed, fullscreen)
+  snk-annotate/     Annotation save/export Tauri commands
+  snk-clipboard/    Clipboard watcher + paste synthesis + caret detection
+  snk-ocr/          Tesseract sidecar + async OCR queue + retry
+  snk-updater/      Ed25519-signed auto-update via tauri-plugin-updater
 packages/
-  snk-library/      TS bindings for snk-library commands + types
-  snk-capture/      TS bindings for snk-capture commands + events
-  snk-annotate/     (phase 3)
-  snk-clipboard/    (phase 4)
-  snk-ocr/          (phase 5)
+  snk-library/      TS bindings: captures, tags, settings, search
+  snk-capture/      TS bindings: capture modes, window listing
+  snk-annotate/     TS bindings: save annotation
+  snk-clipboard/    TS bindings: clipboard list, paste, pin
+  snk-ocr/          TS bindings: OCR trigger
+  snk-updater/      TS bindings: check for update, get status
 app/
-  src/              React + TS + Vite frontend
-  src-tauri/        Tauri shell, tray, plugin registration
+  src/              React + TypeScript + Vite frontend
+  src-tauri/        Tauri shell, tray, plugin registration, capabilities
 ```
 
-**Architectural rules (load-bearing):**
+### Architectural rules
 
-1. **All persistence flows through `snk-library`.** Plugins never read or write another plugin's tables directly. `snk-library` exposes the typed query/mutation API; everything else is a consumer.
-2. **No plugin imports another plugin's internals.** Cross-plugin communication is Tauri commands or events. Forced separation prevents shared-state creep.
-3. **OCR is fire-and-forget.** `snk-capture` emits `capture:saved`; `snk-ocr` subscribes and processes asynchronously. Capture never waits on OCR.
-4. **Windows are frontend-only.** Plugins are pure Rust contracts. The annotate window and clipboard popup will be frontend artifacts that compose plugin bindings; plugins don't own window lifecycle.
-5. **The clipboard plugin skips its own writes.** When `snk-capture` auto-copies, the call routes through `snk-clipboard` so the watcher can tag-and-skip rather than dedup against itself.
+1. **All persistence flows through `snk-library`.** No other plugin reads or writes DB tables directly.
+2. **No plugin imports another plugin's internals.** Cross-plugin communication uses Tauri commands or events.
+3. **OCR is fire-and-forget.** Capture emits `capture:saved`; OCR subscribes async. Capture never waits.
+4. **Windows are frontend-only.** Plugins are pure Rust contracts; windows live in `app/src/windows/`.
+5. **The clipboard plugin skips its own writes** so auto-copy from capture doesn't re-trigger the watcher.
 
-See the design doc for full architectural rationale.
+### Data storage
 
-## Repository layout
+All data lives in the OS app-data directory:
+- **Windows:** `%APPDATA%\com.snapper-keeper.app\`
+- **macOS:** `~/Library/Application Support/com.snapper-keeper.app/`
 
-```
-app/                      Tauri shell + React frontend
-crates/                   Rust plugin crates (one per feature)
-packages/                 TS plugin packages (paired with Rust crates)
-docs/superpowers/
-  specs/                  Design specs (one per phase or major decision)
-  plans/                  Implementation plans (one per phase)
-.github/workflows/        CI
-```
+SQLite database with WAL mode, 3 migrations (captures + FTS, clipboard, OCR). Capture images stored as `captures/YYYY/MM/<uuid>.png` alongside annotated copies.
+
+## CI
+
+Two workflows:
+
+- **CI** (`.github/workflows/ci.yml`) — runs on push to `main` and all PRs. Lint + typecheck + Rust tests on Linux, app build verification on Linux/macOS/Windows.
+- **Release** (`.github/workflows/release.yml`) — runs on `v*` tags. Builds signed bundles for macOS (aarch64 + x86_64) and Windows (x86_64), notarizes macOS builds, generates `latest.json` update manifest, publishes to GitHub Releases.
+
+## Releasing
+
+1. Generate an Ed25519 keypair and configure GitHub Actions secrets (see [`docs/release-signing.md`](docs/release-signing.md))
+2. Set the public key in `app/src-tauri/tauri.conf.json` under `plugins.updater.pubkey`
+3. Configure Apple and Windows signing certificates as repo secrets
+4. Tag and push: `git tag v0.1.0 && git push origin v0.1.0`
+
+The release workflow builds, signs, notarizes, and publishes automatically.
 
 ## Development workflow
 
-Phase-scoped: each phase has its own spec + plan + worktree + feature branch + PR. Implementation runs through the [h-superpowers](https://github.com/) plugin ecosystem (brainstorming → writing-plans → team-driven-development → finishing-a-development-branch).
+Phase-scoped: each phase has its own spec + plan + worktree + feature branch. Implementation plans live in `docs/superpowers/plans/`, the design spec in `docs/superpowers/specs/`.
 
 When working on this repo with Claude Code, see [`CLAUDE.md`](CLAUDE.md) for project-specific conventions and gotchas.
 
 ## License
 
-MIT OR Apache-2.0 (dual-licensed, no contributions accepted yet — phase 1 is solo).
+MIT OR Apache-2.0 (dual-licensed).
