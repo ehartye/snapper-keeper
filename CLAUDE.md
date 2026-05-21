@@ -6,7 +6,7 @@ This file gives Claude project-specific context. Read it before you start anythi
 
 Cross-platform (Windows + macOS) desktop utility — screen capture with annotation + OCR-indexed search, plus clipboard history with a caret-anchored popup. Tauri 2 (Rust + React/TS), local-first, no servers, no telemetry. Audience is "share-friendly side project" — signed installers + auto-update via GitHub Releases, no store distribution.
 
-**Current phase:** Phase 1 (foundation + vertical slice). Done. See [`docs/superpowers/plans/2026-05-20-snapper-keeper-phase-1-foundation.md`](docs/superpowers/plans/2026-05-20-snapper-keeper-phase-1-foundation.md) for what landed.
+**Current phase:** Phase 6 complete (library polish). Phases 1–6 all merged to `main`. Next: Phase 7 (signing, notarization, auto-updater, release pipeline). See `docs/superpowers/plans/` for all phase plans.
 
 **Full design:** [`docs/superpowers/specs/2026-05-20-snapper-keeper-design.md`](docs/superpowers/specs/2026-05-20-snapper-keeper-design.md) — read this first if you don't have context. Section 13 has the decisions log; sections 4-10 cover architecture, data model, flows, OS integration, errors, and testing.
 
@@ -77,23 +77,18 @@ Don't let plan and code drift. The audit trail "plan was fixed because X" is muc
 - One task = one commit (unless a precursor is justified — workspace stubs, plan-fixes that need to land before the implementation).
 - Stage files explicitly (`git add path/to/file`), never `git add .` or `-A`.
 
-## Phase 1 status snapshot
+## Phase status
 
-22 plan tasks, all complete. ~24 commits on `feature/phase-1-foundation`. Two plan-fix commits + one stub-precursor commit are intentional and called out in their messages.
+| Phase | Scope | Status |
+|-------|-------|--------|
+| 1 | Foundation + vertical slice (workspace, capture pipeline, 3 plugins) | Done |
+| 2 | Region select, window capture, timed capture, post-capture toolbar | Done |
+| 3 | Annotation editor + canvas | Done |
+| 4 | Clipboard plugin + popup + auto-paste | Done |
+| 5 | OCR + FTS5 search | Done |
+| 6 | Library polish (sidebar, tags, settings, first-run wizard) | Done |
+| 7 | Signing, notarization, auto-updater, release pipeline | Next |
 
-**Known limitation:** The phase 1 smoke test on Windows requires an interactive desktop session. SSH-only environments can build and lint but can't smoke. CI's `build-app` job verifies the compile across all three OSes; runtime verification is manual.
-
-**What ships in phase 1:**
-- All workspace scaffolding, tooling, and CI
-- Working capture pipeline (hotkey/button/tray → file + DB row → thumbnail grid)
-- 3 of 8 plugins (`snk-library`, `snk-hotkeys`, `snk-capture`) plus the app shell
-
-**What's deferred (phases 2-7):**
-- Region select, window capture, timed capture, floating post-capture toolbar
-- Annotation editor + canvas
-- Clipboard plugin + popup + auto-paste
-- OCR + FTS5 search migration
-- Library window polish (sidebar, smart sections, tags, settings, first-run wizard)
-- Signing, notarization, auto-updater, release pipeline
+**Known limitation:** Smoke tests on Windows require an interactive desktop session. SSH-only environments can build and lint but can't smoke. CI's `build-app` job verifies the compile across all three OSes; runtime verification is manual.
 
 Each phase gets its own plan document in `docs/superpowers/plans/`.
