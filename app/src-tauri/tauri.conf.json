@@ -100,5 +100,13 @@
     "active": true,
     "targets": "all",
     "icon": ["icons/icon.ico", "icons/icon.png"]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "REPLACE_WITH_PUBLIC_KEY",
+      "endpoints": [
+        "https://github.com/ehartye/snapper-keeper/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

@@ -376,7 +376,7 @@ Add a top-level `"plugins"` key after the `"bundle"` section:
   "updater": {
     "pubkey": "REPLACE_WITH_PUBLIC_KEY",
     "endpoints": [
-      "https://github.com/anthropics/snapper-keeper/releases/latest/download/latest.json"
+      "https://github.com/ehartye/snapper-keeper/releases/latest/download/latest.json"
     ]
   }
 }
