@@ -3673,6 +3673,7 @@ dependencies = [
 name = "snk-ocr"
 version = "0.0.1"
 dependencies = [
+ "image",
  "serde",
  "serde_json",
  "snk-library",

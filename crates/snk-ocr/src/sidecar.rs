@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use tracing::{info, warn};
 
+#[derive(Debug)]
 pub struct OcrOutput {
     pub text: String,
     pub confidence: f64,
