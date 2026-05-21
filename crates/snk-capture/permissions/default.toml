@@ -1,3 +1,8 @@
 [default]
-description = "Default permissions for snk-capture: allows full-screen capture."
-permissions = ["allow-capture-full-screen"]
+description = "Default permissions for snk-capture: allows all capture modes and window listing."
+permissions = [
+    "allow-capture-full-screen",
+    "allow-capture-window",
+    "allow-capture-region",
+    "allow-list-capturable-windows",
+]
