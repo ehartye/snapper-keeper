@@ -23,6 +23,17 @@
         "decorations": true
       },
       {
+        "label": "capture-overlay",
+        "title": "",
+        "fullscreen": true,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "decorations": false,
+        "resizable": false,
+        "visible": false,
+        "skipTaskbar": true
+      },
+      {
         "label": "capture-toolbar",
         "title": "",
         "width": 280,
