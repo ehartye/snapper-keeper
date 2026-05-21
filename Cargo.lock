@@ -3669,6 +3669,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "snk-ocr"
+version = "0.0.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "snk-library",
+ "tauri",
+ "tauri-plugin",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "socket2"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

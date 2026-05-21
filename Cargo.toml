@@ -6,6 +6,7 @@ members = [
     "crates/snk-capture",
     "crates/snk-annotate",
     "crates/snk-clipboard",
+    "crates/snk-ocr",
     "app/src-tauri",
 ]
 
