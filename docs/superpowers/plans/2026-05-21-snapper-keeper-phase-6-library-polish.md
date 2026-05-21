@@ -636,7 +636,16 @@ git commit -m "feat(library): add settings module — get, set, delete with JSON
 
 **Step 1: Write the failing tests**
 
-Add new fields to `ListCapturesQuery` and new tests. In `crates/snk-library/src/captures.rs`, update the struct:
+Add new fields to `ListCapturesQuery` and new tests. In `crates/snk-library/src/captures.rs`, first update the existing `soft_delete_sets_deleted_at` test (around line 317) — change the literal struct initializer to use the spread operator so it remains forward-compatible with new fields:
+
+```rust
+ListCapturesQuery {
+    include_deleted: true,
+    ..Default::default()
+},
+```
+
+Then update the struct:
 
 ```rust
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -846,7 +855,7 @@ Expected: all tests pass (existing + 4 new)
 **Step 5: Run full workspace tests**
 
 Run: `cargo test --workspace`
-Expected: all pass — existing tests use `ListCapturesQuery::default()` or `ListCapturesQuery { limit: None, include_deleted: true }`, which still works because new fields default to `false`/`None`
+Expected: all pass — `ListCapturesQuery::default()` callers Just Work; the one literal initializer in `soft_delete_sets_deleted_at` was updated to use `..Default::default()` spread
 
 **Step 6: Commit**
 
