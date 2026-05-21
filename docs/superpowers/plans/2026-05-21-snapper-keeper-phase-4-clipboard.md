@@ -1500,7 +1500,7 @@ git commit -m "feat(app): register snk-clipboard plugin, hotkey, and tray entry"
 ```typescript
 export interface ClipboardItem {
   id: string;
-  kind: string;
+  kind: 'text' | 'image';
   text_content: string | null;
   file_path: string | null;
   content_hash: string;
