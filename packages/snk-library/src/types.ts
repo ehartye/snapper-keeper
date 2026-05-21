@@ -15,8 +15,19 @@ export interface Capture {
 export interface ListCapturesQuery {
   limit?: number;
   include_deleted?: boolean;
+  since?: number;
+  pinned_only?: boolean;
+  tag_id?: string;
+  deleted_only?: boolean;
 }
 
 export type SearchResult =
   | { kind: 'capture'; id: string; rank: number; snippet: string }
   | { kind: 'clipboard'; id: string; rank: number; snippet: string };
+
+export interface Tag {
+  id: string;
+  name: string;
+  color: string;
+  created_at: number;
+}
