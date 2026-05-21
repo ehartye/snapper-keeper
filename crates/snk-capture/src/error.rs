@@ -19,13 +19,17 @@ pub enum CaptureError {
 
 impl From<xcap::XCapError> for CaptureError {
     fn from(e: xcap::XCapError) -> Self {
-        CaptureError::Os { message: e.to_string() }
+        CaptureError::Os {
+            message: e.to_string(),
+        }
     }
 }
 
 impl From<image::ImageError> for CaptureError {
     fn from(e: image::ImageError) -> Self {
-        CaptureError::Encode { message: e.to_string() }
+        CaptureError::Encode {
+            message: e.to_string(),
+        }
     }
 }
 

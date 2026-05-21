@@ -22,7 +22,9 @@ impl Db {
         conn.pragma_update(None, "foreign_keys", "ON")?;
         crate::migrate::migrate(&mut conn)?;
         info!(path = %path.display(), "opened db");
-        Ok(Self { conn: Mutex::new(conn) })
+        Ok(Self {
+            conn: Mutex::new(conn),
+        })
     }
 
     pub(crate) fn with_conn<T>(&self, f: impl FnOnce(&mut Connection) -> Result<T>) -> Result<T> {
@@ -41,8 +43,9 @@ mod tests {
         let path = dir.path().join("nested/sk.db");
         let db = Db::open(&path).expect("open");
         db.with_conn(|c| {
-            let mode: String =
-                c.query_row("PRAGMA journal_mode", [], |row| row.get(0)).unwrap();
+            let mode: String = c
+                .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+                .unwrap();
             assert_eq!(mode.to_lowercase(), "wal");
             Ok(())
         })

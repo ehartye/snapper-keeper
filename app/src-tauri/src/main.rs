@@ -29,7 +29,8 @@ fn main() {
                 true,
                 None::<&str>,
             )?;
-            let open_lib = MenuItem::with_id(app, "tray:open-library", "Open library", true, None::<&str>)?;
+            let open_lib =
+                MenuItem::with_id(app, "tray:open-library", "Open library", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "tray:quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&capture_item, &open_lib, &quit])?;
 

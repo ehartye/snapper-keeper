@@ -169,13 +169,20 @@ mod tests {
         let db = fresh_db();
         let new = NewCapture {
             file_path: PathBuf::from("x.png"),
-            width: 1, height: 1,
-            source_app: None, source_window_title: None, monitor: None,
+            width: 1,
+            height: 1,
+            source_app: None,
+            source_window_title: None,
+            monitor: None,
         };
         let c = insert(&db, new).unwrap();
         db.with_conn(|conn| {
             let count: i64 = conn
-                .query_row("SELECT COUNT(*) FROM captures WHERE id = ?1", [&c.id], |r| r.get(0))
+                .query_row(
+                    "SELECT COUNT(*) FROM captures WHERE id = ?1",
+                    [&c.id],
+                    |r| r.get(0),
+                )
                 .unwrap();
             assert_eq!(count, 1);
             Ok(())
@@ -188,8 +195,11 @@ mod tests {
         let db = fresh_db();
         let new = NewCapture {
             file_path: PathBuf::from("a.png"),
-            width: 10, height: 10,
-            source_app: None, source_window_title: None, monitor: None,
+            width: 10,
+            height: 10,
+            source_app: None,
+            source_window_title: None,
+            monitor: None,
         };
         let inserted = insert(&db, new).unwrap();
         let fetched = get(&db, &inserted.id).unwrap();
@@ -210,8 +220,11 @@ mod tests {
         let db = fresh_db();
         let mk = |i: u32| NewCapture {
             file_path: PathBuf::from(format!("{i}.png")),
-            width: i, height: i,
-            source_app: None, source_window_title: None, monitor: None,
+            width: i,
+            height: i,
+            source_app: None,
+            source_window_title: None,
+            monitor: None,
         };
         let a = insert(&db, mk(1)).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(2));
@@ -221,9 +234,13 @@ mod tests {
 
         // Soft-delete `b`
         db.with_conn(|conn| {
-            conn.execute("UPDATE captures SET deleted_at=?1 WHERE id=?2", rusqlite::params![1_i64, &b.id])?;
+            conn.execute(
+                "UPDATE captures SET deleted_at=?1 WHERE id=?2",
+                rusqlite::params![1_i64, &b.id],
+            )?;
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
 
         let rows = list(&db, ListCapturesQuery::default()).unwrap();
         let ids: Vec<&str> = rows.iter().map(|r| r.id.as_str()).collect();

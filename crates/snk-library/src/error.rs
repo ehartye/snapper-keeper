@@ -11,7 +11,11 @@ pub enum LibraryError {
     Io { path: String, reason: String },
 
     #[error("migration failed from {from} to {to}")]
-    Migration { from: u32, to: u32, recoverable: bool },
+    Migration {
+        from: u32,
+        to: u32,
+        recoverable: bool,
+    },
 
     #[error("not found: {what}")]
     NotFound { what: String },
@@ -25,7 +29,10 @@ impl From<rusqlite::Error> for LibraryError {
                 if err.code == rusqlite::ErrorCode::DatabaseBusy
                 || err.code == rusqlite::ErrorCode::DatabaseLocked
         );
-        LibraryError::Database { message: e.to_string(), retryable }
+        LibraryError::Database {
+            message: e.to_string(),
+            retryable,
+        }
     }
 }
 

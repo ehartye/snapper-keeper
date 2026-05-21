@@ -1,5 +1,5 @@
 use rusqlite::Connection;
-use rusqlite_migration::{M, Migrations};
+use rusqlite_migration::{Migrations, M};
 
 use crate::Result;
 
@@ -10,11 +10,13 @@ pub fn migrations() -> Migrations<'static> {
 }
 
 pub fn migrate(conn: &mut Connection) -> Result<()> {
-    migrations().to_latest(conn).map_err(|e| crate::LibraryError::Migration {
-        from: 0,
-        to: 1,
-        recoverable: e.to_string().contains("Backup"),
-    })?;
+    migrations()
+        .to_latest(conn)
+        .map_err(|e| crate::LibraryError::Migration {
+            from: 0,
+            to: 1,
+            recoverable: e.to_string().contains("Backup"),
+        })?;
     Ok(())
 }
 
@@ -28,7 +30,13 @@ mod tests {
         migrate(&mut conn).expect("apply v001");
 
         // Tables exist
-        for table in ["captures", "tags", "capture_tags", "settings", "hotkey_bindings"] {
+        for table in [
+            "captures",
+            "tags",
+            "capture_tags",
+            "settings",
+            "hotkey_bindings",
+        ] {
             let count: i64 = conn
                 .query_row(
                     "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",

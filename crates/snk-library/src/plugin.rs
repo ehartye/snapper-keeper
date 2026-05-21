@@ -24,7 +24,10 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
                 .map_err(|e| format!("resolve app data dir: {e}"))?;
             let db_path = root.join("snapper-keeper.db");
             let db = Db::open(&db_path).map_err(|e| format!("open db: {e}"))?;
-            app.manage(LibraryState { db: Arc::new(db), root });
+            app.manage(LibraryState {
+                db: Arc::new(db),
+                root,
+            });
             Ok(())
         })
         .build()
