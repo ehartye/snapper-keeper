@@ -30,6 +30,9 @@ export function Thumbnail({ capture, src }: Props) {
           {capture.monitor ? ` · ${capture.monitor}` : ''}
           {capture.source_app ? ` · ${capture.source_app}` : ''}
         </div>
+        {capture.annotated_path && (
+          <div className="text-[10px] text-blue-400 truncate">annotated</div>
+        )}
       </div>
     </div>
   );
