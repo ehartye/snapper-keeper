@@ -14,6 +14,7 @@ import {
 import { CLIPBOARD_HISTORY_EVENT, CLIPBOARD_POPUP_SHOW_EVENT, showPopup } from '@snk/clipboard';
 
 import { CaptureGrid } from './CaptureGrid';
+import { SearchBar } from './SearchBar';
 
 export function LibraryWindow() {
   const queryClient = useQueryClient();
@@ -115,8 +116,9 @@ export function LibraryWindow() {
     <main className="h-full flex flex-col">
       <header className="px-4 py-2 border-b border-slate-800 flex items-center gap-3">
         <h1 className="text-sm font-semibold">snapper-keeper</h1>
-        <span className="text-xs text-slate-500">phase 4 · clipboard</span>
-        <div className="flex-1" />
+        <div className="flex-1 max-w-md">
+          <SearchBar />
+        </div>
         <button
           className="bg-slate-800 hover:bg-slate-700 text-slate-100 px-3 py-1 rounded text-xs"
           onClick={handleFullScreen}
