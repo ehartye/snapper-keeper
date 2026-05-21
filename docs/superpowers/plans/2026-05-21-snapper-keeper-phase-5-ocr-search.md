@@ -1597,25 +1597,19 @@ fn sidecar_extracts_text_from_image() {
         return;
     }
 
-    // Create a simple white image with black text using imageproc would be ideal,
-    // but for now we'll use a pre-existing fixture. Generate a minimal image
-    // that tesseract can read by writing "Hello" as a simple bitmap.
+    // Blank white image — tesseract should process without error,
+    // producing little or no text.
     let dir = tempfile::tempdir().unwrap();
     let img_path = dir.path().join("test.png");
-
-    // Create a 200x50 white image — tesseract won't find text but should not crash
     let img = image::RgbaImage::from_pixel(200, 50, image::Rgba([255, 255, 255, 255]));
     img.save(&img_path).unwrap();
 
     let result = snk_ocr::sidecar::run_tesseract(&img_path, "eng");
-    // Blank image should succeed but return empty/near-empty text
     match result {
         Ok(output) => {
-            // Success — tesseract processed the image without error
             assert!(output.text.len() < 10, "blank image should have minimal text");
         }
         Err(e) => {
-            // Tesseract might emit warnings about empty pages — that's OK
             assert!(
                 e.contains("empty") || e.contains("Empty") || e.contains("exit"),
                 "unexpected error: {e}"
