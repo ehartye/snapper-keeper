@@ -16,3 +16,7 @@ export interface ListCapturesQuery {
   limit?: number;
   include_deleted?: boolean;
 }
+
+export type SearchResult =
+  | { kind: 'capture'; id: string; rank: number; snippet: string }
+  | { kind: 'clipboard'; id: string; rank: number; snippet: string };

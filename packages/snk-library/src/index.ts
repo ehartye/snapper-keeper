@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 
-import type { Capture, ListCapturesQuery } from './types';
+import type { Capture, ListCapturesQuery, SearchResult } from './types';
 
 export * from './types';
 
@@ -14,4 +14,8 @@ export function getCapture(id: string): Promise<Capture> {
 
 export function softDeleteCapture(id: string): Promise<void> {
   return invoke<void>('plugin:snk-library|soft_delete_capture', { id });
+}
+
+export function searchLibrary(query: string, limit?: number): Promise<SearchResult[]> {
+  return invoke<SearchResult[]>('plugin:snk-library|search_library', { query, limit });
 }
