@@ -44,6 +44,18 @@
         "transparent": true,
         "visible": false,
         "skipTaskbar": true
+      },
+      {
+        "label": "annotate",
+        "title": "Annotate",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600,
+        "resizable": true,
+        "visible": false,
+        "decorations": true,
+        "skipTaskbar": false
       }
     ],
     "security": {

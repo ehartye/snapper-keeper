@@ -15,6 +15,7 @@ tauri-plugin-global-shortcut.workspace = true
 snk-library = { path = "../../crates/snk-library" }
 snk-hotkeys = { path = "../../crates/snk-hotkeys" }
 snk-capture = { path = "../../crates/snk-capture" }
+snk-annotate = { path = "../../crates/snk-annotate" }
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true

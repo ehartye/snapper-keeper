@@ -20,6 +20,7 @@ fn main() {
         .plugin(snk_library::init())
         .plugin(snk_hotkeys::init())
         .plugin(snk_capture::init())
+        .plugin(snk_annotate::init())
         .setup(|app| {
             let capture_region = MenuItem::with_id(
                 app,

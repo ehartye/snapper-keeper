@@ -3542,6 +3542,7 @@ version = "0.0.1"
 dependencies = [
  "serde",
  "serde_json",
+ "snk-annotate",
  "snk-capture",
  "snk-hotkeys",
  "snk-library",
