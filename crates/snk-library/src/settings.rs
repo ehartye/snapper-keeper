@@ -4,19 +4,16 @@ use crate::{Db, Result};
 
 pub fn get(db: &Db, key: &str) -> Result<Option<Value>> {
     db.with_conn(|conn| {
-        let result = conn.query_row(
-            "SELECT value FROM settings WHERE key = ?1",
-            [key],
-            |row| row.get::<_, String>(0),
-        );
+        let result = conn.query_row("SELECT value FROM settings WHERE key = ?1", [key], |row| {
+            row.get::<_, String>(0)
+        });
         match result {
             Ok(raw) => {
-                let val: Value = serde_json::from_str(&raw).map_err(|e| {
-                    crate::LibraryError::Database {
+                let val: Value =
+                    serde_json::from_str(&raw).map_err(|e| crate::LibraryError::Database {
                         message: format!("invalid JSON in setting {key}: {e}"),
                         retryable: false,
-                    }
-                })?;
+                    })?;
                 Ok(Some(val))
             }
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),

@@ -478,10 +478,7 @@ mod tests {
         let _b = insert(&db, mk(2)).unwrap();
 
         db.with_conn(|conn| {
-            conn.execute(
-                "UPDATE captures SET pinned = 1 WHERE id = ?1",
-                [&a.id],
-            )?;
+            conn.execute("UPDATE captures SET pinned = 1 WHERE id = ?1", [&a.id])?;
             Ok(())
         })
         .unwrap();

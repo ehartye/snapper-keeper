@@ -30,7 +30,10 @@ fn sidecar_extracts_text_from_image() {
     let result = snk_ocr::sidecar::run_tesseract(&img_path, "eng");
     match result {
         Ok(output) => {
-            assert!(output.text.len() < 10, "blank image should have minimal text");
+            assert!(
+                output.text.len() < 10,
+                "blank image should have minimal text"
+            );
         }
         Err(e) => {
             assert!(
@@ -51,5 +54,8 @@ fn sidecar_retries_on_bad_path() {
     let result = snk_ocr::sidecar::run_tesseract(Path::new("/nonexistent/image.png"), "eng");
     assert!(result.is_err());
     let err = result.unwrap_err();
-    assert!(err.contains("3 attempts"), "should report retry exhaustion: {err}");
+    assert!(
+        err.contains("3 attempts"),
+        "should report retry exhaustion: {err}"
+    );
 }

@@ -12,7 +12,8 @@ pub struct Tag {
 
 pub fn list(db: &Db) -> Result<Vec<Tag>> {
     db.with_conn(|conn| {
-        let mut stmt = conn.prepare("SELECT id, name, color, created_at FROM tags ORDER BY name")?;
+        let mut stmt =
+            conn.prepare("SELECT id, name, color, created_at FROM tags ORDER BY name")?;
         let rows = stmt
             .query_map([], |row| {
                 Ok(Tag {
