@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { LibraryWindow } from './windows/library/LibraryWindow';
 import { CaptureOverlay } from './windows/capture-overlay/CaptureOverlay';
 import { CaptureToolbar } from './windows/capture-toolbar/CaptureToolbar';
+import { AnnotateWindow } from './windows/annotate/AnnotateWindow';
 
 function WindowRouter() {
   const [label, setLabel] = useState<string | null>(null);
@@ -21,6 +22,8 @@ function WindowRouter() {
       return <CaptureOverlay />;
     case 'capture-toolbar':
       return <CaptureToolbar />;
+    case 'annotate':
+      return <AnnotateWindow />;
     default:
       return <div>Unknown window: {label}</div>;
   }
