@@ -6,10 +6,12 @@
 
 pub mod commands;
 pub mod error;
+pub mod foreground;
 pub mod grab;
 pub mod orchestrate;
 pub mod plugin;
 
 pub use error::{CaptureError, Result};
+pub use foreground::{get_foreground_info, ForegroundInfo};
 pub use grab::{grab_primary_monitor, GrabResult};
 pub use plugin::init;
