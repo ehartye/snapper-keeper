@@ -1716,7 +1716,7 @@ git commit -m "feat(clipboard): add ClipboardPopupItem component"
 **Step 1: Create the component**
 
 ```tsx
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef, type ChangeEvent, type KeyboardEvent } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
 
@@ -1791,7 +1791,7 @@ export function ClipboardPopup() {
   );
 
   const handleFilterChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
+    (e: ChangeEvent<HTMLInputElement>) => {
       const val = e.target.value;
       setFilter(val);
       loadItems(val);
@@ -1800,7 +1800,7 @@ export function ClipboardPopup() {
   );
 
   const handleKeyDown = useCallback(
-    async (e: React.KeyboardEvent) => {
+    async (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
         await dismiss();
