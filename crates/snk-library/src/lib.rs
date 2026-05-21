@@ -11,6 +11,7 @@ pub mod ocr;
 pub mod plugin;
 pub mod search;
 pub mod settings;
+pub mod tags;
 
 pub use captures::{Capture, ListCapturesQuery, NewCapture};
 pub use clipboard::{ClipboardItem, ClipboardItemKind, ListClipboardQuery, NewClipboardItem};
@@ -19,3 +20,4 @@ pub use error::{LibraryError, Result};
 pub use ocr::OcrText;
 pub use plugin::{init, LibraryState};
 pub use search::SearchResult;
+pub use tags::Tag;
