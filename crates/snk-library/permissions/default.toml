@@ -1,5 +1,5 @@
 [default]
-description = "Default permissions for snk-library: allows all capture and clipboard operations."
+description = "Default permissions for snk-library: allows all capture, clipboard, search, tag, and settings operations."
 permissions = [
     "allow-list-captures",
     "allow-get-capture",
@@ -8,4 +8,13 @@ permissions = [
     "allow-get-clipboard-item",
     "allow-toggle-clipboard-pin",
     "allow-search-library",
+    "allow-list-tags",
+    "allow-create-tag",
+    "allow-update-tag",
+    "allow-delete-tag",
+    "allow-assign-tag",
+    "allow-remove-tag",
+    "allow-list-capture-tags",
+    "allow-get-setting",
+    "allow-set-setting",
 ]

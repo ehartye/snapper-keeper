@@ -4,6 +4,7 @@ use crate::captures::{self, Capture, ListCapturesQuery};
 use crate::clipboard::{self, ClipboardItem, ListClipboardQuery};
 use crate::plugin::LibraryState;
 use crate::search::{self, SearchResult};
+use crate::tags::{self, Tag};
 use crate::Result;
 
 #[tauri::command]
@@ -69,4 +70,90 @@ pub fn search_library<R: Runtime>(
     limit: Option<u32>,
 ) -> Result<Vec<SearchResult>> {
     search::search(&state.db, &query, limit.unwrap_or(50))
+}
+
+#[tauri::command]
+pub fn list_tags<R: Runtime>(
+    state: State<'_, LibraryState>,
+    _app: tauri::AppHandle<R>,
+) -> Result<Vec<Tag>> {
+    tags::list(&state.db)
+}
+
+#[tauri::command]
+pub fn create_tag<R: Runtime>(
+    state: State<'_, LibraryState>,
+    _app: tauri::AppHandle<R>,
+    name: String,
+    color: String,
+) -> Result<Tag> {
+    tags::create(&state.db, &name, &color)
+}
+
+#[tauri::command]
+pub fn update_tag<R: Runtime>(
+    state: State<'_, LibraryState>,
+    _app: tauri::AppHandle<R>,
+    id: String,
+    name: String,
+    color: String,
+) -> Result<Tag> {
+    tags::update(&state.db, &id, &name, &color)
+}
+
+#[tauri::command]
+pub fn delete_tag<R: Runtime>(
+    state: State<'_, LibraryState>,
+    _app: tauri::AppHandle<R>,
+    id: String,
+) -> Result<()> {
+    tags::delete(&state.db, &id)
+}
+
+#[tauri::command]
+pub fn assign_tag<R: Runtime>(
+    state: State<'_, LibraryState>,
+    _app: tauri::AppHandle<R>,
+    capture_id: String,
+    tag_id: String,
+) -> Result<()> {
+    tags::assign(&state.db, &capture_id, &tag_id)
+}
+
+#[tauri::command]
+pub fn remove_tag<R: Runtime>(
+    state: State<'_, LibraryState>,
+    _app: tauri::AppHandle<R>,
+    capture_id: String,
+    tag_id: String,
+) -> Result<()> {
+    tags::remove(&state.db, &capture_id, &tag_id)
+}
+
+#[tauri::command]
+pub fn list_capture_tags<R: Runtime>(
+    state: State<'_, LibraryState>,
+    _app: tauri::AppHandle<R>,
+    capture_id: String,
+) -> Result<Vec<Tag>> {
+    tags::list_for_capture(&state.db, &capture_id)
+}
+
+#[tauri::command]
+pub fn get_setting<R: Runtime>(
+    state: State<'_, LibraryState>,
+    _app: tauri::AppHandle<R>,
+    key: String,
+) -> Result<Option<serde_json::Value>> {
+    crate::settings::get(&state.db, &key)
+}
+
+#[tauri::command]
+pub fn set_setting<R: Runtime>(
+    state: State<'_, LibraryState>,
+    _app: tauri::AppHandle<R>,
+    key: String,
+    value: serde_json::Value,
+) -> Result<()> {
+    crate::settings::set(&state.db, &key, &value)
 }

@@ -21,6 +21,15 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             crate::commands::get_clipboard_item,
             crate::commands::toggle_clipboard_pin,
             crate::commands::search_library,
+            crate::commands::list_tags,
+            crate::commands::create_tag,
+            crate::commands::update_tag,
+            crate::commands::delete_tag,
+            crate::commands::assign_tag,
+            crate::commands::remove_tag,
+            crate::commands::list_capture_tags,
+            crate::commands::get_setting,
+            crate::commands::set_setting,
         ])
         .setup(|app, _api| {
             let root = app
