@@ -9,6 +9,7 @@ pub mod files;
 pub mod migrate;
 pub mod ocr;
 pub mod plugin;
+pub mod search;
 
 pub use captures::{Capture, ListCapturesQuery, NewCapture};
 pub use clipboard::{ClipboardItem, ClipboardItemKind, ListClipboardQuery, NewClipboardItem};
@@ -16,3 +17,4 @@ pub use db::Db;
 pub use error::{LibraryError, Result};
 pub use ocr::OcrText;
 pub use plugin::{init, LibraryState};
+pub use search::SearchResult;
