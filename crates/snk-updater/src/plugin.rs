@@ -163,3 +163,103 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         })
         .build()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn initial_status_is_idle() {
+        let state = UpdaterState::new();
+        assert_eq!(state.get_status(), UpdateStatus::Idle);
+    }
+
+    #[test]
+    fn set_and_get_status() {
+        let state = UpdaterState::new();
+        state.set_status(UpdateStatus::Checking);
+        assert_eq!(state.get_status(), UpdateStatus::Checking);
+    }
+
+    #[test]
+    fn set_available_status() {
+        let state = UpdaterState::new();
+        state.set_status(UpdateStatus::Available {
+            version: "1.2.3".to_string(),
+        });
+        assert_eq!(
+            state.get_status(),
+            UpdateStatus::Available {
+                version: "1.2.3".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn set_downloading_status() {
+        let state = UpdaterState::new();
+        state.set_status(UpdateStatus::Downloading { percent: 42.5 });
+        assert_eq!(
+            state.get_status(),
+            UpdateStatus::Downloading { percent: 42.5 }
+        );
+    }
+
+    #[test]
+    fn set_error_status() {
+        let state = UpdaterState::new();
+        state.set_status(UpdateStatus::Error {
+            detail: "network timeout".to_string(),
+        });
+        assert_eq!(
+            state.get_status(),
+            UpdateStatus::Error {
+                detail: "network timeout".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn status_transitions() {
+        let state = UpdaterState::new();
+        assert_eq!(state.get_status(), UpdateStatus::Idle);
+
+        state.set_status(UpdateStatus::Checking);
+        assert_eq!(state.get_status(), UpdateStatus::Checking);
+
+        state.set_status(UpdateStatus::Available {
+            version: "2.0.0".to_string(),
+        });
+        state.set_status(UpdateStatus::Downloading { percent: 50.0 });
+        state.set_status(UpdateStatus::Ready {
+            version: "2.0.0".to_string(),
+        });
+        assert_eq!(
+            state.get_status(),
+            UpdateStatus::Ready {
+                version: "2.0.0".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn serde_roundtrip_unit_variants() {
+        let idle = UpdateStatus::Idle;
+        let json = serde_json::to_string(&idle).unwrap();
+        assert!(json.contains("\"kind\":\"idle\""));
+        let parsed: UpdateStatus = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, UpdateStatus::Idle);
+    }
+
+    #[test]
+    fn serde_roundtrip_data_variants() {
+        let available = UpdateStatus::Available {
+            version: "3.0.0".to_string(),
+        };
+        let json = serde_json::to_string(&available).unwrap();
+        assert!(json.contains("\"kind\":\"available\""));
+        assert!(json.contains("\"version\":\"3.0.0\""));
+        let parsed: UpdateStatus = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, available);
+    }
+}
