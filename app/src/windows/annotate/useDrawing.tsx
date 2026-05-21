@@ -1,4 +1,4 @@
-import { useCallback, useRef, type RefObject } from 'react';
+import { useCallback, useRef, type MutableRefObject } from 'react';
 import type Konva from 'konva';
 
 import type { AnnotationShape, AnnotationTool } from '@snk/annotate';
@@ -19,7 +19,7 @@ function makeStroke(color: string, width: number, tool: AnnotationTool) {
   };
 }
 
-export function useDrawing(stageRef: RefObject<Konva.Stage | null>) {
+export function useDrawing(stageRef: MutableRefObject<Konva.Stage | null>) {
   const startPosRef = useRef<{ x: number; y: number } | null>(null);
 
   const getPointerPos = useCallback(() => {

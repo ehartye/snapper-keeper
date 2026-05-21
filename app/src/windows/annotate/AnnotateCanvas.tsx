@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, type MutableRefObject } from 'react';
 import { Stage, Layer, Image as KonvaImage, Rect } from 'react-konva';
 import type Konva from 'konva';
 
@@ -10,10 +10,10 @@ interface Props {
   imageSrc: string;
   imageWidth: number;
   imageHeight: number;
+  stageRef: MutableRefObject<Konva.Stage | null>;
 }
 
-export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight }: Props) {
-  const stageRef = useRef<Konva.Stage | null>(null);
+export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: Props) {
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
   const containerRef = useRef<HTMLDivElement>(null);

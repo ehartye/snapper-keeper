@@ -1,4 +1,4 @@
-import { useCallback, useRef, type RefObject } from 'react';
+import { useCallback, useRef, type MutableRefObject } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type Konva from 'konva';
 
@@ -8,7 +8,7 @@ import { useAnnotateStore } from './store';
 
 interface Props {
   captureId: string;
-  stageRef: RefObject<Konva.Stage | null>;
+  stageRef: MutableRefObject<Konva.Stage | null>;
 }
 
 export function AnnotateTopBar({ captureId, stageRef }: Props) {

@@ -64,6 +64,7 @@ export function AnnotateWindow() {
           imageSrc={src}
           imageWidth={capture.data.width}
           imageHeight={capture.data.height}
+          stageRef={stageRef}
         />
       </div>
     </div>
