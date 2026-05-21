@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
@@ -14,10 +14,18 @@ import {
 import { CLIPBOARD_HISTORY_EVENT, CLIPBOARD_POPUP_SHOW_EVENT, showPopup } from '@snk/clipboard';
 
 import { CaptureGrid } from './CaptureGrid';
+import { ClipboardList } from './ClipboardList';
 import { SearchBar } from './SearchBar';
+import { Sidebar } from './Sidebar';
+import type { SidebarSelection } from './Sidebar';
 
 export function LibraryWindow() {
   const queryClient = useQueryClient();
+  const [selection, setSelection] = useState<SidebarSelection>({
+    type: 'captures',
+    label: 'All',
+    query: {},
+  });
 
   const refreshCaptures = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: ['captures'] });
@@ -51,8 +59,6 @@ export function LibraryWindow() {
   }, []);
 
   const handleWindow = useCallback(async () => {
-    // Phase 2 MVP: for now, capture the first non-minimized window
-    // that isn't our own app. A window picker UI is a future polish item.
     try {
       const { listCapturableWindows, captureWindow } = await import('@snk/capture');
       const windows = await listCapturableWindows();
@@ -72,7 +78,6 @@ export function LibraryWindow() {
   }, [refreshCaptures, showToolbar]);
 
   const handleTimed = useCallback(async () => {
-    // 5-second countdown, then full-screen capture
     setTimeout(async () => {
       try {
         const capture = await captureFullScreen();
@@ -113,22 +118,29 @@ export function LibraryWindow() {
   }, [handleFullScreen, handleRegion, handleWindow, handleTimed, handleClipboardHistory]);
 
   return (
-    <main className="h-full flex flex-col">
-      <header className="px-4 py-2 border-b border-slate-800 flex items-center gap-3">
-        <h1 className="text-sm font-semibold">snapper-keeper</h1>
-        <div className="flex-1 max-w-md">
-          <SearchBar />
-        </div>
-        <button
-          className="bg-slate-800 hover:bg-slate-700 text-slate-100 px-3 py-1 rounded text-xs"
-          onClick={handleFullScreen}
-        >
-          Capture screen
-        </button>
-      </header>
-      <section className="flex-1 overflow-auto p-4">
-        <CaptureGrid />
-      </section>
+    <main className="h-full flex">
+      <Sidebar selection={selection} onSelect={setSelection} />
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="px-4 py-2 border-b border-slate-800 flex items-center gap-3">
+          <h1 className="text-sm font-semibold">snapper-keeper</h1>
+          <div className="flex-1 max-w-md">
+            <SearchBar />
+          </div>
+          <button
+            className="bg-slate-800 hover:bg-slate-700 text-slate-100 px-3 py-1 rounded text-xs"
+            onClick={handleFullScreen}
+          >
+            Capture screen
+          </button>
+        </header>
+        <section className="flex-1 overflow-auto p-4">
+          {selection.type === 'captures' ? (
+            <CaptureGrid query={selection.query} />
+          ) : (
+            <ClipboardList />
+          )}
+        </section>
+      </div>
     </main>
   );
 }

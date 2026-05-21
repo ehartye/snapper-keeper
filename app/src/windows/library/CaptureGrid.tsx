@@ -2,19 +2,24 @@ import { useQuery } from '@tanstack/react-query';
 import { path } from '@tauri-apps/api';
 
 import { listCaptures } from '@snk/library';
+import type { ListCapturesQuery } from '@snk/library';
 
 import { captureAssetUrl } from '../../lib/assetUrl';
 import { queryKeys } from '../../lib/queryKeys';
 import { Thumbnail } from './Thumbnail';
 
-export function CaptureGrid() {
+interface Props {
+  query?: ListCapturesQuery;
+}
+
+export function CaptureGrid({ query }: Props) {
   const root = useQuery({
     queryKey: ['app-data-dir'],
     queryFn: () => path.appDataDir(),
   });
   const captures = useQuery({
-    queryKey: queryKeys.captures.list(),
-    queryFn: () => listCaptures(),
+    queryKey: queryKeys.captures.list(query),
+    queryFn: () => listCaptures(query),
   });
 
   if (root.isLoading || captures.isLoading) {
