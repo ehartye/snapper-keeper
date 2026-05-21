@@ -7,4 +7,5 @@ permissions = [
     "allow-list-clipboard-items",
     "allow-get-clipboard-item",
     "allow-toggle-clipboard-pin",
+    "allow-search-library",
 ]

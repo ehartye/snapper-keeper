@@ -5,6 +5,7 @@ const COMMANDS: &[&str] = &[
     "list_clipboard_items",
     "get_clipboard_item",
     "toggle_clipboard_pin",
+    "search_library",
 ];
 
 fn main() {

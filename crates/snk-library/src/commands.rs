@@ -3,6 +3,7 @@ use tauri::{Runtime, State};
 use crate::captures::{self, Capture, ListCapturesQuery};
 use crate::clipboard::{self, ClipboardItem, ListClipboardQuery};
 use crate::plugin::LibraryState;
+use crate::search::{self, SearchResult};
 use crate::Result;
 
 #[tauri::command]
@@ -58,4 +59,14 @@ pub fn toggle_clipboard_pin<R: Runtime>(
     pinned: bool,
 ) -> Result<()> {
     clipboard::set_pinned(&state.db, &id, pinned)
+}
+
+#[tauri::command]
+pub fn search_library<R: Runtime>(
+    state: State<'_, LibraryState>,
+    _app: tauri::AppHandle<R>,
+    query: String,
+    limit: Option<u32>,
+) -> Result<Vec<SearchResult>> {
+    search::search(&state.db, &query, limit.unwrap_or(50))
 }
