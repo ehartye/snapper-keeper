@@ -56,6 +56,18 @@
         "visible": false,
         "decorations": true,
         "skipTaskbar": false
+      },
+      {
+        "label": "clipboard-popup",
+        "title": "",
+        "width": 380,
+        "height": 480,
+        "resizable": false,
+        "alwaysOnTop": true,
+        "decorations": false,
+        "transparent": true,
+        "visible": false,
+        "skipTaskbar": true
       }
     ],
     "security": {

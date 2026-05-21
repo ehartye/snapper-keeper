@@ -15,6 +15,7 @@ pub enum HotkeyAction {
     CaptureRegion,
     CaptureWindow,
     CaptureTimedFullScreen,
+    ClipboardHistory,
 }
 
 impl HotkeyAction {
@@ -24,6 +25,7 @@ impl HotkeyAction {
             HotkeyAction::CaptureRegion => "hotkey:capture-region",
             HotkeyAction::CaptureWindow => "hotkey:capture-window",
             HotkeyAction::CaptureTimedFullScreen => "hotkey:capture-timed",
+            HotkeyAction::ClipboardHistory => "hotkey:clipboard-history",
         }
     }
 
@@ -34,6 +36,7 @@ impl HotkeyAction {
             HotkeyAction::CaptureRegion => "Cmd+Shift+4",
             HotkeyAction::CaptureWindow => "Cmd+Shift+5",
             HotkeyAction::CaptureTimedFullScreen => "Cmd+Shift+6",
+            HotkeyAction::ClipboardHistory => "Cmd+Shift+V",
         }
         #[cfg(not(target_os = "macos"))]
         match self {
@@ -41,6 +44,7 @@ impl HotkeyAction {
             HotkeyAction::CaptureRegion => "CmdOrCtrl+Shift+4",
             HotkeyAction::CaptureWindow => "CmdOrCtrl+Shift+5",
             HotkeyAction::CaptureTimedFullScreen => "CmdOrCtrl+Shift+6",
+            HotkeyAction::ClipboardHistory => "CmdOrCtrl+Shift+V",
         }
     }
 }
@@ -68,6 +72,7 @@ fn register_defaults<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String
         HotkeyAction::CaptureRegion,
         HotkeyAction::CaptureWindow,
         HotkeyAction::CaptureTimedFullScreen,
+        HotkeyAction::ClipboardHistory,
     ];
     for action in actions {
         let chord = action.default_chord();

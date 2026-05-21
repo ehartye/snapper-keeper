@@ -21,6 +21,7 @@ fn main() {
         .plugin(snk_hotkeys::init())
         .plugin(snk_capture::init())
         .plugin(snk_annotate::init())
+        .plugin(snk_clipboard::init())
         .setup(|app| {
             let capture_region = MenuItem::with_id(
                 app,
@@ -50,6 +51,13 @@ fn main() {
                 true,
                 None::<&str>,
             )?;
+            let clipboard_hist = MenuItem::with_id(
+                app,
+                "tray:clipboard-history",
+                "Clipboard history\tCtrl+Shift+V",
+                true,
+                None::<&str>,
+            )?;
             let sep = PredefinedMenuItem::separator(app)?;
             let open_lib =
                 MenuItem::with_id(app, "tray:open-library", "Open library", true, None::<&str>)?;
@@ -62,6 +70,7 @@ fn main() {
                     &capture_window,
                     &capture_screen,
                     &capture_timed,
+                    &clipboard_hist,
                     &sep,
                     &open_lib,
                     &quit,
@@ -83,6 +92,9 @@ fn main() {
                     }
                     "tray:capture-timed" => {
                         let _ = app.emit("hotkey:capture-timed", ());
+                    }
+                    "tray:clipboard-history" => {
+                        let _ = app.emit("hotkey:clipboard-history", ());
                     }
                     "tray:open-library" => {
                         if let Some(win) = app.get_webview_window("library") {

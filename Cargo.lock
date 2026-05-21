@@ -3580,6 +3580,7 @@ dependencies = [
  "serde_json",
  "snk-annotate",
  "snk-capture",
+ "snk-clipboard",
  "snk-hotkeys",
  "snk-library",
  "tauri",
