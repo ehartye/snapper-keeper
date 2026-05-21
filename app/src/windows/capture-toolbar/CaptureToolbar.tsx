@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { softDeleteCapture } from '@snk/library';
 
 interface ToolbarPayload {
@@ -29,8 +30,18 @@ export function CaptureToolbar() {
   }, []);
 
   const handleAnnotate = useCallback(async () => {
+    if (!captureId) {
+      await dismiss();
+      return;
+    }
+    const annotateWin = await WebviewWindow.getByLabel('annotate');
+    if (annotateWin) {
+      await annotateWin.emit('annotate:open', { captureId });
+      await annotateWin.show();
+      await annotateWin.setFocus();
+    }
     await dismiss();
-  }, [dismiss]);
+  }, [captureId, dismiss]);
 
   const handleCopy = useCallback(async () => {
     await dismiss();
