@@ -1103,21 +1103,16 @@ async fn worker(
                     error!(capture_id = %job.capture_id, error = %e, "failed to store ocr text");
                     continue;
                 }
-                // Update FTS index with OCR text
-                let ocr_row = snk_library::ocr::get(&db_clone, &job.capture_id);
-                if let Ok(Some(_)) = ocr_row {
-                    // Re-index capture with OCR text
-                    let capture = snk_library::captures::get(&db_clone, &job.capture_id);
-                    if let Ok(cap) = capture {
-                        let _ = snk_library::search::index_capture(
-                            &db_clone,
-                            &job.capture_id,
-                            cap.source_app.as_deref(),
-                            cap.source_window_title.as_deref(),
-                            Some(&output.text),
-                            None,
-                        );
-                    }
+                // Re-index capture with OCR text (upsert just succeeded, no need to re-read ocr_text)
+                if let Ok(cap) = snk_library::captures::get(&db_clone, &job.capture_id) {
+                    let _ = snk_library::search::index_capture(
+                        &db_clone,
+                        &job.capture_id,
+                        cap.source_app.as_deref(),
+                        cap.source_window_title.as_deref(),
+                        Some(&output.text),
+                        None,
+                    );
                 }
                 info!(capture_id = %job.capture_id, chars = output.text.len(), "ocr indexed");
             }
@@ -1165,16 +1160,10 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             let db = lib_state.db.clone();
             let root = lib_state.root.clone();
 
-            let queue = OcrQueue::start(Arc::clone(&db), root.clone());
+            let queue = OcrQueue::start(Arc::clone(&db), root);
             app.manage(OcrState { queue });
 
-            // Listen for capture:saved events and enqueue OCR
-            let ocr_state = app.state::<OcrState>();
-            let queue_handle = &ocr_state.queue;
             let db_for_listener = Arc::clone(&db);
-            let root_for_listener = root.clone();
-
-            // We need to clone the sender side to move into the listener closure
             let app_handle = app.app_handle().clone();
             app_handle.listen("capture:saved", move |event| {
                 let capture_id = event.payload().trim_matches('"').to_string();
