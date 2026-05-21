@@ -13,5 +13,7 @@ pub mod plugin;
 
 pub use error::{CaptureError, Result};
 pub use foreground::{get_foreground_info, ForegroundInfo};
-pub use grab::{grab_primary_monitor, grab_window, list_capturable_windows, GrabResult, WindowInfo};
+pub use grab::{
+    grab_primary_monitor, grab_region, grab_window, list_capturable_windows, GrabResult, WindowInfo,
+};
 pub use plugin::init;

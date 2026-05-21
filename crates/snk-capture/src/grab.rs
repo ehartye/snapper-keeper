@@ -82,3 +82,49 @@ pub fn grab_window(window_id: u32) -> Result<GrabResult> {
         monitor_name,
     })
 }
+
+pub fn grab_region(monitor_id: u32, x: u32, y: u32, w: u32, h: u32) -> Result<GrabResult> {
+    let monitors = Monitor::all()?;
+    let mon = monitors
+        .into_iter()
+        .find(|m| m.id() == monitor_id)
+        .ok_or(crate::CaptureError::NoMonitors)?;
+
+    let monitor_name = mon.name().to_string();
+    let full_image = mon.capture_image()?;
+
+    let x = x.min(full_image.width().saturating_sub(1));
+    let y = y.min(full_image.height().saturating_sub(1));
+    let w = w.min(full_image.width().saturating_sub(x));
+    let h = h.min(full_image.height().saturating_sub(y));
+
+    if w == 0 || h == 0 {
+        return Err(crate::CaptureError::Os {
+            message: "region has zero area".into(),
+        });
+    }
+
+    let cropped = image::imageops::crop_imm(&full_image, x, y, w, h).to_image();
+    let (cw, ch) = (cropped.width(), cropped.height());
+
+    let mut buf = Cursor::new(Vec::with_capacity((cw * ch * 4) as usize / 2));
+    PngEncoder::new(&mut buf).write_image(cropped.as_raw(), cw, ch, ColorType::Rgba8.into())?;
+
+    Ok(GrabResult {
+        png_bytes: buf.into_inner(),
+        width: cw,
+        height: ch,
+        monitor_name,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn grab_region_rejects_zero_area() {
+        let result = grab_region(9999, 0, 0, 100, 100);
+        assert!(result.is_err());
+    }
+}
