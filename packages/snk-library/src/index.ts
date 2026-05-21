@@ -11,3 +11,7 @@ export function listCaptures(query?: ListCapturesQuery): Promise<Capture[]> {
 export function getCapture(id: string): Promise<Capture> {
   return invoke<Capture>('plugin:snk-library|get_capture', { id });
 }
+
+export function softDeleteCapture(id: string): Promise<void> {
+  return invoke<void>('plugin:snk-library|soft_delete_capture', { id });
+}
