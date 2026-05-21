@@ -854,6 +854,22 @@ const COMMANDS: &[&str] = &[
 ];
 ```
 
+**Step 3.5: Update permissions/default.toml**
+
+Add `"allow-search-library"` to the `permissions` array in `crates/snk-library/permissions/default.toml` so the `snk-library:default` capability alias includes the new command. Without this, the frontend's `invoke('plugin:snk-library|search_library', ...)` would be rejected at runtime by Tauri 2's capability enforcement.
+
+```toml
+permissions = [
+    "allow-list-captures",
+    "allow-get-capture",
+    "allow-soft-delete-capture",
+    "allow-list-clipboard-items",
+    "allow-get-clipboard-item",
+    "allow-toggle-clipboard-pin",
+    "allow-search-library",
+]
+```
+
 **Step 4: Verify build compiles**
 
 Run: `cargo build -p snk-library`
@@ -862,7 +878,7 @@ Expected: SUCCESS
 **Step 5: Commit**
 
 ```bash
-git add crates/snk-library/src/commands.rs crates/snk-library/src/plugin.rs crates/snk-library/build.rs
+git add crates/snk-library/src/commands.rs crates/snk-library/src/plugin.rs crates/snk-library/build.rs crates/snk-library/permissions/default.toml
 git commit -m "feat(library): add search_library Tauri command"
 ```
 
