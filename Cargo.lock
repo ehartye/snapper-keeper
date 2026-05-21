@@ -3625,17 +3625,14 @@ name = "snk-clipboard"
 version = "0.0.1"
 dependencies = [
  "arboard",
- "chrono",
  "core-foundation",
  "core-graphics 0.24.0",
  "serde",
- "serde_json",
  "sha2",
  "snk-library",
  "tauri",
  "tauri-plugin",
  "thiserror 1.0.69",
- "tokio",
  "tracing",
  "uuid",
  "windows 0.61.3",

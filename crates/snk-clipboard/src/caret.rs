@@ -6,6 +6,11 @@ pub struct CaretPosition {
     pub y: i32,
 }
 
+/// Last-resort popup origin when neither caret nor cursor APIs return a
+/// usable position — places it near the top-left of the primary screen so
+/// the user can still see and interact with it.
+const POPUP_FALLBACK: CaretPosition = CaretPosition { x: 100, y: 100 };
+
 pub fn get_caret_position() -> Option<CaretPosition> {
     #[cfg(target_os = "windows")]
     {
@@ -39,7 +44,7 @@ pub fn get_cursor_position() -> Option<CaretPosition> {
 pub fn resolve_popup_position() -> CaretPosition {
     get_caret_position()
         .or_else(get_cursor_position)
-        .unwrap_or(CaretPosition { x: 100, y: 100 })
+        .unwrap_or(POPUP_FALLBACK)
 }
 
 #[cfg(target_os = "windows")]
