@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { listTags } from '@snk/library';
 import type { ListCapturesQuery, Tag } from '@snk/library';
 
 import { queryKeys } from '../../lib/queryKeys';
+import { TagDialog } from './TagDialog';
 
 export type SidebarSelection =
   | { type: 'captures'; label: string; query: ListCapturesQuery }
@@ -47,6 +49,7 @@ export function Sidebar({ selection, onSelect }: Props) {
   });
 
   const tags: Tag[] = tagsQuery.data ?? [];
+  const [tagDialogOpen, setTagDialogOpen] = useState(false);
 
   return (
     <aside className="w-56 shrink-0 border-r border-slate-800 flex flex-col overflow-y-auto">
@@ -70,6 +73,12 @@ export function Sidebar({ selection, onSelect }: Props) {
 
       <div className="p-2">
         <div className="text-[10px] uppercase tracking-wider text-slate-500 px-3 mb-1">Tags</div>
+        <button
+          className="text-[10px] text-slate-500 hover:text-slate-300 px-3 mb-1"
+          onClick={() => setTagDialogOpen(true)}
+        >
+          Manage tags
+        </button>
         {tags.length === 0 ? (
           <div className="text-xs text-slate-600 px-3">No tags yet</div>
         ) : (
@@ -115,6 +124,7 @@ export function Sidebar({ selection, onSelect }: Props) {
           Clipboard History
         </button>
       </nav>
+      <TagDialog open={tagDialogOpen} onClose={() => setTagDialogOpen(false)} />
     </aside>
   );
 }
