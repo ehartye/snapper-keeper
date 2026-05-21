@@ -41,6 +41,7 @@ These bit us in phase 1. Avoid repeating.
 - **Cargo workspace requires every declared member to exist on disk.** If you add members to the root `Cargo.toml` for tasks that haven't shipped yet, also commit a placeholder manifest (empty `[package]` + empty `src/lib.rs`).
 - **`core:asset:default` is NOT a valid Tauri 2 permission.** The asset protocol is gated entirely by the `protocol-asset` Cargo feature + `assetProtocol` scope in `tauri.conf.json`; there's no separate per-capability permission. The frontend needs `core:path:default` to call `path.appDataDir()`.
 - **Windows OpenSSH sessions are non-interactive window stations.** `RegisterHotKey` and `WebView2` will fail with cryptic errors (error 1459, "Invalid window handle") if you try to run `tauri dev` from SSH. Must be an interactive desktop (RDP, console, GUI terminal).
+- **Windows UAC installer detection heuristic flags binaries with "update", "setup", or "install" in the filename.** A binary named `snk_updater-*.exe` (or any test/example exe matching this pattern) triggers UAC elevation on launch, which breaks unattended `cargo test` / `cargo run --example` runs. Name test binaries to avoid these substrings (e.g. `updater_smoke` not `snk_updater_test`), or embed a manifest declaring `asInvoker` requestedExecutionLevel.
 
 ## Worktree convention
 
