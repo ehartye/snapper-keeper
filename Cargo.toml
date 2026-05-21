@@ -5,6 +5,7 @@ members = [
     "crates/snk-hotkeys",
     "crates/snk-capture",
     "crates/snk-annotate",
+    "crates/snk-clipboard",
     "app/src-tauri",
 ]
 
@@ -32,6 +33,8 @@ xcap = "0.0.13"
 image = { version = "0.25", default-features = false, features = ["png"] }
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1"
+arboard = "3"
+sha2 = "0.10"
 
 [profile.release]
 opt-level = 3

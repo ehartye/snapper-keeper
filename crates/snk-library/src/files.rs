@@ -15,6 +15,16 @@ pub fn capture_relative_path(id: &Uuid, ext: &str) -> PathBuf {
         .join(format!("{id}.{ext}"))
 }
 
+/// Compute the relative path a new clipboard image file should live at:
+///   clipboard/YYYY/MM/<uuid>.png
+pub fn clipboard_image_relative_path(id: &Uuid) -> PathBuf {
+    let now = Utc::now();
+    PathBuf::from("clipboard")
+        .join(format!("{:04}", now.year()))
+        .join(format!("{:02}", now.month()))
+        .join(format!("{id}.png"))
+}
+
 /// Atomic-ish file write: write to <path>.tmp, fsync, rename.
 /// Rename is atomic on the same filesystem on POSIX and on NTFS.
 pub fn write_atomic(library_root: &Path, relative: &Path, bytes: &[u8]) -> Result<PathBuf> {
