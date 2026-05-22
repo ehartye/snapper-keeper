@@ -1,27 +1,34 @@
 import { useEffect, useRef } from 'react';
-import { Rect, Group } from 'react-konva';
-import type Konva from 'konva';
+import { Image as KonvaImage } from 'react-konva';
+import Konva from 'konva';
 
 import { useAnnotateStore } from '../store';
 import type { ShapeProps } from './index';
 
+// 20px gives macOS-style chunky pixelation. Large enough that even
+// uppercase letters lose their identifiable shape entirely; small
+// enough to still feel like a "redaction box" rather than a giant blob.
+const PIXELATE_BLOCK_SIZE = 20;
+
 export function BlurShape({ shape, draggable, onSelect, registerNode }: ShapeProps) {
-  const ref = useRef<Konva.Group | null>(null);
+  const ref = useRef<Konva.Image | null>(null);
+  const sourceImage = useAnnotateStore((s) => s.sourceImage);
   const updateShape = useAnnotateStore((s) => s.updateShape);
 
+  const x = shape.x ?? 0;
+  const y = shape.y ?? 0;
   const w = shape.width ?? 0;
   const h = shape.height ?? 0;
-  const blockSize = 12;
-  const cols = Math.ceil(w / blockSize);
-  const rows = Math.ceil(h / blockSize);
-  const blocks: { bx: number; by: number; shade: string }[] = [];
 
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const shade = (r + c) % 2 === 0 ? 'rgba(100,100,100,0.85)' : 'rgba(140,140,140,0.85)';
-      blocks.push({ bx: c * blockSize, by: r * blockSize, shade });
-    }
-  }
+  // Konva filters only render against a cached node. Re-cache whenever
+  // the source image or the shape geometry changes so the filter
+  // re-runs against the right region.
+  useEffect(() => {
+    const node = ref.current;
+    if (!node || !sourceImage || w <= 0 || h <= 0) return;
+    node.cache();
+    node.getLayer()?.batchDraw();
+  }, [sourceImage, x, y, w, h]);
 
   useEffect(() => {
     registerNode?.(ref.current);
@@ -29,12 +36,19 @@ export function BlurShape({ shape, draggable, onSelect, registerNode }: ShapePro
   }, [registerNode]);
 
   return (
-    <Group
+    <KonvaImage
       ref={ref}
-      x={shape.x ?? 0}
-      y={shape.y ?? 0}
+      image={sourceImage ?? undefined}
+      x={x}
+      y={y}
       width={w}
       height={h}
+      // `crop` tells Konva to draw only this region of the source image.
+      // The screenshot fills the layer at (0,0) at native pixel size,
+      // so the shape's rect and the crop region happen to be identical.
+      crop={{ x, y, width: w, height: h }}
+      filters={[Konva.Filters.Pixelate]}
+      pixelSize={PIXELATE_BLOCK_SIZE}
       draggable={draggable}
       onMouseDown={onSelect}
       onTap={onSelect}
@@ -55,17 +69,6 @@ export function BlurShape({ shape, draggable, onSelect, registerNode }: ShapePro
           height: Math.max(5, h * scaleY),
         });
       }}
-    >
-      {blocks.map((b, i) => (
-        <Rect
-          key={i}
-          x={b.bx}
-          y={b.by}
-          width={Math.min(blockSize, w - b.bx)}
-          height={Math.min(blockSize, h - b.by)}
-          fill={b.shade}
-        />
-      ))}
-    </Group>
+    />
   );
 }
