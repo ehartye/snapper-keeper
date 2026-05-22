@@ -47,16 +47,18 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
   const { handleMouseDown, handleMouseMove, handleMouseUp } = useDrawing(stageRef);
 
   useEffect(() => {
+    let cancelled = false;
     const img = new window.Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
+      if (cancelled) return;
       setImage(img);
       setSourceImage(img);
     };
     img.src = imageSrc;
-    // Drop the store reference when we unmount or the src changes so the
-    // next capture loads cleanly. (reset() also clears it.)
     return () => {
+      // reset() also clears sourceImage; this handles the imageSrc-change case.
+      cancelled = true;
       setSourceImage(null);
     };
   }, [imageSrc, setSourceImage]);
