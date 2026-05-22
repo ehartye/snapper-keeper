@@ -1,8 +1,11 @@
+import { useEffect, useRef, useState } from 'react';
+
 import { useAnnotateStore, COLORS, STROKE_WIDTHS, type StrokePreset } from './store';
 
 import type { AnnotationTool } from '@snk/annotate';
 
 const TOOLS: { id: AnnotationTool; label: string; icon: string }[] = [
+  { id: 'select', label: 'Select', icon: '↖' },
   { id: 'arrow', label: 'Arrow', icon: '↗' },
   { id: 'rectangle', label: 'Rectangle', icon: '□' },
   { id: 'ellipse', label: 'Ellipse', icon: '○' },
@@ -26,17 +29,31 @@ export function AnnotateToolbar() {
   const undo = useAnnotateStore((s) => s.undo);
   const redo = useAnnotateStore((s) => s.redo);
 
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const colorRowRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!colorPickerOpen) return;
+    const close = (e: MouseEvent) => {
+      if (colorRowRef.current && !colorRowRef.current.contains(e.target as Node)) {
+        setColorPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [colorPickerOpen]);
+
   return (
-    <div className="flex flex-col gap-3 p-2 bg-slate-900 border-r border-slate-700 w-14 items-center">
+    <div className="flex flex-col gap-3 p-2 bg-bg-soft border-r border-border w-14 items-center">
       <div className="flex flex-col gap-1">
         {TOOLS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTool(t.id)}
-            className={`w-10 h-10 rounded flex items-center justify-center text-sm ${
+            className={`w-10 h-10 rounded-lg flex items-center justify-center text-sm transition-colors ${
               tool === t.id
-                ? 'bg-blue-600 text-white'
-                : 'text-slate-400 hover:bg-slate-800'
+                ? 'bg-primary text-bg'
+                : 'text-fg-muted hover:bg-surface-2 hover:text-fg'
             }`}
             title={t.label}
           >
@@ -45,51 +62,64 @@ export function AnnotateToolbar() {
         ))}
       </div>
 
-      <div className="w-8 border-t border-slate-700" />
+      <div className="w-8 border-t border-border" />
 
-      <div className="flex flex-col gap-1">
-        {COLORS.map((c) => (
-          <button
-            key={c}
-            onClick={() => setColor(c)}
-            className={`w-6 h-6 rounded-full border-2 mx-auto ${
-              color === c ? 'border-white' : 'border-transparent'
-            }`}
-            style={{ backgroundColor: c }}
-            title={c}
-          />
-        ))}
+      <div ref={colorRowRef} className="relative">
+        <button
+          onClick={() => setColorPickerOpen((o) => !o)}
+          className="w-8 h-8 rounded-full border-2 border-fg shadow-[2px_2px_0_0_var(--border)]"
+          style={{ backgroundColor: color }}
+          title="Color"
+        />
+        {colorPickerOpen && (
+          <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 bg-surface border-2 border-border rounded-xl shadow-[4px_4px_0_0_var(--accent-2)] p-2 z-50 w-max">
+            <div className="grid grid-cols-4 gap-2 w-max">
+              {COLORS.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => {
+                    setColor(c);
+                    setColorPickerOpen(false);
+                  }}
+                  className={`w-7 h-7 rounded-full border-2 ${
+                    color === c ? 'border-fg' : 'border-transparent hover:border-fg-muted'
+                  }`}
+                  style={{ backgroundColor: c }}
+                  title={c}
+                />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      <div className="w-8 border-t border-slate-700" />
+      <div className="w-8 border-t border-border" />
 
       <div className="flex flex-col gap-1 items-center">
         {(Object.keys(STROKE_WIDTHS) as StrokePreset[]).map((preset) => (
           <button
             key={preset}
             onClick={() => setStrokePreset(preset)}
-            className={`w-10 h-6 rounded flex items-center justify-center ${
-              strokePreset === preset
-                ? 'bg-blue-600'
-                : 'hover:bg-slate-800'
+            className={`w-10 h-6 rounded-lg flex items-center justify-center ${
+              strokePreset === preset ? 'bg-primary' : 'hover:bg-surface-2'
             }`}
             title={preset}
           >
             <div
-              className="bg-white rounded-full"
+              className={`rounded-full ${strokePreset === preset ? 'bg-bg' : 'bg-fg'}`}
               style={{ width: 20, height: STROKE_WIDTHS[preset] }}
             />
           </button>
         ))}
       </div>
 
-      <div className="w-8 border-t border-slate-700" />
+      <div className="w-8 border-t border-border" />
 
       <div className="flex flex-col gap-1">
         <button
           onClick={undo}
           disabled={undoStack.length === 0}
-          className="w-10 h-8 rounded text-sm text-slate-400 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed"
+          className="w-10 h-8 rounded-lg text-sm text-fg-muted hover:bg-surface-2 hover:text-fg disabled:opacity-30 disabled:cursor-not-allowed"
           title="Undo (Ctrl+Z)"
         >
           ↶
@@ -97,7 +127,7 @@ export function AnnotateToolbar() {
         <button
           onClick={redo}
           disabled={redoStack.length === 0}
-          className="w-10 h-8 rounded text-sm text-slate-400 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed"
+          className="w-10 h-8 rounded-lg text-sm text-fg-muted hover:bg-surface-2 hover:text-fg disabled:opacity-30 disabled:cursor-not-allowed"
           title="Redo (Ctrl+Y)"
         >
           ↷

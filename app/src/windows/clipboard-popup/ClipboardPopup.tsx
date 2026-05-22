@@ -126,23 +126,26 @@ export function ClipboardPopup() {
 
   return (
     <div
-      className="flex flex-col h-full bg-slate-900/95 border border-slate-700 rounded-lg shadow-2xl"
+      className="flex flex-col h-full bg-surface border-2 border-border rounded-xl shadow-[6px_6px_0_0_var(--accent-2)] overflow-hidden"
       onKeyDown={handleKeyDown}
     >
-      <div className="px-3 pt-3 pb-2">
+      <div className="px-3 pt-3 pb-2 border-b border-border">
+        <div className="font-display text-[10px] uppercase tracking-widest text-accent mb-2 px-1">
+          clipboard ✦
+        </div>
         <input
           ref={inputRef}
           type="text"
           value={filter}
           onChange={handleFilterChange}
-          placeholder="Type to filter..."
-          className="w-full bg-slate-800 text-xs text-slate-200 px-3 py-1.5 rounded border border-slate-600 outline-none focus:border-blue-500"
+          placeholder="filter…"
+          className="w-full bg-bg-soft text-xs text-fg px-3 py-1.5 rounded-md border border-border outline-none focus:border-primary placeholder:text-fg-muted"
         />
       </div>
       <div className="flex-1 overflow-y-auto">
         {items.length === 0 ? (
-          <div className="px-3 py-4 text-xs text-slate-500 text-center">
-            No clipboard items
+          <div className="px-3 py-6 text-xs text-fg-muted text-center">
+            nothing copied yet
           </div>
         ) : (
           items.map((item, i) => (
@@ -156,12 +159,12 @@ export function ClipboardPopup() {
           ))
         )}
       </div>
-      <div className="px-3 py-1.5 border-t border-slate-700 text-[10px] text-slate-500 flex gap-3">
+      <div className="px-3 py-2 border-t border-border text-[10px] text-fg-muted flex gap-3 font-display uppercase tracking-wider">
         <span>↑↓ nav</span>
-        <span>Enter paste</span>
-        <span>1-9 jump</span>
-        <span>Ctrl+P pin</span>
-        <span>Esc close</span>
+        <span>↵ paste</span>
+        <span>1-9</span>
+        <span>⌘P pin</span>
+        <span>esc</span>
       </div>
     </div>
   );

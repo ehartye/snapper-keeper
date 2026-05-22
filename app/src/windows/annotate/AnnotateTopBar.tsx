@@ -79,27 +79,27 @@ export function AnnotateTopBar({ captureId, stageRef }: Props) {
   }, []);
 
   return (
-    <div className="flex items-center gap-2 px-4 py-2 bg-slate-900 border-b border-slate-700">
-      <span className="text-xs text-slate-400 flex-1">
-        Annotating capture {captureId.slice(0, 8)}…
+    <div className="flex items-center gap-2 px-4 py-2.5 bg-bg-soft border-b border-border">
+      <span className="font-display text-xs uppercase tracking-wider text-fg-muted flex-1">
+        ✎ annotating · {captureId.slice(0, 8)}
       </span>
       <button
         onClick={handleCopy}
-        className="px-3 py-1 text-xs text-slate-300 hover:bg-slate-700 rounded"
+        className="px-3 py-1 text-xs font-display uppercase tracking-wider text-fg hover:bg-surface-2 rounded-lg"
       >
-        Copy
+        copy
       </button>
       <button
         onClick={handleSave}
-        className="px-3 py-1 text-xs text-blue-400 hover:bg-slate-700 rounded"
+        className="px-3 py-1 text-xs font-display uppercase tracking-wider text-bg bg-accent-2 hover:opacity-90 rounded-lg"
       >
-        Save
+        save
       </button>
       <button
         onClick={handleDone}
-        className="px-3 py-1 text-xs text-slate-300 hover:bg-slate-700 rounded"
+        className="px-3 py-1 text-xs font-display uppercase tracking-wider text-fg hover:bg-surface-2 rounded-lg"
       >
-        Done
+        done
       </button>
     </div>
   );

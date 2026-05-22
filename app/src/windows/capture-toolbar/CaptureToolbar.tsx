@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { LogicalSize } from '@tauri-apps/api/dpi';
 import { listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { softDeleteCapture } from '@snk/library';
@@ -10,6 +11,7 @@ interface ToolbarPayload {
 
 export function CaptureToolbar() {
   const [captureId, setCaptureId] = useState<string | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -21,6 +23,22 @@ export function CaptureToolbar() {
       })
       .catch((e) => console.error('toolbar listen failed', e));
     return () => unlisten?.();
+  }, []);
+
+  // Resize the window to fit the toolbar exactly. Re-runs whenever the layout
+  // could change (mount, theme/font swap, content edits).
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      const rect = el.getBoundingClientRect();
+      // Add a small margin for the drop shadow (offset 4px right/down).
+      const w = Math.ceil(rect.width) + 8;
+      const h = Math.ceil(rect.height) + 8;
+      getCurrentWindow().setSize(new LogicalSize(w, h)).catch(() => {});
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
   const dismiss = useCallback(async () => {
@@ -71,31 +89,34 @@ export function CaptureToolbar() {
   }, [dismiss]);
 
   return (
-    <div className="flex items-center gap-1 bg-slate-900/95 rounded-lg px-2 py-1 border border-slate-700 shadow-lg">
+    <div
+      ref={rootRef}
+      className="inline-flex items-center gap-1 bg-surface rounded-xl px-2 py-1.5 border-2 border-border shadow-[4px_4px_0_0_var(--accent-2)] font-display"
+    >
       <button
         onClick={handleAnnotate}
-        className="px-2 py-1 text-xs text-slate-300 hover:bg-slate-700 rounded"
-        title="Annotate (phase 3)"
+        className="px-3 py-1 text-[11px] uppercase tracking-wider text-fg hover:bg-surface-2 rounded-lg"
+        title="Annotate"
       >
-        Annotate
+        annotate
       </button>
       <button
         onClick={handleCopy}
-        className="px-2 py-1 text-xs text-slate-300 hover:bg-slate-700 rounded"
+        className="px-3 py-1 text-[11px] uppercase tracking-wider text-fg hover:bg-surface-2 rounded-lg"
       >
-        Copy
+        copy
       </button>
       <button
         onClick={handleSave}
-        className="px-2 py-1 text-xs text-blue-400 hover:bg-slate-700 rounded"
+        className="px-3 py-1 text-[11px] uppercase tracking-wider text-accent-2 hover:bg-surface-2 rounded-lg"
       >
-        Save
+        save
       </button>
       <button
         onClick={handleDiscard}
-        className="px-2 py-1 text-xs text-red-400 hover:bg-slate-700 rounded"
+        className="px-3 py-1 text-[11px] uppercase tracking-wider text-danger hover:bg-surface-2 rounded-lg"
       >
-        Discard
+        discard
       </button>
     </div>
   );

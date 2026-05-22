@@ -24,12 +24,12 @@ function startOfWeek(): number {
   return d.getTime();
 }
 
-const SMART_SECTIONS: { label: string; query: ListCapturesQuery }[] = [
-  { label: 'All', query: {} },
-  { label: 'Today', query: { since: startOfDay() } },
-  { label: 'This Week', query: { since: startOfWeek() } },
-  { label: 'Pinned', query: { pinned_only: true } },
-  { label: 'Trash', query: { deleted_only: true } },
+const SMART_SECTIONS: { label: string; icon: string; query: ListCapturesQuery }[] = [
+  { label: 'All', icon: '◇', query: {} },
+  { label: 'Today', icon: '✶', query: { since: startOfDay() } },
+  { label: 'This Week', icon: '☀', query: { since: startOfWeek() } },
+  { label: 'Pinned', icon: '★', query: { pinned_only: true } },
+  { label: 'Trash', icon: '✕', query: { deleted_only: true } },
 ];
 
 interface Props {
@@ -52,76 +52,95 @@ export function Sidebar({ selection, onSelect }: Props) {
   const [tagDialogOpen, setTagDialogOpen] = useState(false);
 
   return (
-    <aside className="w-56 shrink-0 border-r border-slate-800 flex flex-col overflow-y-auto">
-      <nav className="p-2 space-y-0.5">
-        {SMART_SECTIONS.map((s) => (
-          <button
-            key={s.label}
-            className={`w-full text-left px-3 py-1.5 rounded text-sm ${
-              isActive(selection, s.label)
-                ? 'bg-slate-700 text-slate-100'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-            }`}
-            onClick={() => onSelect({ type: 'captures', label: s.label, query: s.label === 'Today' ? { since: startOfDay() } : s.label === 'This Week' ? { since: startOfWeek() } : s.query })}
-          >
-            {s.label}
-          </button>
-        ))}
+    <aside className="w-60 shrink-0 border-r border-border flex flex-col overflow-y-auto bg-bg-soft">
+      <nav className="p-3 space-y-1">
+        {SMART_SECTIONS.map((s) => {
+          const active = isActive(selection, s.label);
+          return (
+            <button
+              key={s.label}
+              className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors ${
+                active
+                  ? 'bg-primary text-bg shadow-[3px_3px_0_0_var(--border)]'
+                  : 'text-fg-muted hover:bg-surface hover:text-fg'
+              }`}
+              onClick={() =>
+                onSelect({
+                  type: 'captures',
+                  label: s.label,
+                  query:
+                    s.label === 'Today'
+                      ? { since: startOfDay() }
+                      : s.label === 'This Week'
+                        ? { since: startOfWeek() }
+                        : s.query,
+                })
+              }
+            >
+              <span className="w-5 text-base leading-none">{s.icon}</span>
+              <span>{s.label}</span>
+            </button>
+          );
+        })}
       </nav>
 
-      <div className="border-t border-slate-800 mx-2 my-1" />
+      <div className="squiggle-divider mx-3 my-2" />
 
-      <div className="p-2">
-        <div className="text-[10px] uppercase tracking-wider text-slate-500 px-3 mb-1">Tags</div>
-        <button
-          className="text-[10px] text-slate-500 hover:text-slate-300 px-3 mb-1"
-          onClick={() => setTagDialogOpen(true)}
-        >
-          Manage tags
-        </button>
+      <div className="p-3">
+        <div className="flex items-baseline justify-between mb-2 px-1">
+          <div className="font-display text-[11px] uppercase tracking-wider">Tags</div>
+          <button
+            className="text-[10px] text-fg-muted hover:text-fg"
+            onClick={() => setTagDialogOpen(true)}
+          >
+            manage
+          </button>
+        </div>
         {tags.length === 0 ? (
-          <div className="text-xs text-slate-600 px-3">No tags yet</div>
+          <div className="text-xs text-fg-muted px-3">No tags yet</div>
         ) : (
-          <nav className="space-y-0.5">
-            {tags.map((tag) => (
-              <button
-                key={tag.id}
-                className={`w-full text-left px-3 py-1.5 rounded text-sm flex items-center gap-2 ${
-                  isActive(selection, tag.name)
-                    ? 'bg-slate-700 text-slate-100'
-                    : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                }`}
-                onClick={() =>
-                  onSelect({
-                    type: 'captures',
-                    label: tag.name,
-                    query: { tag_id: tag.id },
-                  })
-                }
-              >
-                <span
-                  className="w-2.5 h-2.5 rounded-full shrink-0"
-                  style={{ backgroundColor: tag.color }}
-                />
-                {tag.name}
-              </button>
-            ))}
+          <nav className="space-y-1">
+            {tags.map((tag) => {
+              const active = isActive(selection, tag.name);
+              return (
+                <button
+                  key={tag.id}
+                  className={`w-full text-left px-3 py-1.5 rounded-lg text-sm flex items-center gap-2 transition-colors ${
+                    active ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface hover:text-fg'
+                  }`}
+                  onClick={() =>
+                    onSelect({
+                      type: 'captures',
+                      label: tag.name,
+                      query: { tag_id: tag.id },
+                    })
+                  }
+                >
+                  <span
+                    className="w-3 h-3 rounded-full shrink-0 ring-2 ring-bg-soft"
+                    style={{ backgroundColor: tag.color }}
+                  />
+                  {tag.name}
+                </button>
+              );
+            })}
           </nav>
         )}
       </div>
 
-      <div className="border-t border-slate-800 mx-2 my-1" />
+      <div className="squiggle-divider mx-3 my-2" />
 
-      <nav className="p-2">
+      <nav className="p-3">
         <button
-          className={`w-full text-left px-3 py-1.5 rounded text-sm ${
+          className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors ${
             selection.type === 'clipboard'
-              ? 'bg-slate-700 text-slate-100'
-              : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+              ? 'bg-accent-2 text-bg shadow-[3px_3px_0_0_var(--border)]'
+              : 'text-fg-muted hover:bg-surface hover:text-fg'
           }`}
           onClick={() => onSelect({ type: 'clipboard' })}
         >
-          Clipboard History
+          <span className="w-5 text-base leading-none">⌘</span>
+          <span>Clipboard History</span>
         </button>
       </nav>
       <TagDialog open={tagDialogOpen} onClose={() => setTagDialogOpen(false)} />

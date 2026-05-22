@@ -1,10 +1,16 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { searchLibrary, type SearchResult } from '@snk/library';
 
-export function SearchBar() {
+interface Props {
+  onSelectClipboard?: () => void;
+}
+
+export function SearchBar({ onSelectClipboard }: Props) {
   const [input, setInput] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [open, setOpen] = useState(true);
   const timerRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
@@ -28,33 +34,59 @@ export function SearchBar() {
     setDebouncedQuery('');
   }, []);
 
+  const handleResultClick = useCallback(
+    async (result: SearchResult) => {
+      if (result.kind === 'capture') {
+        const annotate = await WebviewWindow.getByLabel('annotate');
+        if (annotate) {
+          await annotate.show();
+          await annotate.setFocus();
+          await annotate.emit('annotate:open', { captureId: result.id });
+        }
+      } else if (result.kind === 'clipboard') {
+        onSelectClipboard?.();
+      }
+      handleClear();
+      setOpen(false);
+    },
+    [handleClear, onSelectClipboard],
+  );
+
   return (
     <div className="relative">
       <input
         type="text"
         value={input}
-        onChange={(e) => setInput(e.target.value)}
-        placeholder="Search captures & clipboard..."
-        className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-slate-500"
+        onChange={(e) => {
+          setInput(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        placeholder="search captures & clipboard…"
+        className="w-full bg-surface border-2 border-border rounded-lg px-3 py-1.5 text-sm text-fg placeholder:text-fg-muted focus:outline-none focus:border-primary"
       />
       {input && (
         <button
           onClick={handleClear}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs"
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-fg-muted hover:text-fg text-xs"
         >
-          Clear
+          clear
         </button>
       )}
-      {debouncedQuery && results && results.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded shadow-lg max-h-64 overflow-auto z-50">
+      {open && debouncedQuery && results && results.length > 0 && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-surface border-2 border-border rounded-lg shadow-[4px_4px_0_0_var(--border)] max-h-64 overflow-auto z-50">
           {results.map((result) => (
-            <SearchResultRow key={resultKey(result)} result={result} />
+            <SearchResultRow
+              key={resultKey(result)}
+              result={result}
+              onClick={() => handleResultClick(result)}
+            />
           ))}
         </div>
       )}
-      {debouncedQuery && results && results.length === 0 && !isLoading && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded shadow-lg p-3 z-50">
-          <p className="text-slate-500 text-xs text-center">No results</p>
+      {open && debouncedQuery && results && results.length === 0 && !isLoading && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-surface border-2 border-border rounded-lg shadow-[4px_4px_0_0_var(--border)] p-3 z-50">
+          <p className="text-fg-muted text-xs text-center">No results</p>
         </div>
       )}
     </div>
@@ -65,17 +97,25 @@ function resultKey(result: SearchResult): string {
   return `${result.kind}-${result.id}`;
 }
 
-function SearchResultRow({ result }: { result: SearchResult }) {
+interface RowProps {
+  result: SearchResult;
+  onClick: () => void;
+}
+
+function SearchResultRow({ result, onClick }: RowProps) {
   const icon = result.kind === 'capture' ? 'img' : 'txt';
   return (
-    <div className="px-3 py-2 hover:bg-slate-700 cursor-pointer border-b border-slate-700 last:border-0">
+    <button
+      onClick={onClick}
+      className="w-full text-left px-3 py-2 hover:bg-surface-2 border-b border-border last:border-0"
+    >
       <div className="flex items-center gap-2">
-        <span className="text-[10px] font-mono text-slate-500 uppercase w-6">{icon}</span>
+        <span className="text-[10px] font-display text-accent-2 uppercase w-8">{icon}</span>
         <span
-          className="text-xs text-slate-300 truncate flex-1"
+          className="text-xs text-fg truncate flex-1"
           dangerouslySetInnerHTML={{ __html: result.snippet }}
         />
       </div>
-    </div>
+    </button>
   );
 }

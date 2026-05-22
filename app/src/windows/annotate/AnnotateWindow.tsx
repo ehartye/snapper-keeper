@@ -47,8 +47,8 @@ export function AnnotateWindow() {
 
   if (!captureId || !capture.data || !root.data) {
     return (
-      <div className="h-full flex items-center justify-center bg-slate-950 text-slate-500 text-sm">
-        Waiting for capture…
+      <div className="h-full flex items-center justify-center bg-bg text-fg-muted text-sm font-display uppercase tracking-wider">
+        waiting for capture…
       </div>
     );
   }
@@ -56,7 +56,7 @@ export function AnnotateWindow() {
   const src = captureAssetUrl(root.data, capture.data.file_path);
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col bg-bg text-fg">
       <AnnotateTopBar captureId={captureId} stageRef={stageRef} />
       <div className="flex flex-1 overflow-hidden">
         <AnnotateToolbar />

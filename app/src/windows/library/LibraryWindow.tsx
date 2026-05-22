@@ -10,6 +10,7 @@ import {
   CAPTURE_WINDOW_EVENT,
   CAPTURE_TIMED_EVENT,
   captureFullScreen,
+  grabScreenPreview,
 } from '@snk/capture';
 import { CLIPBOARD_HISTORY_EVENT, CLIPBOARD_POPUP_SHOW_EVENT, showPopup } from '@snk/clipboard';
 import { getSetting } from '@snk/library';
@@ -62,10 +63,16 @@ export function LibraryWindow() {
   }, [refreshCaptures, showToolbar]);
 
   const handleRegion = useCallback(async () => {
-    const overlay = await WebviewWindow.getByLabel('capture-overlay');
-    if (overlay) {
-      await overlay.show();
-      await overlay.setFocus();
+    try {
+      const preview = await grabScreenPreview();
+      const overlay = await WebviewWindow.getByLabel('capture-overlay');
+      if (overlay) {
+        await overlay.emit('overlay:preview', { path: preview.path });
+        await overlay.show();
+        await overlay.setFocus();
+      }
+    } catch (e) {
+      console.error('region overlay failed', e);
     }
   }, []);
 
@@ -105,7 +112,21 @@ export function LibraryWindow() {
       const pos = await showPopup();
       const popup = await WebviewWindow.getByLabel('clipboard-popup');
       if (popup) {
-        await popup.setPosition(new LogicalPosition(pos.x, pos.y));
+        const popupW = 380;
+        const popupH = 480;
+        const screenW = window.screen.width;
+        const screenH = window.screen.height;
+        const pad = 8;
+
+        let x = pos.x;
+        let y = pos.y + pad;
+
+        if (y + popupH > screenH) y = pos.y - popupH - pad;
+        if (x + popupW > screenW) x = screenW - popupW - pad;
+        if (x < pad) x = pad;
+        if (y < pad) y = pad;
+
+        await popup.setPosition(new LogicalPosition(x, y));
         await popup.emit(CLIPBOARD_POPUP_SHOW_EVENT, {});
         await popup.show();
         await popup.setFocus();
@@ -129,7 +150,7 @@ export function LibraryWindow() {
   }, [handleFullScreen, handleRegion, handleWindow, handleTimed, handleClipboardHistory]);
 
   return (
-    <>
+    <div className="h-full bg-bg text-fg">
       {showWizard && !firstRun.isLoading && (
         <FirstRunWizard
           onComplete={() => {
@@ -143,19 +164,23 @@ export function LibraryWindow() {
       <main className="h-full flex">
         <Sidebar selection={selection} onSelect={setSelection} />
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="px-4 py-2 border-b border-slate-800 flex items-center gap-3">
-            <h1 className="text-sm font-semibold">snapper-keeper</h1>
+          <header className="px-5 py-3 border-b border-border flex items-center gap-4">
+            <h1 className="font-display text-xl leading-none">
+              <span className="holo-shimmer bg-clip-text text-transparent">snapper</span>
+              <span className="text-fg-muted">/</span>
+              <span>keeper</span>
+            </h1>
             <div className="flex-1 max-w-md">
-              <SearchBar />
+              <SearchBar onSelectClipboard={() => setSelection({ type: 'clipboard' })} />
             </div>
             <button
-              className="bg-slate-800 hover:bg-slate-700 text-slate-100 px-3 py-1 rounded text-xs"
+              className="font-display text-[11px] uppercase tracking-widest px-4 py-2 bg-primary text-bg border-2 border-border shadow-[3px_3px_0_0_var(--border)] hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_0_var(--border)] active:translate-x-1 active:translate-y-1 active:shadow-none transition-transform"
               onClick={handleFullScreen}
             >
-              Capture screen
+              Snap!
             </button>
           </header>
-          <section className="flex-1 overflow-auto p-4">
+          <section className="flex-1 overflow-auto p-5">
             {selection.type === 'captures' ? (
               <CaptureGrid query={selection.query} />
             ) : (
@@ -164,6 +189,6 @@ export function LibraryWindow() {
           </section>
         </div>
       </main>
-    </>
+    </div>
   );
 }

@@ -50,6 +50,7 @@ pub fn resolve_popup_position() -> CaretPosition {
 #[cfg(target_os = "windows")]
 fn get_caret_windows() -> Option<CaretPosition> {
     use windows::Win32::Foundation::POINT;
+    use windows::Win32::Graphics::Gdi::ClientToScreen;
     use windows::Win32::UI::WindowsAndMessaging::{GetGUIThreadInfo, GUITHREADINFO};
 
     unsafe {
@@ -57,14 +58,16 @@ fn get_caret_windows() -> Option<CaretPosition> {
             cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
             ..Default::default()
         };
-        if GetGUIThreadInfo(0, &mut info).is_ok() {
-            let pt = POINT {
+        if GetGUIThreadInfo(0, &mut info).is_ok() && !info.hwndFocus.is_invalid() {
+            let mut pt = POINT {
                 x: info.rcCaret.left,
                 y: info.rcCaret.bottom,
             };
-            if pt.x != 0 || pt.y != 0 {
-                return Some(CaretPosition { x: pt.x, y: pt.y });
+            if pt.x == 0 && pt.y == 0 {
+                return None;
             }
+            let _ = ClientToScreen(info.hwndFocus, &mut pt);
+            return Some(CaretPosition { x: pt.x, y: pt.y });
         }
         None
     }
