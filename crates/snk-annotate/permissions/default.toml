@@ -1,3 +1,3 @@
 [default]
-description = "Default permissions for snk-annotate: allows saving annotations."
-permissions = ["allow-save-annotation"]
+description = "Default permissions for snk-annotate: allows saving annotations and deriving cropped captures."
+permissions = ["allow-save-annotation", "allow-derive-capture"]
