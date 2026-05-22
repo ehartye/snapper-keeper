@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef, type ChangeEvent, type KeyboardEvent } from 'react';
+import { useEffect, useCallback, useRef, type ChangeEvent } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
 
@@ -81,64 +81,71 @@ export function ClipboardPopup() {
     [setFilter, loadItems],
   );
 
-  const handleKeyDown = useCallback(
-    async (e: KeyboardEvent) => {
-      // Handler is attached to both the input and the wrapper so it fires
-      // regardless of which element holds focus; stop propagation so it
-      // doesn't run twice for the same event.
-      const handled = () => {
-        e.preventDefault();
-        e.stopPropagation();
-      };
+  // Use a window-level listener so navigation works regardless of which
+  // element has focus inside the popup webview (input, body, list buttons).
+  useEffect(() => {
+    const handler = async (e: globalThis.KeyboardEvent) => {
+      // Snapshot the latest state at the moment the key was pressed.
+      const { items: liveItems, selectedIndex: liveIdx, filter: liveFilter } =
+        useClipboardPopupStore.getState();
 
       if (e.key === 'Escape') {
-        handled();
+        e.preventDefault();
         await dismiss();
         return;
       }
       if (e.key === 'ArrowDown') {
-        handled();
+        e.preventDefault();
         moveSelection(1);
         return;
       }
       if (e.key === 'ArrowUp') {
-        handled();
+        e.preventDefault();
         moveSelection(-1);
         return;
       }
       if (e.key === 'Enter') {
-        handled();
-        const item = items[selectedIndex];
+        e.preventDefault();
+        const item = liveItems[liveIdx];
         if (item) await handlePaste(item.id);
         return;
       }
-      // Digit shortcuts only with a modifier so typing digits in the filter
-      // input still works as filter text.
-      if ((e.ctrlKey || e.altKey || e.metaKey) && /^[1-9]$/.test(e.key)) {
+      // Plain 1-9 immediately pastes that row. Skip when a modifier is held
+      // so OS shortcuts still work, and skip if the filter input is focused
+      // and the user is editing — but only when the filter already has
+      // content (so empty-filter quick-pick still works).
+      if (
+        !e.ctrlKey &&
+        !e.altKey &&
+        !e.metaKey &&
+        /^[1-9]$/.test(e.key)
+      ) {
+        const isEditingFilter =
+          document.activeElement === inputRef.current && liveFilter.length > 0;
+        if (isEditingFilter) return;
         const idx = parseInt(e.key, 10) - 1;
-        if (items[idx]) {
-          handled();
-          await handlePaste(items[idx]!.id);
+        if (liveItems[idx]) {
+          e.preventDefault();
+          await handlePaste(liveItems[idx]!.id);
         }
         return;
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
-        handled();
-        const item = items[selectedIndex];
+        e.preventDefault();
+        const item = liveItems[liveIdx];
         if (item) {
           await toggleClipboardPin(item.id, !item.pinned);
-          await loadItems(filter);
+          await loadItems(liveFilter);
         }
       }
-    },
-    [items, selectedIndex, dismiss, handlePaste, moveSelection, loadItems, filter],
-  );
+    };
+
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [dismiss, handlePaste, moveSelection, loadItems]);
 
   return (
-    <div
-      className="flex flex-col h-full bg-surface border-2 border-border rounded-xl shadow-[6px_6px_0_0_var(--accent-2)] overflow-hidden"
-      onKeyDown={handleKeyDown}
-    >
+    <div className="flex flex-col h-full bg-surface border-2 border-border rounded-xl shadow-[6px_6px_0_0_var(--accent-2)] overflow-hidden">
       <div className="px-3 pt-3 pb-2 border-b border-border">
         <div className="font-display text-[10px] uppercase tracking-widest text-accent mb-2 px-1">
           clipboard ✦
@@ -148,7 +155,6 @@ export function ClipboardPopup() {
           type="text"
           value={filter}
           onChange={handleFilterChange}
-          onKeyDown={handleKeyDown}
           placeholder="filter…"
           className="w-full bg-bg-soft text-xs text-fg px-3 py-1.5 rounded-md border border-border outline-none focus:border-primary placeholder:text-fg-muted"
         />
