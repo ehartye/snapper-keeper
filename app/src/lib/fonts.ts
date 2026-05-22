@@ -56,3 +56,11 @@ import '@fontsource/karla/latin-700.css';
 import '@fontsource/alfa-slab-one/latin-400.css';
 import '@fontsource/pt-sans/latin-400.css';
 import '@fontsource/pt-sans/latin-700.css';
+
+// Mid-Century Atomic: Limelight (display, googie/marquee) + Cabin (body, humanist sans)
+import '@fontsource/limelight/latin-400.css';
+import '@fontsource/cabin/latin-400.css';
+import '@fontsource/cabin/latin-400-italic.css';
+import '@fontsource/cabin/latin-500.css';
+import '@fontsource/cabin/latin-600.css';
+import '@fontsource/cabin/latin-700.css';

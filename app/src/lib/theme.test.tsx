@@ -14,11 +14,14 @@ function wrap({ children }: { children: ReactNode }) {
 }
 
 describe('theme module', () => {
-  it('exposes 14 themes across 7 families with light + dark each', () => {
-    expect(THEMES).toHaveLength(14);
+  it('exposes 16 themes across 8 families with light + dark each', () => {
+    expect(THEMES).toHaveLength(16);
     const families = new Set(THEMES.map((t) => t.family));
     expect(families).toEqual(
-      new Set(['holo', 'memphis', 'robotic', 'corporate', 'wabi-sabi', 'riso', 'constructivist']),
+      new Set([
+        'holo', 'memphis', 'robotic', 'corporate',
+        'wabi-sabi', 'riso', 'constructivist', 'atomic',
+      ]),
     );
     for (const fam of families) {
       const inFam = THEMES.filter((t) => t.family === fam);

@@ -56,6 +56,9 @@ importers:
       '@fontsource/bungee':
         specifier: ^5.2.7
         version: 5.2.7
+      '@fontsource/cabin':
+        specifier: ^5.2.8
+        version: 5.2.8
       '@fontsource/cormorant-garamond':
         specifier: ^5.2.11
         version: 5.2.11
@@ -68,6 +71,9 @@ importers:
       '@fontsource/karla':
         specifier: ^5.2.8
         version: 5.2.8
+      '@fontsource/limelight':
+        specifier: ^5.2.7
+        version: 5.2.7
       '@fontsource/pt-sans':
         specifier: ^5.2.8
         version: 5.2.8
@@ -565,6 +571,9 @@ packages:
   '@fontsource/bungee@5.2.7':
     resolution: {integrity: sha512-pzUlTXEFdiDM5p0inlWRM+1ovS3vTWG6NplJ65EpfBwZNQmM6wNS6z22tml07+NWKK+e8/FPPupBVbzd0th54w==}
 
+  '@fontsource/cabin@5.2.8':
+    resolution: {integrity: sha512-Gu3MMA3pvxqZDhZcnMS1FvCL9y4ejhYqZFcccps80jvkAehhUGLP65N7JBNtJzYRaNRSO4Kss3OXrNaELG5N1A==}
+
   '@fontsource/cormorant-garamond@5.2.11':
     resolution: {integrity: sha512-5JjpN023lhA5soijgVT0BdRGzmlijm402ppjccMd6h+vRE0mX2lJnE+41UPfnlidrkV9/rCo1mf58WZlHnB0CA==}
 
@@ -576,6 +585,9 @@ packages:
 
   '@fontsource/karla@5.2.8':
     resolution: {integrity: sha512-uZMA4ugNcHFYMpjr/9FIHQC3ldtILlqPdK3f4P9XInDgRL0NxdIyRwH9MuGZUT7sdup0kshk9zsGXitq1xpFAw==}
+
+  '@fontsource/limelight@5.2.7':
+    resolution: {integrity: sha512-zQuBYnG35zmnOCRNJ+eBuKbQH/6/UBLCRilXN2BNSmtDsO2pPJjzhVJdc4P1otQHSY1fOEIv/8l+yKNvpN0+SA==}
 
   '@fontsource/pt-sans@5.2.8':
     resolution: {integrity: sha512-b8nBGHMVwfe21IWqERlMrzIs+L/Vm3QNGbnET3H1vfclAScWExbN17N/z/dJcyPgvrcenbJDv1H3f5hTAEbcVQ==}
@@ -2778,6 +2790,8 @@ snapshots:
 
   '@fontsource/bungee@5.2.7': {}
 
+  '@fontsource/cabin@5.2.8': {}
+
   '@fontsource/cormorant-garamond@5.2.11': {}
 
   '@fontsource/fredoka@5.2.10': {}
@@ -2785,6 +2799,8 @@ snapshots:
   '@fontsource/ibm-plex-mono@5.2.7': {}
 
   '@fontsource/karla@5.2.8': {}
+
+  '@fontsource/limelight@5.2.7': {}
 
   '@fontsource/pt-sans@5.2.8': {}
 

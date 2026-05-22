@@ -164,6 +164,23 @@ export const THEME_FAMILIES = {
       swatchShape: 'square',
     },
   },
+  atomic: {
+    label: 'Mid-Century Atomic',
+    tagline: '\'50s/\'60s googie + jet age. Mustard, teal, brick, atomic green on butter cream.',
+    preview: {
+      swatches: ['#d4a024', '#3a7c9e', '#c5552a', '#8fb055'],
+      bgLight: '#f5ebd8',
+      bgDark: '#1a120c',
+      fgLight: '#2d2521',
+      fgDark: '#f5ebd8',
+      mutedLight: '#6e5e4c',
+      mutedDark: '#b39a7c',
+      displayFont: "'Limelight', serif",
+      bodyFont: "'Cabin', sans-serif",
+      shape: 'round',
+      swatchShape: 'round',
+    },
+  },
 } as const satisfies Record<string, FamilyDef>;
 
 export type ThemeFamily = keyof typeof THEME_FAMILIES;

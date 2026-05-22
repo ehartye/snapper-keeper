@@ -1,0 +1,99 @@
+/* ========================================================================
+ *  MID-CENTURY ATOMIC — '50s/'60s googie + jet age.
+ *  Light: butter cream interior. Charles Eames meets Cape Canaveral.
+ *  Dark:  jazz lounge after midnight. Espresso walnut, brass accents.
+ * ====================================================================== */
+
+html[data-theme='atomic-light'] {
+  --bg: #f5ebd8;
+  --bg-soft: #e8dcc4;
+  --surface: #fdf6e8;
+  --surface-2: #efe3cb;
+  --border: #2d2521;
+  --text: #2d2521;
+  --text-muted: #6e5e4c;
+  --primary: #d4a024;
+  --accent: #3a7c9e;
+  --accent-2: #c5552a;
+  --accent-3: #8fb055;
+  --accent-4: #d4a024;
+  --danger: #c5552a;
+  --display-font: 'Limelight', serif;
+  --body-font: 'Cabin', system-ui, sans-serif;
+  --halo: radial-gradient(600px circle at 15% 110%, rgba(212, 160, 36, 0.08), transparent 50%),
+    radial-gradient(700px circle at 85% -10%, rgba(58, 124, 158, 0.06), transparent 55%);
+  --grain: none;
+
+  /* SVG starburst — mustard fill. */
+  --atomic-star: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M6 0.5 L7 5 L11.5 6 L7 7 L6 11.5 L5 7 L0.5 6 L5 5 Z' fill='%23d4a024' /></svg>");
+}
+
+html[data-theme='atomic-dark'] {
+  --bg: #1a120c;
+  --bg-soft: #251a10;
+  --surface: #2f2418;
+  --surface-2: #3a2c1d;
+  --border: #d4a024;
+  --text: #f5ebd8;
+  --text-muted: #b39a7c;
+  --primary: #f5c050;
+  --accent: #5da6c8;
+  --accent-2: #e87850;
+  --accent-3: #b5cc70;
+  --accent-4: #f5c050;
+  --danger: #e87850;
+  --display-font: 'Limelight', serif;
+  --body-font: 'Cabin', system-ui, sans-serif;
+  --halo: radial-gradient(600px circle at 80% 110%, rgba(245, 192, 80, 0.07), transparent 50%),
+    radial-gradient(700px circle at 10% -10%, rgba(93, 166, 200, 0.05), transparent 55%);
+  --grain: none;
+
+  --atomic-star: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M6 0.5 L7 5 L11.5 6 L7 7 L6 11.5 L5 7 L0.5 6 L5 5 Z' fill='%23f5c050' /></svg>");
+}
+
+html[data-theme^='atomic'] .font-display {
+  font-weight: 400;
+  letter-spacing: 0.04em;
+}
+
+html[data-theme^='atomic'] body {
+  font-weight: 500;
+}
+
+/* Shimmer is a flat brick-orange fill — warm, no animation. */
+html[data-theme^='atomic'] .holo-shimmer {
+  background-image: linear-gradient(90deg, var(--accent-2), var(--accent-2));
+}
+
+/* Divider — hairline (faded) with a centered 4-point compass starburst.
+   Parent draws the hairline; ::before is the star with its own bg-soft
+   fill that masks the line behind it (same trick as the corporate
+   stamped serial). */
+html[data-theme^='atomic'] .menu-divider {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 14px;
+  background-image: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--border) 50%, transparent),
+    color-mix(in srgb, var(--border) 50%, transparent)
+  );
+  background-size: 100% 1px;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+html[data-theme^='atomic'] .menu-divider::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  box-sizing: content-box;
+  padding: 0 6px;
+  background: var(--bg-soft) var(--atomic-star) no-repeat center / 12px 12px;
+}
+
+/* Scrollbar — mustard thumb, soft-rounded (mid-century domestic curve). */
+html[data-theme^='atomic'] ::-webkit-scrollbar-thumb {
+  background: var(--primary);
+  border-radius: 5px;
+}
