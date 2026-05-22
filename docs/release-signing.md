@@ -40,3 +40,16 @@ Add these secrets to the repository (`Settings > Secrets and variables > Actions
 |--------|-------|
 | `WINDOWS_CERTIFICATE` | Base64-encoded `.pfx` code-signing certificate |
 | `WINDOWS_CERTIFICATE_PASSWORD` | Password for the `.pfx` |
+
+## Tesseract bundling
+
+Windows release builds ship a copy of Tesseract OCR (engine + DLLs + `eng.traineddata`) alongside the app so users don't need a separate install. The release workflow runs `choco install tesseract` on the Windows runner and copies `C:\Program Files\Tesseract-OCR\` into `app/src-tauri/resources/tesseract/` before `tauri build`. The bundler then ships those files inside the installer.
+
+At runtime, `snk-ocr/sidecar.rs` resolves tesseract in this order:
+
+1. `SNK_TESSERACT_PATH` env var (override for dev/debug)
+2. Bundled location (`<resource_dir>/tesseract/tesseract.exe`)
+3. System `PATH`
+4. Common install locations per OS
+
+macOS bundles are not yet self-contained for OCR — users currently need `brew install tesseract`. This is because Homebrew's tesseract binary references absolute `/opt/homebrew/lib/...` dylib paths, and bundling requires running `install_name_tool` to rewrite each path to `@executable_path/../Frameworks/...`. To be added later.

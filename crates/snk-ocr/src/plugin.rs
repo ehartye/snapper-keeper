@@ -24,6 +24,13 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             let db = lib_state.db.clone();
             let root = lib_state.root.clone();
 
+            // Tell the sidecar where the bundled tesseract distribution lives,
+            // so a packaged build can use it without requiring a system install.
+            match app.path().resource_dir() {
+                Ok(dir) => crate::sidecar::set_bundled_resource_dir(dir),
+                Err(e) => tracing::debug!(error = %e, "no resource dir; falling back to system tesseract"),
+            }
+
             let queue = OcrQueue::start(Arc::clone(&db), root);
             app.manage(OcrState { queue });
 

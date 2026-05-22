@@ -60,6 +60,21 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Bundle Tesseract OCR + tessdata so the installed app doesn't need a
+      # system tesseract. The resolver in snk-ocr/sidecar.rs prefers the
+      # bundled location before falling back to PATH/system installs.
+      - name: Bundle Tesseract (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          choco install tesseract -y --no-progress
+          $src = 'C:\Program Files\Tesseract-OCR'
+          $dest = 'app\src-tauri\resources\tesseract'
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Copy-Item -Path "$src\*" -Destination $dest -Recurse -Force
+          Write-Host "Bundled tesseract:"
+          Get-ChildItem $dest | Format-Table Name, Length
+
       # macOS: import signing certificate
       - name: Import Apple certificate
         if: runner.os == 'macOS'

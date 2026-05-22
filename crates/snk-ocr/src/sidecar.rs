@@ -1,5 +1,6 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use tracing::{info, warn};
@@ -8,6 +9,103 @@ use tracing::{info, warn};
 pub struct OcrOutput {
     pub text: String,
     pub confidence: f64,
+}
+
+/// Cached path to the tesseract executable, resolved once on first use.
+/// Returns `None` if tesseract isn't installed anywhere we can find.
+static TESSERACT_PATH: OnceLock<Option<PathBuf>> = OnceLock::new();
+
+/// Tauri resource dir containing the bundled tesseract distribution
+/// (executable + DLLs + tessdata). Set once by the plugin during setup.
+static BUNDLED_RESOURCE_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+/// Called by the plugin at startup with the Tauri resource directory.
+pub fn set_bundled_resource_dir(dir: PathBuf) {
+    let _ = BUNDLED_RESOURCE_DIR.set(dir);
+}
+
+/// Path to the tessdata directory if we resolved to a bundled tesseract.
+fn bundled_tessdata_dir() -> Option<PathBuf> {
+    let dir = BUNDLED_RESOURCE_DIR.get()?.join("tesseract").join("tessdata");
+    if dir.is_dir() {
+        Some(dir)
+    } else {
+        None
+    }
+}
+
+fn resolve_tesseract() -> Option<PathBuf> {
+    // 1. Explicit override first (debugging, custom installs).
+    if let Ok(p) = std::env::var("SNK_TESSERACT_PATH") {
+        let pb = PathBuf::from(p);
+        if pb.is_file() {
+            return Some(pb);
+        }
+    }
+
+    // 2. Bundled distribution that ships with the installer.
+    if let Some(dir) = BUNDLED_RESOURCE_DIR.get() {
+        let exe_name = if cfg!(target_os = "windows") {
+            "tesseract.exe"
+        } else {
+            "tesseract"
+        };
+        let candidate = dir.join("tesseract").join(exe_name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+
+    // 3. If on PATH, this just works.
+    if which("tesseract").is_some() {
+        return Some(PathBuf::from("tesseract"));
+    }
+
+    // 4. Common install locations.
+    let candidates: &[&str] = if cfg!(target_os = "windows") {
+        &[
+            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        ]
+    } else if cfg!(target_os = "macos") {
+        &[
+            "/opt/homebrew/bin/tesseract",
+            "/usr/local/bin/tesseract",
+            "/opt/local/bin/tesseract",
+        ]
+    } else {
+        &["/usr/bin/tesseract", "/usr/local/bin/tesseract"]
+    };
+
+    for c in candidates {
+        let pb = PathBuf::from(c);
+        if pb.is_file() {
+            return Some(pb);
+        }
+    }
+    None
+}
+
+fn which(cmd: &str) -> Option<PathBuf> {
+    let path_var = std::env::var_os("PATH")?;
+    let exts: Vec<String> = if cfg!(target_os = "windows") {
+        std::env::var("PATHEXT")
+            .unwrap_or_else(|_| ".EXE;.BAT;.CMD".to_string())
+            .split(';')
+            .map(|s| s.to_string())
+            .collect()
+    } else {
+        vec![String::new()]
+    };
+    for dir in std::env::split_paths(&path_var) {
+        for ext in &exts {
+            let candidate = dir.join(format!("{cmd}{ext}"));
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
 }
 
 pub fn run_tesseract(image_path: &Path, language: &str) -> Result<OcrOutput, String> {
@@ -40,7 +138,32 @@ pub fn run_tesseract(image_path: &Path, language: &str) -> Result<OcrOutput, Str
 }
 
 fn invoke_tesseract(image_path: &Path, language: &str) -> Result<OcrOutput, String> {
-    let output = Command::new("tesseract")
+    let exe = TESSERACT_PATH
+        .get_or_init(resolve_tesseract)
+        .as_ref()
+        .ok_or_else(|| {
+            "tesseract not found — install it and ensure it's on PATH, or set \
+             SNK_TESSERACT_PATH to the executable"
+                .to_string()
+        })?;
+
+    let mut command = Command::new(exe);
+    #[cfg(target_os = "windows")]
+    {
+        // Hide the console window that spawns alongside child processes on
+        // Windows. CREATE_NO_WINDOW = 0x08000000.
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000);
+    }
+
+    // Point a bundled tesseract at its bundled tessdata. System installs find
+    // their own data via the standard layout, so we only set this if we have
+    // a bundled directory we ourselves shipped.
+    if let Some(tessdata) = bundled_tessdata_dir() {
+        command.env("TESSDATA_PREFIX", tessdata);
+    }
+
+    let output = command
         .arg(image_path.as_os_str())
         .arg("stdout")
         .arg("-l")
@@ -48,7 +171,7 @@ fn invoke_tesseract(image_path: &Path, language: &str) -> Result<OcrOutput, Stri
         .arg("--psm")
         .arg("3")
         .output()
-        .map_err(|e| format!("spawn tesseract: {e}"))?;
+        .map_err(|e| format!("spawn tesseract ({}): {e}", exe.display()))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
