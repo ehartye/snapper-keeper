@@ -151,4 +151,46 @@ New-SkIcon `
     -TextColor ([System.Drawing.Color]::FromArgb(255, 9, 9, 11)) `
     -Rounded $false
 
+# Wabi-Sabi: vermillion hanko-red square (rounded), washi cream "SK" italic serif
+New-SkIcon `
+    -OutPath (Join-Path $here 'sk-wabi-sabi.png') `
+    -FontName 'Cormorant Garamond' `
+    -BgFrom ([System.Drawing.Color]::FromArgb(255, 197, 74, 58)) `
+    -BgTo ([System.Drawing.Color]::FromArgb(255, 197, 74, 58)) `
+    -TextColor ([System.Drawing.Color]::FromArgb(255, 245, 239, 224)) `
+    -Rounded $true
+
+# Risograph: cream paper, federal-blue border, pink "SK" with blue misregistration ghost
+New-SkIcon `
+    -OutPath (Join-Path $here 'sk-riso.png') `
+    -FontName 'Bebas Neue' `
+    -BgFrom ([System.Drawing.Color]::FromArgb(255, 245, 240, 229)) `
+    -BgTo ([System.Drawing.Color]::FromArgb(255, 245, 240, 229)) `
+    -TextColor ([System.Drawing.Color]::FromArgb(255, 255, 85, 137)) `
+    -Rounded $false `
+    -BorderColor ([System.Drawing.Color]::FromArgb(255, 31, 69, 135)) `
+    -GhostColor ([System.Drawing.Color]::FromArgb(255, 31, 69, 135)) `
+    -GhostOffsetX 18 `
+    -GhostOffsetY 14
+
+# Constructivist: agitprop-red square, wheat-cream slab "SK", tilted -4 deg
+New-SkIcon `
+    -OutPath (Join-Path $here 'sk-constructivist.png') `
+    -FontName 'Bahnschrift' `
+    -BgFrom ([System.Drawing.Color]::FromArgb(255, 217, 26, 40)) `
+    -BgTo ([System.Drawing.Color]::FromArgb(255, 217, 26, 40)) `
+    -TextColor ([System.Drawing.Color]::FromArgb(255, 239, 230, 207)) `
+    -Rounded $false `
+    -TextRotation -4
+
+# Mid-Century Atomic: butter cream (rounded) with walnut border, brick-orange "SK" in display serif
+New-SkIcon `
+    -OutPath (Join-Path $here 'sk-atomic.png') `
+    -FontName 'Cooper Black' `
+    -BgFrom ([System.Drawing.Color]::FromArgb(255, 245, 235, 216)) `
+    -BgTo ([System.Drawing.Color]::FromArgb(255, 245, 235, 216)) `
+    -TextColor ([System.Drawing.Color]::FromArgb(255, 197, 85, 42)) `
+    -Rounded $true `
+    -BorderColor ([System.Drawing.Color]::FromArgb(255, 45, 37, 33))
+
 Write-Host 'done.'
