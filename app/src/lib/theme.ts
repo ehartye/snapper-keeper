@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
@@ -7,6 +7,15 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { getSetting, setSetting } from '@snk/library';
 
 import { queryKeys } from './queryKeys';
+
+import HoloDividerPreview from '../themes/holo.preview';
+import MemphisDividerPreview from '../themes/memphis.preview';
+import RoboticDividerPreview from '../themes/robotic.preview';
+import CorporateDividerPreview from '../themes/corporate.preview';
+import WabiSabiDividerPreview from '../themes/wabi-sabi.preview';
+import RisoDividerPreview from '../themes/riso.preview';
+import ConstructivistDividerPreview from '../themes/constructivist.preview';
+import AtomicDividerPreview from '../themes/atomic.preview';
 
 export const THEME_CHANGED_EVENT = 'theme:changed';
 
@@ -38,10 +47,23 @@ export interface FamilyPreview {
   swatchShape: SwatchShape;
 }
 
+/** A divider preview is a small inline JSX mockup of a family's
+ *  .menu-divider, rendered inside the Settings theme picker card. It's
+ *  decoupled from the actual CSS so a card preview can't be hijacked by
+ *  the active document theme's cascade. Live next to the matching
+ *  themes/<family>.css as themes/<family>.preview.tsx. */
+export interface DividerPreviewProps {
+  mode: ThemeMode;
+  preview: FamilyPreview;
+}
+export type DividerPreviewComponent = (props: DividerPreviewProps) => ReactNode;
+
 export interface FamilyDef {
   label: string;
   tagline: string;
   preview: FamilyPreview;
+  /** Inline mockup for the picker card. See themes/<family>.preview.tsx. */
+  DividerPreview: DividerPreviewComponent;
 }
 
 export const THEME_FAMILIES = {
@@ -61,6 +83,7 @@ export const THEME_FAMILIES = {
       shape: 'round',
       swatchShape: 'round',
     },
+    DividerPreview: HoloDividerPreview,
   },
   memphis: {
     label: 'Memphis Machine',
@@ -78,6 +101,7 @@ export const THEME_FAMILIES = {
       shape: 'memphis',
       swatchShape: 'square',
     },
+    DividerPreview: MemphisDividerPreview,
   },
   robotic: {
     label: 'Mr Robotic',
@@ -95,6 +119,7 @@ export const THEME_FAMILIES = {
       shape: 'terminal',
       swatchShape: 'square',
     },
+    DividerPreview: RoboticDividerPreview,
   },
   corporate: {
     label: 'Corporate Overlord',
@@ -112,6 +137,7 @@ export const THEME_FAMILIES = {
       shape: 'card',
       swatchShape: 'square',
     },
+    DividerPreview: CorporateDividerPreview,
   },
   'wabi-sabi': {
     label: 'Wabi-Sabi',
@@ -129,6 +155,7 @@ export const THEME_FAMILIES = {
       shape: 'card',
       swatchShape: 'round',
     },
+    DividerPreview: WabiSabiDividerPreview,
   },
   riso: {
     label: 'Risograph Zine',
@@ -146,6 +173,7 @@ export const THEME_FAMILIES = {
       shape: 'card',
       swatchShape: 'square',
     },
+    DividerPreview: RisoDividerPreview,
   },
   constructivist: {
     label: 'Constructivist',
@@ -163,6 +191,7 @@ export const THEME_FAMILIES = {
       shape: 'card',
       swatchShape: 'square',
     },
+    DividerPreview: ConstructivistDividerPreview,
   },
   atomic: {
     label: 'Mid-Century Atomic',
@@ -180,6 +209,7 @@ export const THEME_FAMILIES = {
       shape: 'round',
       swatchShape: 'round',
     },
+    DividerPreview: AtomicDividerPreview,
   },
 } as const satisfies Record<string, FamilyDef>;
 

@@ -10,15 +10,7 @@ import {
 import { getSetting, setSetting } from '@snk/library';
 
 import { queryKeys } from '../../lib/queryKeys';
-import {
-  THEMES,
-  THEME_FAMILIES,
-  familyOf,
-  useTheme,
-  type FamilyPreview,
-  type ThemeFamily,
-  type ThemeId,
-} from '../../lib/theme';
+import { THEMES, THEME_FAMILIES, familyOf, useTheme, type ThemeId } from '../../lib/theme';
 
 interface SettingRowProps {
   label: string;
@@ -100,220 +92,9 @@ function useAutostart(): [boolean, (v: boolean) => void, boolean] {
   return [data ?? false, update, isLoading];
 }
 
-/**
- * Inline approximation of each family's .menu-divider for the card preview.
- * Rendered with inline styles rather than the real CSS so that one card's
- * theme can't be hijacked by the active document theme's cascade (the actual
- * .menu-divider rules in app/src/themes/*.css are anchored to html so they
- * never bleed into card scope).
- */
-function DividerPreview({
-  family,
-  mode,
-  preview,
-}: {
-  family: ThemeFamily;
-  mode: 'light' | 'dark';
-  preview: FamilyPreview;
-}) {
-  const isDark = mode === 'dark';
-  const fg = isDark ? preview.fgDark : preview.fgLight;
-  const muted = isDark ? preview.mutedDark : preview.mutedLight;
-  const bg = isDark ? preview.bgDark : preview.bgLight;
-  // Swatches are conventionally [primary, accent, third, fourth] per family.
-  // Non-null asserts are safe — every family registers all four (enforced by
-  // the FamilyPreview shape).
-  const primary = preview.swatches[0]!;
-  const accent = preview.swatches[1]!;
-  const third = preview.swatches[2]!;
-
-  switch (family) {
-    case 'holo':
-      return (
-        <div
-          style={{
-            height: 12,
-            backgroundImage: `linear-gradient(to right, transparent 0%, ${third} 25%, ${primary} 50%, ${accent} 75%, transparent 100%)`,
-            backgroundSize: '100% 2px',
-            backgroundRepeat: 'no-repeat',
-            backgroundPosition: 'center',
-          }}
-        />
-      );
-    case 'memphis': {
-      const stroke = encodeURIComponent(fg);
-      return (
-        <div
-          style={{
-            height: 12,
-            backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 12' preserveAspectRatio='none'><path d='M0 6 Q 12.5 0 25 6 T 50 6 T 75 6 T 100 6' stroke='${stroke}' stroke-width='2.5' fill='none' /></svg>")`,
-            backgroundRepeat: 'repeat-x',
-            backgroundSize: '50px 12px',
-          }}
-        />
-      );
-    }
-    case 'robotic':
-      return (
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            gap: 6,
-            height: 12,
-            fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
-            fontSize: 8,
-            letterSpacing: '0.5px',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-          }}
-        >
-          <span style={{ color: accent }}>0x00FF</span>
-          <span style={{ color: muted }}>41 6C 6C 0A 2D 54 41 47 53</span>
-        </div>
-      );
-    case 'corporate':
-      return (
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            height: 12,
-            backgroundImage: `linear-gradient(to right, ${fg}, ${fg})`,
-            backgroundSize: '100% 1px',
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat',
-          }}
-        >
-          <span
-            style={{
-              background: bg,
-              padding: '0 6px',
-              fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
-              fontSize: 8,
-              fontWeight: 600,
-              letterSpacing: '1px',
-              color: muted,
-              textTransform: 'uppercase',
-            }}
-          >
-            № I
-          </span>
-        </div>
-      );
-    case 'wabi-sabi': {
-      const brushColor = encodeURIComponent(isDark ? '#c8a878' : '#2a1f1a');
-      return (
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            height: 14,
-            backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 4' preserveAspectRatio='none'><path d='M2 2.2 Q 22 0.8 50 2.5 Q 78 4.2 98 2' stroke='${brushColor}' stroke-width='0.6' fill='none' stroke-linecap='round' opacity='0.55' /></svg>")`,
-            backgroundSize: '100% 4px',
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat',
-          }}
-        >
-          <span
-            style={{
-              background: primary,
-              color: bg,
-              fontFamily:
-                "'Shippori Mincho', 'Yu Mincho', 'Hiragino Mincho ProN', 'Noto Serif JP', serif",
-              fontWeight: 800,
-              fontSize: 10,
-              lineHeight: 1,
-              padding: '2px 3px',
-              borderRadius: 1,
-              transform: 'rotate(-3deg)',
-              boxShadow: 'inset 0 0 2px rgba(0,0,0,0.4)',
-            }}
-          >
-            章
-          </span>
-        </div>
-      );
-    }
-    case 'riso':
-      return (
-        <div style={{ position: 'relative', height: 12 }}>
-          <div
-            style={{
-              position: 'absolute',
-              left: 0,
-              right: 0,
-              top: 5,
-              height: 1.5,
-              background: primary,
-              opacity: 0.85,
-            }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              left: 2,
-              right: 0,
-              top: 7,
-              height: 1.5,
-              background: accent,
-              opacity: 0.85,
-            }}
-          />
-        </div>
-      );
-    case 'constructivist':
-      return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 14 }}>
-          <span
-            style={{
-              flex: '0 0 10px',
-              width: 10,
-              height: 10,
-              background: primary,
-              transform: 'rotate(15deg)',
-            }}
-          />
-          <span style={{ flex: 1, height: 2, background: fg }} />
-        </div>
-      );
-    case 'atomic': {
-      const starFill = encodeURIComponent(primary);
-      return (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: 14,
-            backgroundImage: `linear-gradient(to right, ${fg}, ${fg})`,
-            backgroundSize: '100% 1px',
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat',
-            opacity: 1,
-          }}
-        >
-          <span
-            style={{
-              width: 12,
-              height: 12,
-              backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M6 0.5 L7 5 L11.5 6 L7 7 L6 11.5 L5 7 L0.5 6 L5 5 Z' fill='${starFill}' /></svg>")`,
-              backgroundSize: '12px 12px',
-              backgroundColor: bg,
-              backgroundRepeat: 'no-repeat',
-              backgroundPosition: 'center',
-              padding: '0 4px',
-              boxSizing: 'content-box',
-            }}
-          />
-        </div>
-      );
-    }
-  }
-}
+// DividerPreview is now colocated with each family's CSS — see
+// themes/<family>.preview.tsx. SettingsWindow reads the matching component
+// from THEME_FAMILIES[family].DividerPreview.
 
 function ThemeCard({
   themeId,
@@ -329,6 +110,7 @@ function ThemeCard({
   const family = familyOf(themeId);
   const isDark = themeId.endsWith('dark');
   const preview = THEME_FAMILIES[family].preview;
+  const DividerPreview = THEME_FAMILIES[family].DividerPreview;
 
   const shapeClass = (() => {
     switch (preview.shape) {
@@ -401,9 +183,10 @@ function ThemeCard({
         {tagline}
       </div>
 
-      {/* Divider preview — inline mockup per family. NOT the real .menu-divider
-          because that's anchored to html[data-theme=X] and would inherit the
-          active document theme inside the card. See DividerPreview above. */}
+      {/* Divider preview — colocated mockup at themes/<family>.preview.tsx.
+          NOT the real .menu-divider because that's anchored to
+          html[data-theme=X] and would inherit the active document theme
+          inside the card. */}
       <div
         className="mt-3 px-2 py-1.5"
         style={{
@@ -412,7 +195,7 @@ function ThemeCard({
         }}
         aria-hidden
       >
-        <DividerPreview family={family} mode={isDark ? 'dark' : 'light'} preview={preview} />
+        <DividerPreview mode={isDark ? 'dark' : 'light'} preview={preview} />
       </div>
     </button>
   );
