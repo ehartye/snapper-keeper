@@ -124,48 +124,72 @@ function ThemeCard({
     }
   })();
 
+  const tagline = THEME_FAMILIES[family].tagline;
+  const fg = isDark ? preview.fgDark : preview.fgLight;
+  const muted = isDark ? preview.mutedDark : preview.mutedLight;
+
   return (
     <button
       onClick={onSelect}
-      className={`group relative text-left p-3 transition-transform hover:-translate-y-0.5 ${shapeClass}`}
+      data-theme={themeId}
+      className={`group relative text-left p-4 transition-transform hover:-translate-y-0.5 ${shapeClass}`}
       style={{ background: isDark ? preview.bgDark : preview.bgLight }}
     >
-      <div className="flex gap-1 mb-3">
+      <div className="flex gap-1.5 mb-3">
         {preview.swatches.map((c) => (
           <span
             key={c}
             className={`block ${preview.swatchShape === 'round' ? 'rounded-full' : ''}`}
             style={{
-              width: 18,
-              height: 18,
+              width: 20,
+              height: 20,
               background: c,
               border:
                 preview.swatchShape === 'square'
-                  ? `2px solid ${isDark ? preview.fgDark : preview.fgLight}`
+                  ? `2px solid ${fg}`
                   : 'none',
             }}
           />
         ))}
       </div>
+
       <div
-        className="text-xs"
+        className="text-sm leading-tight"
         style={{
           fontFamily: preview.displayFont,
-          color: isDark ? preview.fgDark : preview.fgLight,
+          color: fg,
           letterSpacing: preview.shape === 'card' ? '0.08em' : undefined,
           textTransform: preview.shape === 'card' ? 'uppercase' : undefined,
         }}
       >
         {label}
       </div>
+
       <div
-        className="text-[10px] mt-0.5"
-        style={{
-          fontFamily: preview.bodyFont,
-          color: isDark ? preview.mutedDark : preview.mutedLight,
-        }}
+        className="text-[10px] mt-0.5 uppercase tracking-wider"
+        style={{ fontFamily: preview.bodyFont, color: muted, opacity: 0.7 }}
       >
         {isDark ? 'dark' : 'light'}
+      </div>
+
+      <div
+        className="text-[11px] mt-2 leading-snug italic"
+        style={{ fontFamily: preview.bodyFont, color: muted }}
+      >
+        {tagline}
+      </div>
+
+      {/* Live divider preview — rendered inside a bg-soft band so atomic /
+          corporate / wabi-sabi divider masks (which use var(--bg-soft) to
+          occlude the line behind their centerpiece) blend cleanly. The
+          data-theme attr is on the button itself, so child .menu-divider
+          rules cascade with the correct theme palette. */}
+      <div
+        className="mt-3 px-2 py-1.5"
+        style={{ background: 'var(--bg-soft)' }}
+        aria-hidden
+      >
+        <div className="menu-divider" />
       </div>
     </button>
   );

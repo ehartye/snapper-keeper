@@ -5,7 +5,7 @@
  *  Dark:  the poster pulled off the wall and stuck in a black alley.
  * ====================================================================== */
 
-html[data-theme='constructivist-light'] {
+[data-theme='constructivist-light'] {
   --bg: #efe6cf;
   --bg-soft: #e0d6bb;
   --surface: #f7f0dc;
@@ -25,7 +25,7 @@ html[data-theme='constructivist-light'] {
   --grain: none;
 }
 
-html[data-theme='constructivist-dark'] {
+[data-theme='constructivist-dark'] {
   --bg: #0a0a0a;
   --bg-soft: #141414;
   --surface: #1f1f1f;
@@ -47,7 +47,7 @@ html[data-theme='constructivist-dark'] {
 
 /* Diagonal stripe background at very low opacity — constructivist plane.
    Subtle enough to read as texture, not pattern. */
-html[data-theme^='constructivist'] body {
+[data-theme^='constructivist'] body {
   background-image: repeating-linear-gradient(
     135deg,
     rgba(217, 26, 40, 0.04) 0 24px,
@@ -55,7 +55,7 @@ html[data-theme^='constructivist'] body {
   );
   background-attachment: fixed;
 }
-html[data-theme='constructivist-dark'] body {
+[data-theme='constructivist-dark'] body {
   background-image: repeating-linear-gradient(
     135deg,
     rgba(240, 64, 64, 0.05) 0 24px,
@@ -64,23 +64,23 @@ html[data-theme='constructivist-dark'] body {
 }
 
 /* Display text — Alfa Slab One, all-caps, no extra weight (single-weight font). */
-html[data-theme^='constructivist'] .font-display {
+[data-theme^='constructivist'] .font-display {
   font-weight: 400;
   letter-spacing: 0;
   text-transform: uppercase;
 }
 
-html[data-theme^='constructivist'] body {
+[data-theme^='constructivist'] body {
   font-weight: 400;
 }
 
 /* Shimmer is a flat agitprop-red fill — no animation. */
-html[data-theme^='constructivist'] .holo-shimmer {
+[data-theme^='constructivist'] .holo-shimmer {
   background-image: linear-gradient(90deg, var(--primary), var(--primary));
 }
 
 /* Divider — Lissitzky composition. Tilted red square + 2px horizontal bar. */
-html[data-theme^='constructivist'] .menu-divider {
+[data-theme^='constructivist'] .menu-divider {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -88,7 +88,7 @@ html[data-theme^='constructivist'] .menu-divider {
   background-image: none;
   padding: 0 4px;
 }
-html[data-theme^='constructivist'] .menu-divider::before {
+[data-theme^='constructivist'] .menu-divider::before {
   content: '';
   flex: 0 0 10px;
   width: 10px;
@@ -96,7 +96,7 @@ html[data-theme^='constructivist'] .menu-divider::before {
   background: var(--primary);
   transform: rotate(15deg);
 }
-html[data-theme^='constructivist'] .menu-divider::after {
+[data-theme^='constructivist'] .menu-divider::after {
   content: '';
   flex: 1;
   height: 2px;
@@ -104,7 +104,7 @@ html[data-theme^='constructivist'] .menu-divider::after {
 }
 
 /* Scrollbar — red on flat, square thumb */
-html[data-theme^='constructivist'] ::-webkit-scrollbar-thumb {
+[data-theme^='constructivist'] ::-webkit-scrollbar-thumb {
   background: var(--primary);
   border-radius: 0;
 }

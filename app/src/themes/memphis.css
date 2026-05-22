@@ -3,7 +3,7 @@
  *  squiggles, ziggurats, asymmetric grid-breaking, hard angles.
  * ====================================================================== */
 
-html[data-theme='memphis-light'] {
+[data-theme='memphis-light'] {
   --bg: #fafaf5;
   --bg-soft: #f0ede3;
   --surface: #ffffff;
@@ -23,7 +23,7 @@ html[data-theme='memphis-light'] {
   --grain: none;
 }
 
-html[data-theme='memphis-dark'] {
+[data-theme='memphis-dark'] {
   --bg: #050505;
   --bg-soft: #141414;
   --surface: #1f1f1f;
@@ -44,17 +44,17 @@ html[data-theme='memphis-dark'] {
 }
 
 /* Shimmer falls back to a flat primary fill so bg-clip-text stays legible. */
-html[data-theme^='memphis'] .holo-shimmer {
+[data-theme^='memphis'] .holo-shimmer {
   background-image: linear-gradient(90deg, var(--primary), var(--primary));
 }
 
 /* Squiggles, dots, ziggurats overlaid via SVG/gradient backgrounds. */
-html[data-theme^='memphis'] .memphis-dots {
+[data-theme^='memphis'] .memphis-dots {
   background-image: radial-gradient(var(--accent-4) 1.5px, transparent 2px);
   background-size: 16px 16px;
 }
 
-html[data-theme^='memphis'] .memphis-grid {
+[data-theme^='memphis'] .memphis-grid {
   background-image:
     linear-gradient(var(--border) 1px, transparent 1px),
     linear-gradient(90deg, var(--border) 1px, transparent 1px);
@@ -62,14 +62,14 @@ html[data-theme^='memphis'] .memphis-grid {
   opacity: 0.15;
 }
 
-html[data-theme^='memphis'] .memphis-card {
+[data-theme^='memphis'] .memphis-card {
   border: 2.5px solid var(--border);
   background: var(--surface);
   border-radius: 0;
   box-shadow: 6px 6px 0 0 var(--border);
 }
 
-html[data-theme^='memphis'] .memphis-card-accent {
+[data-theme^='memphis'] .memphis-card-accent {
   border: 2.5px solid var(--border);
   background: var(--surface);
   border-radius: 0;
@@ -77,17 +77,17 @@ html[data-theme^='memphis'] .memphis-card-accent {
 }
 
 /* Divider — hand-drawn squiggle (the original); dark variant flips stroke color. */
-html[data-theme^='memphis'] .menu-divider {
+[data-theme^='memphis'] .menu-divider {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 12' preserveAspectRatio='none'><path d='M0 6 Q 12.5 0 25 6 T 50 6 T 75 6 T 100 6' stroke='%230a0a0a' stroke-width='2.5' fill='none' /></svg>");
   background-repeat: repeat-x;
   background-size: 50px 12px;
   background-position: 0 0;
 }
-html[data-theme='memphis-dark'] .menu-divider {
+[data-theme='memphis-dark'] .menu-divider {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 12' preserveAspectRatio='none'><path d='M0 6 Q 12.5 0 25 6 T 50 6 T 75 6 T 100 6' stroke='%23fafaf5' stroke-width='2.5' fill='none' /></svg>");
 }
 
-html[data-theme^='memphis'] ::-webkit-scrollbar-thumb {
+[data-theme^='memphis'] ::-webkit-scrollbar-thumb {
   border-radius: 0;
   background: var(--text);
 }
