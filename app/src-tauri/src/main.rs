@@ -1,12 +1,56 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use tauri::{
+    image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Emitter, Manager,
 };
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
+
+const TRAY_HOLO_PNG: &[u8] = include_bytes!("../icons/sk-holo.png");
+const TRAY_MEMPHIS_PNG: &[u8] = include_bytes!("../icons/sk-memphis.png");
+const TRAY_ROBOTIC_PNG: &[u8] = include_bytes!("../icons/sk-robotic.png");
+const TRAY_CORPORATE_PNG: &[u8] = include_bytes!("../icons/sk-corporate.png");
+
+fn tray_icon_for(family: &str) -> Image<'static> {
+    let bytes = match family {
+        "memphis" => TRAY_MEMPHIS_PNG,
+        "robotic" => TRAY_ROBOTIC_PNG,
+        "corporate" => TRAY_CORPORATE_PNG,
+        _ => TRAY_HOLO_PNG,
+    };
+    let img = image::load_from_memory(bytes)
+        .expect("tray icon png decode")
+        .to_rgba8();
+    let (w, h) = img.dimensions();
+    Image::new_owned(img.into_raw(), w, h)
+}
+
+#[tauri::command]
+fn set_tray_theme<R: tauri::Runtime>(app: tauri::AppHandle<R>, family: String) -> Result<(), String> {
+    let icon = tray_icon_for(&family);
+    if let Some(tray) = app.tray_by_id("main") {
+        tray.set_icon(Some(icon.clone()))
+            .map_err(|e| e.to_string())?;
+    } else {
+        // Expected during early startup before the tray is built; the next
+        // theme apply (window focus / setting change) will succeed.
+        tracing::debug!("set_tray_theme: tray 'main' not built yet");
+    }
+
+    // Also swap the per-window icon shown in the taskbar / titlebar / alt-tab,
+    // so the live "app icon" matches the active theme. The bundled .exe icon
+    // (set at build time via bundle.icon) is unaffected.
+    for (label, win) in app.webview_windows() {
+        if let Err(e) = win.set_icon(icon.clone()) {
+            tracing::warn!(window = %label, error = %e, "failed to set window icon");
+        }
+    }
+
+    Ok(())
+}
 
 fn main() {
     tracing_subscriber::fmt()
@@ -25,6 +69,7 @@ fn main() {
         .plugin(snk_ocr::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(snk_updater::init())
+        .invoke_handler(tauri::generate_handler![set_tray_theme])
         .setup(|app| {
             let capture_region = MenuItem::with_id(
                 app,
@@ -92,6 +137,8 @@ fn main() {
             )?;
 
             let _tray = TrayIconBuilder::with_id("main")
+                .icon(tray_icon_for("holo"))
+                .icon_as_template(false)
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id().as_ref() {

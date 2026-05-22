@@ -15,6 +15,7 @@ export default [
     languageOptions: {
       parser: tsParser,
       parserOptions: { ecmaVersion: 2022, sourceType: 'module', ecmaFeatures: { jsx: true } },
+      globals: { ...globals.browser },
     },
     plugins: { '@typescript-eslint': tsPlugin },
     rules: {

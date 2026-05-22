@@ -7,9 +7,11 @@ import { CaptureToolbar } from './windows/capture-toolbar/CaptureToolbar';
 import { AnnotateWindow } from './windows/annotate/AnnotateWindow';
 import { ClipboardPopup } from './windows/clipboard-popup/ClipboardPopup';
 import { SettingsWindow } from './windows/settings/SettingsWindow';
+import { useTheme } from './lib/theme';
 
 function WindowRouter() {
   const [label, setLabel] = useState<string | null>(null);
+  useTheme();
 
   useEffect(() => {
     setLabel(getCurrentWindow().label);

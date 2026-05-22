@@ -6,6 +6,12 @@
   "permissions": [
     "core:default",
     "core:window:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-focus",
+    "core:window:allow-set-position",
+    "core:window:allow-set-size",
+    "core:window:allow-set-fullscreen",
     "core:event:default",
     "core:path:default",
     "global-shortcut:allow-register",
