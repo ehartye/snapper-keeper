@@ -23,7 +23,7 @@ No new technology. Four additional `New-SkIcon` calls in the script, four new `i
 
 | Family | Shape | Background | Text color | Font | Effect |
 |---|---|---|---|---|---|
-| **wabi-sabi** | Rounded (28%) | Solid `#c54a3a` (vermillion hanko-red) | `#f5efe0` (washi cream) | `Cormorant Garamond Italic` → `Yu Mincho` fallback | None |
+| **wabi-sabi** | Rounded (28%) | Solid `#c54a3a` (vermillion hanko-red) | `#f5efe0` (washi cream) | `Cormorant Garamond` (Bold) → `Yu Mincho` fallback | None |
 | **riso** | Hard square + 2 px `#1f4587` border | Solid `#f5f0e5` (cream paper) | `#ff5589` (fluorescent pink) | `Bebas Neue` → `Impact` fallback | 4 px right / 3 px down `#1f4587` text-shadow (misregistration ghost) |
 | **constructivist** | Hard square | Solid `#d91a28` (agitprop red) | `#efe6cf` (wheat cream) | `Alfa Slab One` → `Bahnschrift` → `Impact` fallback | Text rotated -4° |
 | **atomic** | Rounded (18%) + 4 px `#2d2521` border | Solid `#f5ebd8` (butter cream) | `#c5552a` (brick orange) | `Limelight` → `Cooper Black` → `Georgia` fallback | None |

@@ -176,7 +176,7 @@ git commit -m "chore(icons): extend New-SkIcon with ghost/border/rotation params
 After the existing Corporate Overlord invocation (after the `-Rounded $false` line that ends at ~line 123 of pre-Task-1 HEAD; line numbers shift slightly post-Task-1), add:
 
 ```powershell
-# Wabi-Sabi: vermillion hanko-red square (rounded), washi cream "SK" italic serif
+# Wabi-Sabi: vermillion hanko-red square (rounded), washi cream "SK" bold serif
 New-SkIcon `
     -OutPath (Join-Path $here 'sk-wabi-sabi.png') `
     -FontName 'Cormorant Garamond' `
@@ -381,7 +381,7 @@ The 4 existing families (`holo`, `memphis`, `robotic`, `corporate`) should look 
 
 If a family's "SK" looks wrong (wrong letterforms), the system was missing the named font and fell back to `Segoe UI Black` (rounded families) or `Impact` (square families). Common culprits:
 
-- `Cormorant Garamond` — install from Google Fonts if you want the italic serif look on wabi-sabi
+- `Cormorant Garamond` — install from Google Fonts for the proper bold serif on wabi-sabi (the function passes FontStyle::Bold; italic would require further extending New-SkIcon)
 - `Bebas Neue` — install for the condensed riso display
 - `Cooper Black` — ships with Windows but may be absent on macOS / Linux
 
