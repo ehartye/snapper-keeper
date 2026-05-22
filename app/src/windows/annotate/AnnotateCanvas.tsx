@@ -39,6 +39,7 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
   const selectedId = useAnnotateStore((s) => s.selectedId);
   const setSelectedId = useAnnotateStore((s) => s.setSelectedId);
   const setCropRegion = useAnnotateStore((s) => s.setCropRegion);
+  const setSourceImage = useAnnotateStore((s) => s.setSourceImage);
   const confirmCrop = useAnnotateStore((s) => s.confirmCrop);
   const deleteShape = useAnnotateStore((s) => s.deleteShape);
   const updateShape = useAnnotateStore((s) => s.updateShape);
@@ -48,9 +49,17 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
   useEffect(() => {
     const img = new window.Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => setImage(img);
+    img.onload = () => {
+      setImage(img);
+      setSourceImage(img);
+    };
     img.src = imageSrc;
-  }, [imageSrc]);
+    // Drop the store reference when we unmount or the src changes so the
+    // next capture loads cleanly. (reset() also clears it.)
+    return () => {
+      setSourceImage(null);
+    };
+  }, [imageSrc, setSourceImage]);
 
   useEffect(() => {
     const el = containerRef.current;
