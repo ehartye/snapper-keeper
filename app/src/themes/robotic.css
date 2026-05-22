@@ -4,7 +4,7 @@
  *  tractor-feed paper printed in amber ribbon.
  * ====================================================================== */
 
-[data-theme='robotic-dark'] {
+html[data-theme='robotic-dark'] {
   --bg: #0a0a0a;
   --bg-soft: #121212;
   --surface: #1a1a1a;
@@ -28,7 +28,7 @@
   --grain: none;
 }
 
-[data-theme='robotic-light'] {
+html[data-theme='robotic-light'] {
   --bg: #f5efde;
   --bg-soft: #ebe3ce;
   --surface: #fdfaf0;
@@ -49,7 +49,7 @@
 }
 
 /* CRT scanlines layered over body */
-[data-theme^='robotic'] body {
+html[data-theme^='robotic'] body {
   background-image: var(--halo),
     repeating-linear-gradient(
       0deg,
@@ -60,7 +60,7 @@
     ),
     var(--grain);
 }
-[data-theme='robotic-dark'] body {
+html[data-theme='robotic-dark'] body {
   background-image: var(--halo),
     repeating-linear-gradient(
       0deg,
@@ -71,23 +71,23 @@
     );
 }
 
-[data-theme^='robotic'] .font-display {
+html[data-theme^='robotic'] .font-display {
   letter-spacing: 0;
   line-height: 1;
 }
-[data-theme='robotic-dark'] .font-display {
+html[data-theme='robotic-dark'] .font-display {
   text-shadow:
     0 0 4px rgba(255, 176, 0, 0.55),
     0 0 10px rgba(255, 176, 0, 0.25);
 }
 
-[data-theme^='robotic'] .holo-shimmer {
+html[data-theme^='robotic'] .holo-shimmer {
   background-image: linear-gradient(90deg, var(--accent), var(--accent));
 }
 
 /* Divider — hex memory dump. Address in --accent (Matrix/forest green),
    bytes in --text-muted. Bytes 41 6C 6C 0A 2D 54 41 47 53 = "All\n-TAGS". */
-[data-theme^='robotic'] .menu-divider {
+html[data-theme^='robotic'] .menu-divider {
   display: flex;
   justify-content: center;
   align-items: center;
@@ -100,16 +100,16 @@
   background-image: none;
   user-select: none;
 }
-[data-theme^='robotic'] .menu-divider::before {
+html[data-theme^='robotic'] .menu-divider::before {
   content: "0x00FF";
   color: var(--accent);
 }
-[data-theme^='robotic'] .menu-divider::after {
+html[data-theme^='robotic'] .menu-divider::after {
   content: "41 6C 6C 0A 2D 54 41 47 53";
   color: var(--text-muted);
 }
 
-[data-theme^='robotic'] ::-webkit-scrollbar-thumb {
+html[data-theme^='robotic'] ::-webkit-scrollbar-thumb {
   background: var(--text);
   border-radius: 0;
 }

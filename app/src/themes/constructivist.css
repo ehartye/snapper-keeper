@@ -5,7 +5,7 @@
  *  Dark:  the poster pulled off the wall and stuck in a black alley.
  * ====================================================================== */
 
-[data-theme='constructivist-light'] {
+html[data-theme='constructivist-light'] {
   --bg: #efe6cf;
   --bg-soft: #e0d6bb;
   --surface: #f7f0dc;
@@ -25,7 +25,7 @@
   --grain: none;
 }
 
-[data-theme='constructivist-dark'] {
+html[data-theme='constructivist-dark'] {
   --bg: #0a0a0a;
   --bg-soft: #141414;
   --surface: #1f1f1f;
@@ -47,7 +47,7 @@
 
 /* Diagonal stripe background at very low opacity — constructivist plane.
    Subtle enough to read as texture, not pattern. */
-[data-theme^='constructivist'] body {
+html[data-theme^='constructivist'] body {
   background-image: repeating-linear-gradient(
     135deg,
     rgba(217, 26, 40, 0.04) 0 24px,
@@ -55,7 +55,7 @@
   );
   background-attachment: fixed;
 }
-[data-theme='constructivist-dark'] body {
+html[data-theme='constructivist-dark'] body {
   background-image: repeating-linear-gradient(
     135deg,
     rgba(240, 64, 64, 0.05) 0 24px,
@@ -64,23 +64,23 @@
 }
 
 /* Display text — Alfa Slab One, all-caps, no extra weight (single-weight font). */
-[data-theme^='constructivist'] .font-display {
+html[data-theme^='constructivist'] .font-display {
   font-weight: 400;
   letter-spacing: 0;
   text-transform: uppercase;
 }
 
-[data-theme^='constructivist'] body {
+html[data-theme^='constructivist'] body {
   font-weight: 400;
 }
 
 /* Shimmer is a flat agitprop-red fill — no animation. */
-[data-theme^='constructivist'] .holo-shimmer {
+html[data-theme^='constructivist'] .holo-shimmer {
   background-image: linear-gradient(90deg, var(--primary), var(--primary));
 }
 
 /* Divider — Lissitzky composition. Tilted red square + 2px horizontal bar. */
-[data-theme^='constructivist'] .menu-divider {
+html[data-theme^='constructivist'] .menu-divider {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -88,7 +88,7 @@
   background-image: none;
   padding: 0 4px;
 }
-[data-theme^='constructivist'] .menu-divider::before {
+html[data-theme^='constructivist'] .menu-divider::before {
   content: '';
   flex: 0 0 10px;
   width: 10px;
@@ -96,7 +96,7 @@
   background: var(--primary);
   transform: rotate(15deg);
 }
-[data-theme^='constructivist'] .menu-divider::after {
+html[data-theme^='constructivist'] .menu-divider::after {
   content: '';
   flex: 1;
   height: 2px;
@@ -104,7 +104,7 @@
 }
 
 /* Scrollbar — red on flat, square thumb */
-[data-theme^='constructivist'] ::-webkit-scrollbar-thumb {
+html[data-theme^='constructivist'] ::-webkit-scrollbar-thumb {
   background: var(--primary);
   border-radius: 0;
 }

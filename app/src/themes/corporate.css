@@ -5,7 +5,7 @@
  *  Light: zinc industrial-modern. Dark: vault interior, jet black on bone white.
  * ====================================================================== */
 
-[data-theme='corporate-light'] {
+html[data-theme='corporate-light'] {
   --bg: #f4f4f5;
   --bg-soft: #e4e4e7;
   --surface: #ffffff;
@@ -25,7 +25,7 @@
   --grain: none;
 }
 
-[data-theme='corporate-dark'] {
+html[data-theme='corporate-dark'] {
   --bg: #09090b;
   --bg-soft: #18181b;
   --surface: #27272a;
@@ -45,12 +45,12 @@
   --grain: none;
 }
 
-[data-theme^='corporate'] {
+html[data-theme^='corporate'] {
   font-feature-settings: 'lnum' 1, 'kern' 1, 'ss01' 1;
 }
 
 /* Archivo at 500 is the unforgiving baseline. */
-[data-theme^='corporate'] body {
+html[data-theme^='corporate'] body {
   font-weight: 500;
   font-size: 14px;
   line-height: 1.4;
@@ -58,45 +58,45 @@
 }
 
 /* Display text: gothic-condensed at heavy weight. Presence, not delicacy. */
-[data-theme^='corporate'] .font-display {
+html[data-theme^='corporate'] .font-display {
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   font-stretch: condensed;
 }
 
-[data-theme^='corporate'] button,
-[data-theme^='corporate'] input,
-[data-theme^='corporate'] select,
-[data-theme^='corporate'] textarea {
+html[data-theme^='corporate'] button,
+html[data-theme^='corporate'] input,
+html[data-theme^='corporate'] select,
+html[data-theme^='corporate'] textarea {
   font-weight: 500;
 }
-[data-theme^='corporate'] kbd,
-[data-theme^='corporate'] .font-semibold,
-[data-theme^='corporate'] .font-medium {
+html[data-theme^='corporate'] kbd,
+html[data-theme^='corporate'] .font-semibold,
+html[data-theme^='corporate'] .font-medium {
   font-weight: 600;
 }
 
 /* Pure cold gradient for clipped-text headlines (no animated rainbow). */
-[data-theme^='corporate'] .holo-shimmer {
+html[data-theme^='corporate'] .holo-shimmer {
   background-image: linear-gradient(90deg, var(--text), var(--text));
 }
 
 /* Flat uncompromising rules — no shadows, just weight. */
-[data-theme^='corporate'] .corporate-rule {
+html[data-theme^='corporate'] .corporate-rule {
   border-top: 2px solid var(--border);
 }
 
 /* Divider — stamped Roman serial. CSS counter increments per divider
    position (I, II, III) over a centered hairline. The mark's bg-soft
    background masks the line so the rule appears to terminate cleanly. */
-[data-theme^='corporate'] .menu-divider {
+html[data-theme^='corporate'] .menu-divider {
   position: relative;
   display: flex;
   justify-content: center;
   align-items: center;
 }
-[data-theme^='corporate'] .menu-divider::before {
+html[data-theme^='corporate'] .menu-divider::before {
   content: "№ " counter(divider, upper-roman);
   background: var(--bg-soft);
   padding: 0 8px;
@@ -109,7 +109,7 @@
   z-index: 1;
 }
 
-[data-theme^='corporate'] ::-webkit-scrollbar-thumb {
+html[data-theme^='corporate'] ::-webkit-scrollbar-thumb {
   background: var(--accent);
   border-radius: 0;
 }
