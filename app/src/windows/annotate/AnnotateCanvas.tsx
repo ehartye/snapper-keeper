@@ -284,57 +284,68 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
               />
             )}
           </Layer>
-          {cropRegion && (
-            <Layer listening={false}>
-              {cropConfirmed && (
-                <>
-                  {/* Dim everything outside the confirmed crop so it's
-                      visually clear what will and won't be in the saved
-                      PNG. The four rects cover the top/bottom/left/right
-                      bands around the kept region. Export uses the same
-                      crop bounds, so these dimmed pixels never appear
-                      in the output file. */}
-                  <Rect
-                    x={0}
-                    y={0}
-                    width={imageWidth}
-                    height={cropRegion.y}
-                    fill="rgba(0, 0, 0, 0.45)"
-                  />
-                  <Rect
-                    x={0}
-                    y={cropRegion.y + cropRegion.height}
-                    width={imageWidth}
-                    height={Math.max(0, imageHeight - (cropRegion.y + cropRegion.height))}
-                    fill="rgba(0, 0, 0, 0.45)"
-                  />
-                  <Rect
-                    x={0}
-                    y={cropRegion.y}
-                    width={cropRegion.x}
-                    height={cropRegion.height}
-                    fill="rgba(0, 0, 0, 0.45)"
-                  />
-                  <Rect
-                    x={cropRegion.x + cropRegion.width}
-                    y={cropRegion.y}
-                    width={Math.max(0, imageWidth - (cropRegion.x + cropRegion.width))}
-                    height={cropRegion.height}
-                    fill="rgba(0, 0, 0, 0.45)"
-                  />
-                </>
-              )}
-              <Rect
-                x={cropRegion.x}
-                y={cropRegion.y}
-                width={cropRegion.width}
-                height={cropRegion.height}
-                stroke={cropConfirmed ? '#22c55e' : '#3b82f6'}
-                strokeWidth={cropConfirmed ? 3 : 2}
-                dash={cropConfirmed ? undefined : [6, 3]}
-              />
-            </Layer>
-          )}
+          {(() => {
+            // Render the crop preview from either the in-progress draft
+            // (currentShape, during the drag) or the committed cropRegion
+            // (post-mouseup, pre-Apply, or confirmed). Solid green only
+            // for a confirmed crop; dashed blue otherwise.
+            const drafting = currentShape?.tool === 'crop';
+            const preview = drafting
+              ? {
+                  x: currentShape.x ?? 0,
+                  y: currentShape.y ?? 0,
+                  width: currentShape.width ?? 0,
+                  height: currentShape.height ?? 0,
+                }
+              : cropRegion;
+            if (!preview || preview.width <= 0 || preview.height <= 0) return null;
+            const confirmed = !drafting && cropConfirmed;
+            return (
+              <Layer listening={false}>
+                {/* Dim everything outside the previewed crop so the user
+                    can see what will be kept vs. cropped away. Export uses
+                    the same crop bounds, so these dimmed pixels never
+                    appear in the output file. */}
+                <Rect
+                  x={0}
+                  y={0}
+                  width={imageWidth}
+                  height={preview.y}
+                  fill="rgba(0, 0, 0, 0.45)"
+                />
+                <Rect
+                  x={0}
+                  y={preview.y + preview.height}
+                  width={imageWidth}
+                  height={Math.max(0, imageHeight - (preview.y + preview.height))}
+                  fill="rgba(0, 0, 0, 0.45)"
+                />
+                <Rect
+                  x={0}
+                  y={preview.y}
+                  width={preview.x}
+                  height={preview.height}
+                  fill="rgba(0, 0, 0, 0.45)"
+                />
+                <Rect
+                  x={preview.x + preview.width}
+                  y={preview.y}
+                  width={Math.max(0, imageWidth - (preview.x + preview.width))}
+                  height={preview.height}
+                  fill="rgba(0, 0, 0, 0.45)"
+                />
+                <Rect
+                  x={preview.x}
+                  y={preview.y}
+                  width={preview.width}
+                  height={preview.height}
+                  stroke={confirmed ? '#22c55e' : '#3b82f6'}
+                  strokeWidth={confirmed ? 3 : 2}
+                  dash={confirmed ? undefined : [6, 3]}
+                />
+              </Layer>
+            );
+          })()}
         </Stage>
 
         {editing && editScreenStyle && (
