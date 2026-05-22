@@ -41,6 +41,27 @@ importers:
 
   app:
     dependencies:
+      '@fontsource/archivo':
+        specifier: ^5.2.8
+        version: 5.2.8
+      '@fontsource/big-shoulders-display':
+        specifier: ^5.2.5
+        version: 5.2.5
+      '@fontsource/bungee':
+        specifier: ^5.2.7
+        version: 5.2.7
+      '@fontsource/fredoka':
+        specifier: ^5.2.10
+        version: 5.2.10
+      '@fontsource/ibm-plex-mono':
+        specifier: ^5.2.7
+        version: 5.2.7
+      '@fontsource/rubik-bubbles':
+        specifier: ^5.2.7
+        version: 5.2.7
+      '@fontsource/vt323':
+        specifier: ^5.2.7
+        version: 5.2.7
       '@snk/annotate':
         specifier: workspace:*
         version: link:../packages/snk-annotate
@@ -439,6 +460,27 @@ packages:
   '@eslint/plugin-kit@0.4.1':
     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+
+  '@fontsource/archivo@5.2.8':
+    resolution: {integrity: sha512-Fc4yuMt85MmcYooUVpYHAJRJTymPv2+J9HsMP2f5mxR/0pIWgE2V5XfgNTavPpklX2rJFprdT36iE6Rr8ds9MA==}
+
+  '@fontsource/big-shoulders-display@5.2.5':
+    resolution: {integrity: sha512-qqqqNaT2DRcrpytJ82ZjFeDsQFdrncGna3OqLS+F9XwOS65rxOnXFBgnubh3hQVj8RzUS/LQNVtUXvdsZLKtkA==}
+
+  '@fontsource/bungee@5.2.7':
+    resolution: {integrity: sha512-pzUlTXEFdiDM5p0inlWRM+1ovS3vTWG6NplJ65EpfBwZNQmM6wNS6z22tml07+NWKK+e8/FPPupBVbzd0th54w==}
+
+  '@fontsource/fredoka@5.2.10':
+    resolution: {integrity: sha512-DyzPCmTf0PkBbAu+gNvnPzfD/dYIXlyp+Zcb76jEQyt/vmRKGZgkH8FFF9W2sICDaA5p+GLk1XGFjWh5PPX+lg==}
+
+  '@fontsource/ibm-plex-mono@5.2.7':
+    resolution: {integrity: sha512-MKAb8qV+CaiMQn2B0dIi1OV3565NYzp3WN5b4oT6LTkk+F0jR6j0ZN+5BKJiIhffDC3rtBULsYZE65+0018z9w==}
+
+  '@fontsource/rubik-bubbles@5.2.7':
+    resolution: {integrity: sha512-oxEY6N9aZdsY5mn1VQwb2ZvHA+gZCcWKFDO0uonbnfWBN92auBdeSB7SaZ6tE9NrhJs6b5IHu+/w1rit0t/frQ==}
+
+  '@fontsource/vt323@5.2.7':
+    resolution: {integrity: sha512-8JTMM23vMhQxin9Cn/ijty8cNwXW4INrln0VAJ2227Rz0CVfkzM3qr3l/CqudZJ6BXCnbCGUTdf2ym3cTNex8A==}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -2220,6 +2262,20 @@ snapshots:
     dependencies:
       '@eslint/core': 0.17.0
       levn: 0.4.1
+
+  '@fontsource/archivo@5.2.8': {}
+
+  '@fontsource/big-shoulders-display@5.2.5': {}
+
+  '@fontsource/bungee@5.2.7': {}
+
+  '@fontsource/fredoka@5.2.10': {}
+
+  '@fontsource/ibm-plex-mono@5.2.7': {}
+
+  '@fontsource/rubik-bubbles@5.2.7': {}
+
+  '@fontsource/vt323@5.2.7': {}
 
   '@humanfs/core@0.19.2':
     dependencies:

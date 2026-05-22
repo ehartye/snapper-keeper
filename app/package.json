@@ -12,6 +12,13 @@
     "test": "echo 'no frontend tests yet'"
   },
   "dependencies": {
+    "@fontsource/archivo": "^5.2.8",
+    "@fontsource/big-shoulders-display": "^5.2.5",
+    "@fontsource/bungee": "^5.2.7",
+    "@fontsource/fredoka": "^5.2.10",
+    "@fontsource/ibm-plex-mono": "^5.2.7",
+    "@fontsource/rubik-bubbles": "^5.2.7",
+    "@fontsource/vt323": "^5.2.7",
     "@snk/annotate": "workspace:*",
     "@snk/capture": "workspace:*",
     "@snk/clipboard": "workspace:*",
