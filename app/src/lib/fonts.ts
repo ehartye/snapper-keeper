@@ -51,3 +51,8 @@ import '@fontsource/karla/latin-400-italic.css';
 import '@fontsource/karla/latin-500.css';
 import '@fontsource/karla/latin-600.css';
 import '@fontsource/karla/latin-700.css';
+
+// Constructivist: Alfa Slab One (display, heavy single-weight slab) + PT Sans (body)
+import '@fontsource/alfa-slab-one/latin-400.css';
+import '@fontsource/pt-sans/latin-400.css';
+import '@fontsource/pt-sans/latin-700.css';

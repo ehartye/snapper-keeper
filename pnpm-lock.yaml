@@ -41,6 +41,9 @@ importers:
 
   app:
     dependencies:
+      '@fontsource/alfa-slab-one':
+        specifier: ^5.2.8
+        version: 5.2.8
       '@fontsource/archivo':
         specifier: ^5.2.8
         version: 5.2.8
@@ -63,6 +66,9 @@ importers:
         specifier: ^5.2.7
         version: 5.2.7
       '@fontsource/karla':
+        specifier: ^5.2.8
+        version: 5.2.8
+      '@fontsource/pt-sans':
         specifier: ^5.2.8
         version: 5.2.8
       '@fontsource/rubik-bubbles':
@@ -544,6 +550,9 @@ packages:
     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
+  '@fontsource/alfa-slab-one@5.2.8':
+    resolution: {integrity: sha512-++XkDfZAfT2qb8MAiyMR+clQe7HZRci1if88IZxd1Vlhu4fc6FvraSgOTa01OmQ8vdy/KTumdX5J3rZvGsjKGQ==}
+
   '@fontsource/archivo@5.2.8':
     resolution: {integrity: sha512-Fc4yuMt85MmcYooUVpYHAJRJTymPv2+J9HsMP2f5mxR/0pIWgE2V5XfgNTavPpklX2rJFprdT36iE6Rr8ds9MA==}
 
@@ -567,6 +576,9 @@ packages:
 
   '@fontsource/karla@5.2.8':
     resolution: {integrity: sha512-uZMA4ugNcHFYMpjr/9FIHQC3ldtILlqPdK3f4P9XInDgRL0NxdIyRwH9MuGZUT7sdup0kshk9zsGXitq1xpFAw==}
+
+  '@fontsource/pt-sans@5.2.8':
+    resolution: {integrity: sha512-b8nBGHMVwfe21IWqERlMrzIs+L/Vm3QNGbnET3H1vfclAScWExbN17N/z/dJcyPgvrcenbJDv1H3f5hTAEbcVQ==}
 
   '@fontsource/rubik-bubbles@5.2.7':
     resolution: {integrity: sha512-oxEY6N9aZdsY5mn1VQwb2ZvHA+gZCcWKFDO0uonbnfWBN92auBdeSB7SaZ6tE9NrhJs6b5IHu+/w1rit0t/frQ==}
@@ -2756,6 +2768,8 @@ snapshots:
       '@eslint/core': 0.17.0
       levn: 0.4.1
 
+  '@fontsource/alfa-slab-one@5.2.8': {}
+
   '@fontsource/archivo@5.2.8': {}
 
   '@fontsource/bebas-neue@5.2.7': {}
@@ -2771,6 +2785,8 @@ snapshots:
   '@fontsource/ibm-plex-mono@5.2.7': {}
 
   '@fontsource/karla@5.2.8': {}
+
+  '@fontsource/pt-sans@5.2.8': {}
 
   '@fontsource/rubik-bubbles@5.2.7': {}
 

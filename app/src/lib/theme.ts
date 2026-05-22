@@ -147,6 +147,23 @@ export const THEME_FAMILIES = {
       swatchShape: 'square',
     },
   },
+  constructivist: {
+    label: 'Constructivist',
+    tagline: 'Soviet propaganda poster. Diagonal force, agitprop red on wheat and ink.',
+    preview: {
+      swatches: ['#d91a28', '#1a1a1a', '#efe6cf', '#c9a04a'],
+      bgLight: '#efe6cf',
+      bgDark: '#0a0a0a',
+      fgLight: '#1a1a1a',
+      fgDark: '#efe6cf',
+      mutedLight: '#5e544a',
+      mutedDark: '#a39682',
+      displayFont: "'Alfa Slab One', serif",
+      bodyFont: "'PT Sans', sans-serif",
+      shape: 'card',
+      swatchShape: 'square',
+    },
+  },
 } as const satisfies Record<string, FamilyDef>;
 
 export type ThemeFamily = keyof typeof THEME_FAMILIES;

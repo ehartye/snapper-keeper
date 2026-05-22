@@ -13,6 +13,7 @@
     "test:cov": "vitest run --coverage"
   },
   "dependencies": {
+    "@fontsource/alfa-slab-one": "^5.2.8",
     "@fontsource/archivo": "^5.2.8",
     "@fontsource/bebas-neue": "^5.2.7",
     "@fontsource/big-shoulders-display": "^5.2.5",
@@ -21,6 +22,7 @@
     "@fontsource/fredoka": "^5.2.10",
     "@fontsource/ibm-plex-mono": "^5.2.7",
     "@fontsource/karla": "^5.2.8",
+    "@fontsource/pt-sans": "^5.2.8",
     "@fontsource/rubik-bubbles": "^5.2.7",
     "@fontsource/shippori-mincho": "^5.2.8",
     "@fontsource/vt323": "^5.2.7",
