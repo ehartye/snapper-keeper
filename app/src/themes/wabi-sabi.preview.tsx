@@ -1,9 +1,9 @@
 /** Mockup of the .menu-divider rule defined in wabi-sabi.css.
  *  The kanji 章 ("chapter/section") on a vermillion hanko stamp sits over
  *  a wandering brush stroke — irregularity is the design language. */
-import type { DividerPreviewComponent } from '../lib/theme';
+import type { DividerPreviewProps } from '../lib/theme';
 
-const WabiSabiDividerPreview: DividerPreviewComponent = ({ mode, preview }) => {
+function WabiSabiDividerPreview({ mode, preview }: DividerPreviewProps) {
   const isDark = mode === 'dark';
   const primary = preview.swatches[0]!; // vermillion
   const bg = isDark ? preview.bgDark : preview.bgLight;
@@ -40,6 +40,6 @@ const WabiSabiDividerPreview: DividerPreviewComponent = ({ mode, preview }) => {
       </span>
     </div>
   );
-};
+}
 
 export default WabiSabiDividerPreview;

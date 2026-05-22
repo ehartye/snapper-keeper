@@ -1,7 +1,7 @@
 /** Mockup of the .menu-divider rule defined in corporate.css. */
-import type { DividerPreviewComponent } from '../lib/theme';
+import type { DividerPreviewProps } from '../lib/theme';
 
-const CorporateDividerPreview: DividerPreviewComponent = ({ mode, preview }) => {
+function CorporateDividerPreview({ mode, preview }: DividerPreviewProps) {
   const isDark = mode === 'dark';
   const fg = isDark ? preview.fgDark : preview.fgLight;
   const muted = isDark ? preview.mutedDark : preview.mutedLight;
@@ -35,6 +35,6 @@ const CorporateDividerPreview: DividerPreviewComponent = ({ mode, preview }) => 
       </span>
     </div>
   );
-};
+}
 
 export default CorporateDividerPreview;

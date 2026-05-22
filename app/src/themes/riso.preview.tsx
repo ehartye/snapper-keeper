@@ -1,9 +1,9 @@
 /** Mockup of the .menu-divider rule defined in riso.css.
  *  Two parallel hairlines intentionally misregistered by 2px right + 2px
  *  down — pink + blue on cream, pink + cyan on black. */
-import type { DividerPreviewComponent } from '../lib/theme';
+import type { DividerPreviewProps } from '../lib/theme';
 
-const RisoDividerPreview: DividerPreviewComponent = ({ preview }) => {
+function RisoDividerPreview({ preview }: DividerPreviewProps) {
   const primary = preview.swatches[0]!;
   const accent = preview.swatches[1]!;
   return (
@@ -32,6 +32,6 @@ const RisoDividerPreview: DividerPreviewComponent = ({ preview }) => {
       />
     </div>
   );
-};
+}
 
 export default RisoDividerPreview;

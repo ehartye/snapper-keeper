@@ -1,7 +1,7 @@
 /** Mockup of the .menu-divider rule defined in robotic.css. */
-import type { DividerPreviewComponent } from '../lib/theme';
+import type { DividerPreviewProps } from '../lib/theme';
 
-const RoboticDividerPreview: DividerPreviewComponent = ({ mode, preview }) => {
+function RoboticDividerPreview({ mode, preview }: DividerPreviewProps) {
   const accent = preview.swatches[1]!;
   const muted = mode === 'dark' ? preview.mutedDark : preview.mutedLight;
   return (
@@ -23,6 +23,6 @@ const RoboticDividerPreview: DividerPreviewComponent = ({ mode, preview }) => {
       <span style={{ color: muted }}>41 6C 6C 0A 2D 54 41 47 53</span>
     </div>
   );
-};
+}
 
 export default RoboticDividerPreview;
