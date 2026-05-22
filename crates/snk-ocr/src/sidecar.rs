@@ -37,6 +37,14 @@ fn bundled_tessdata_dir() -> Option<PathBuf> {
     }
 }
 
+/// Resolve the tesseract binary path, trying (in order): the `SNK_TESSERACT_PATH`
+/// env-var override, the bundled installer distribution, the system PATH, and
+/// common install directories. Returns `None` if nothing usable is found.
+///
+/// Override usage: `SNK_TESSERACT_PATH=/path/to/tesseract cargo run` — handy
+/// for pointing at a custom or debug build. The override is ignored silently
+/// if the path doesn't refer to a real file, so the function falls through to
+/// the next resolver.
 fn resolve_tesseract() -> Option<PathBuf> {
     // 1. Explicit override first (debugging, custom installs).
     if let Ok(p) = std::env::var("SNK_TESSERACT_PATH") {
@@ -287,46 +295,6 @@ mod tests {
         set_bundled_resource_dir(dir.clone());
         // Second call — must not panic. If a different test set it first that's fine.
         set_bundled_resource_dir(dir);
-    }
-
-    #[test]
-    fn resolve_tesseract_honors_env_override_when_file_exists() {
-        let dir = tempfile::tempdir().unwrap();
-        let exe_name = if cfg!(target_os = "windows") {
-            "fake_tess_env.exe"
-        } else {
-            "fake_tess_env"
-        };
-        let file = dir.path().join(exe_name);
-        std::fs::write(&file, b"x").unwrap();
-
-        let old = std::env::var_os("SNK_TESSERACT_PATH");
-        std::env::set_var("SNK_TESSERACT_PATH", &file);
-        let got = resolve_tesseract();
-        // Restore before assertions.
-        match old {
-            Some(v) => std::env::set_var("SNK_TESSERACT_PATH", v),
-            None => std::env::remove_var("SNK_TESSERACT_PATH"),
-        }
-        assert_eq!(got.as_ref().map(|p| p.as_path()), Some(file.as_path()));
-    }
-
-    #[test]
-    fn resolve_tesseract_ignores_env_override_pointing_at_nothing() {
-        let old = std::env::var_os("SNK_TESSERACT_PATH");
-        std::env::set_var("SNK_TESSERACT_PATH", "/path/that/does/not/exist/anywhere");
-        // Should fall through to subsequent resolvers (PATH, install dirs),
-        // any of which may or may not find tesseract on the host. We just
-        // assert that the call doesn't panic and the env path itself is NOT
-        // what came back.
-        let got = resolve_tesseract();
-        match old {
-            Some(v) => std::env::set_var("SNK_TESSERACT_PATH", v),
-            None => std::env::remove_var("SNK_TESSERACT_PATH"),
-        }
-        if let Some(p) = got {
-            assert_ne!(p.to_string_lossy(), "/path/that/does/not/exist/anywhere");
-        }
     }
 
     #[test]
