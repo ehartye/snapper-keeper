@@ -1,5 +1,5 @@
 use snk_library::{plugin::LibraryState, Capture};
-use tauri::{Emitter, Runtime, State};
+use tauri::{Emitter, Manager, Runtime, State};
 
 use crate::grab::WindowInfo;
 use crate::Result;
@@ -44,4 +44,31 @@ pub fn capture_region<R: Runtime>(
 #[tauri::command]
 pub fn list_capturable_windows() -> Result<Vec<WindowInfo>> {
     crate::grab::list_capturable_windows()
+}
+
+#[derive(serde::Serialize)]
+pub struct ScreenPreview {
+    pub path: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[tauri::command]
+pub fn grab_screen_preview<R: Runtime>(app: tauri::AppHandle<R>) -> Result<ScreenPreview> {
+    let result = crate::grab::grab_primary_monitor()?;
+    let dir = app.path().app_data_dir().map_err(|e| crate::CaptureError::Os {
+        message: format!("app data dir: {e}"),
+    })?;
+    let preview_path = dir.join(".preview.png");
+    std::fs::create_dir_all(&dir).map_err(|e| crate::CaptureError::Os {
+        message: format!("create dir: {e}"),
+    })?;
+    std::fs::write(&preview_path, &result.png_bytes).map_err(|e| crate::CaptureError::Os {
+        message: format!("write preview: {e}"),
+    })?;
+    Ok(ScreenPreview {
+        path: preview_path.to_string_lossy().into_owned(),
+        width: result.width,
+        height: result.height,
+    })
 }

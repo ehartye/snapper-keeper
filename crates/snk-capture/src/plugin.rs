@@ -8,6 +8,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             crate::commands::capture_window,
             crate::commands::capture_region,
             crate::commands::list_capturable_windows,
+            crate::commands::grab_screen_preview,
         ])
         .build()
 }

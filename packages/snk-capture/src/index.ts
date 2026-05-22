@@ -30,4 +30,14 @@ export function listCapturableWindows(): Promise<WindowInfo[]> {
   return invoke<WindowInfo[]>('plugin:snk-capture|list_capturable_windows');
 }
 
+export interface ScreenPreview {
+  path: string;
+  width: number;
+  height: number;
+}
+
+export function grabScreenPreview(): Promise<ScreenPreview> {
+  return invoke<ScreenPreview>('plugin:snk-capture|grab_screen_preview');
+}
+
 export type { WindowInfo } from './types';

@@ -3,6 +3,7 @@ const COMMANDS: &[&str] = &[
     "capture_window",
     "capture_region",
     "list_capturable_windows",
+    "grab_screen_preview",
 ];
 
 fn main() {

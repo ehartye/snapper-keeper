@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState, type MouseEvent } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { listen } from '@tauri-apps/api/event';
+import { convertFileSrc } from '@tauri-apps/api/core';
 import { captureRegion } from '@snk/capture';
 
 interface Rect {
@@ -12,8 +14,11 @@ interface Rect {
 export function CaptureOverlay() {
   const [rect, setRect] = useState<Rect | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
 
   const cancel = useCallback(async () => {
+    setPreviewSrc(null);
+    setRect(null);
     const win = getCurrentWindow();
     await win.hide();
   }, []);
@@ -40,10 +45,14 @@ export function CaptureOverlay() {
     const w = Math.abs(rect.endX - rect.startX);
     const h = Math.abs(rect.endY - rect.startY);
 
+    setPreviewSrc(null);
+    setRect(null);
     const win = getCurrentWindow();
     await win.hide();
 
     if (w < 5 || h < 5) return;
+
+    await new Promise((r) => setTimeout(r, 150));
 
     try {
       const scaleFactor = window.devicePixelRatio || 1;
@@ -74,6 +83,16 @@ export function CaptureOverlay() {
     return () => window.removeEventListener('keydown', onKey);
   }, [cancel]);
 
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen<{ path: string }>('overlay:preview', (event) => {
+      setPreviewSrc(convertFileSrc(event.payload.path));
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => unlisten?.();
+  }, []);
+
   const selectionStyle = rect
     ? {
         left: Math.min(rect.startX, rect.endX),
@@ -86,21 +105,29 @@ export function CaptureOverlay() {
   return (
     <div
       className="fixed inset-0 cursor-crosshair select-none"
-      style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)' }}
+      style={{
+        backgroundColor: '#000',
+        backgroundImage: previewSrc ? `url(${previewSrc})` : undefined,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
     >
+      {/* Dark tint over the screenshot */}
+      <div className="fixed inset-0" style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)' }} />
       {rect && dragging && (
         <div
           className="absolute border-2 border-blue-400"
           style={{
             ...selectionStyle,
             backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            zIndex: 10,
           }}
         />
       )}
-      <div className="fixed top-4 left-1/2 -translate-x-1/2 text-white text-sm bg-black/60 px-3 py-1 rounded">
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 text-white text-sm bg-black/60 px-3 py-1 rounded z-20">
         Drag to select region · Esc to cancel
       </div>
     </div>

@@ -5,4 +5,5 @@ permissions = [
     "allow-capture-window",
     "allow-capture-region",
     "allow-list-capturable-windows",
+    "allow-grab-screen-preview",
 ]
