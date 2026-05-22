@@ -1,14 +1,13 @@
-/* Tailwind directives. */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
 /* ========================================================================
  *  THEME SYSTEM
  *  Each family lives in its own file under ./themes/. The registry that
  *  wires CSS to React lives in lib/theme.ts. Adding a theme is three
  *  small steps: drop a new ./themes/<family>.css here, @import it below,
  *  and add an entry to THEME_FAMILIES in theme.ts.
+ *
+ *  @import MUST come before the @tailwind directives (and any other rules)
+ *  per the CSS spec — browsers silently ignore @import statements that
+ *  appear after non-import rules. Don't reorder.
  * ====================================================================== */
 
 @import './themes/_base.css';
@@ -20,6 +19,11 @@
 @import './themes/riso.css';
 @import './themes/constructivist.css';
 @import './themes/atomic.css';
+
+/* Tailwind directives. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 /* ========================================================================
  *  BASE LAYOUT
