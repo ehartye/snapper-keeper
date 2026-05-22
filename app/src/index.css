@@ -367,20 +367,30 @@ html[data-theme='memphis-dark'] .menu-divider {
 }
 
 /* Robotic — hex memory dump (xxd / hexdump output styling).
-   Bytes 41 6C 6C 0A 2D 54 41 47 53 = "All\n-TAGS" (easter egg). */
+   Address rendered in --accent (Matrix green / forest green), bytes in
+   --text-muted. Bytes 41 6C 6C 0A 2D 54 41 47 53 = "All\n-TAGS" (easter egg).
+   ::before is the address, ::after is the bytes — split so each can take
+   its own syntax-highlight color. */
 html[data-theme^='robotic'] .menu-divider {
   display: flex;
   justify-content: center;
   align-items: center;
+  gap: 8px;
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
   font-size: 9px;
-  letter-spacing: 1.5px;
-  color: var(--text-muted);
+  letter-spacing: 1px;
+  white-space: nowrap;
+  overflow: hidden;
   background-image: none;
   user-select: none;
 }
 html[data-theme^='robotic'] .menu-divider::before {
-  content: "0x00FF  41 6C 6C 0A 2D 54 41 47 53";
+  content: "0x00FF";
+  color: var(--accent);
+}
+html[data-theme^='robotic'] .menu-divider::after {
+  content: "41 6C 6C 0A 2D 54 41 47 53";
+  color: var(--text-muted);
 }
 
 /* Holo — iridescent gradient fade; dark variant gets a soft pink halo */
