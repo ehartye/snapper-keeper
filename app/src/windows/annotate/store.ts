@@ -39,21 +39,25 @@ interface AnnotateState {
   cropRegion: CropRegion | null;
   isDrawing: boolean;
   currentShape: AnnotationShape | null;
+  selectedId: string | null;
 
   setTool: (tool: AnnotationTool) => void;
   setColor: (color: string) => void;
   setStrokePreset: (preset: StrokePreset) => void;
   addShape: (shape: AnnotationShape) => void;
+  updateShape: (id: string, patch: Partial<AnnotationShape>) => void;
+  deleteShape: (id: string) => void;
   undo: () => void;
   redo: () => void;
   setCropRegion: (region: CropRegion | null) => void;
   setIsDrawing: (drawing: boolean) => void;
   setCurrentShape: (shape: AnnotationShape | null) => void;
+  setSelectedId: (id: string | null) => void;
   reset: () => void;
 }
 
 const initialState = {
-  tool: 'arrow' as AnnotationTool,
+  tool: 'select' as AnnotationTool,
   color: '#ef4444',
   strokePreset: 'medium' as StrokePreset,
   shapes: [] as AnnotationShape[],
@@ -63,12 +67,13 @@ const initialState = {
   cropRegion: null as CropRegion | null,
   isDrawing: false,
   currentShape: null as AnnotationShape | null,
+  selectedId: null as string | null,
 };
 
 export const useAnnotateStore = create<AnnotateState>((set, get) => ({
   ...initialState,
 
-  setTool: (tool) => set({ tool }),
+  setTool: (tool) => set({ tool, selectedId: tool === 'select' ? get().selectedId : null }),
   setColor: (color) => set({ color }),
   setStrokePreset: (preset) => set({ strokePreset: preset }),
 
@@ -79,6 +84,25 @@ export const useAnnotateStore = create<AnnotateState>((set, get) => ({
       redoStack: [],
       shapes: [...shapes, shape],
       nextStepNumber: shape.tool === 'step-marker' ? nextStepNumber + 1 : nextStepNumber,
+    });
+  },
+
+  updateShape: (id, patch) => {
+    const { shapes } = get();
+    set({
+      undoStack: [...get().undoStack, shapes],
+      redoStack: [],
+      shapes: shapes.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+    });
+  },
+
+  deleteShape: (id) => {
+    const { shapes, selectedId } = get();
+    set({
+      undoStack: [...get().undoStack, shapes],
+      redoStack: [],
+      shapes: shapes.filter((s) => s.id !== id),
+      selectedId: selectedId === id ? null : selectedId,
     });
   },
 
@@ -107,5 +131,6 @@ export const useAnnotateStore = create<AnnotateState>((set, get) => ({
   setCropRegion: (region) => set({ cropRegion: region }),
   setIsDrawing: (drawing) => set({ isDrawing: drawing }),
   setCurrentShape: (shape) => set({ currentShape: shape }),
+  setSelectedId: (id) => set({ selectedId: id }),
   reset: () => set(initialState),
 }));

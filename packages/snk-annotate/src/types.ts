@@ -1,4 +1,5 @@
 export type AnnotationTool =
+  | 'select'
   | 'arrow'
   | 'rectangle'
   | 'ellipse'

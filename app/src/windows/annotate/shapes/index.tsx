@@ -9,28 +9,42 @@ import { TextShape } from './TextShape';
 import { BlurShape } from './BlurShape';
 import { StepMarkerShape } from './StepMarkerShape';
 
-interface Props {
+export interface ShapeProps {
   shape: AnnotationShape;
+  draggable?: boolean;
+  onSelect?: () => void;
+  registerNode?: (node: unknown | null) => void;
 }
 
-export function ShapeRenderer({ shape }: Props) {
+interface RendererProps extends ShapeProps {
+  onStartEditText?: () => void;
+}
+
+export function ShapeRenderer({
+  shape,
+  draggable,
+  onSelect,
+  registerNode,
+  onStartEditText,
+}: RendererProps) {
+  const common = { shape, draggable, onSelect, registerNode };
   switch (shape.tool) {
     case 'arrow':
-      return <ArrowShape shape={shape} />;
+      return <ArrowShape {...common} />;
     case 'rectangle':
-      return <RectangleShape shape={shape} />;
+      return <RectangleShape {...common} />;
     case 'ellipse':
-      return <EllipseShape shape={shape} />;
+      return <EllipseShape {...common} />;
     case 'pen':
-      return <PenShape shape={shape} />;
+      return <PenShape {...common} />;
     case 'highlighter':
-      return <HighlighterShape shape={shape} />;
+      return <HighlighterShape {...common} />;
     case 'text':
-      return <TextShape shape={shape} />;
+      return <TextShape {...common} onStartEdit={onStartEditText} />;
     case 'blur':
-      return <BlurShape shape={shape} />;
+      return <BlurShape {...common} />;
     case 'step-marker':
-      return <StepMarkerShape shape={shape} />;
+      return <StepMarkerShape {...common} />;
     default:
       return null;
   }

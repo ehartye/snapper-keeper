@@ -25,58 +25,76 @@ export function useDrawing(stageRef: MutableRefObject<Konva.Stage | null>) {
   const getPointerPos = useCallback(() => {
     const stage = stageRef.current;
     if (!stage) return null;
-    return stage.getPointerPosition();
+    const pos = stage.getPointerPosition();
+    if (!pos) return null;
+    // stage.getPointerPosition() returns screen-container pixels; shapes are
+    // drawn in the (unscaled) image coordinate system, so divide out the scale.
+    const scale = stage.scaleX() || 1;
+    return { x: pos.x / scale, y: pos.y / scale };
   }, [stageRef]);
 
-  const handleMouseDown = useCallback(() => {
-    const pos = getPointerPos();
-    if (!pos) return;
+  const handleMouseDown = useCallback(
+    (evt: Konva.KonvaEventObject<MouseEvent>) => {
+      const { tool, color, strokePreset, nextStepNumber } = useAnnotateStore.getState();
 
-    const { tool, color, strokePreset, nextStepNumber } = useAnnotateStore.getState();
-    const strokeWidth = STROKE_WIDTHS[strokePreset];
-    const stroke = makeStroke(color, strokeWidth, tool);
+      if (tool === 'select') return;
 
-    startPosRef.current = pos;
+      const stage = stageRef.current;
+      if (!stage) return;
+      // Ignore clicks that landed on a non-stage child (e.g., an existing shape)
+      // so we don't draw on top of shapes the user might want to interact with.
+      if (evt.target !== stage) return;
 
-    if (tool === 'step-marker') {
-      useAnnotateStore.getState().addShape({
-        id: nextId(),
-        tool,
-        x: pos.x,
-        y: pos.y,
-        stroke,
-        stepNumber: nextStepNumber,
-      });
-      return;
-    }
+      const pos = getPointerPos();
+      if (!pos) return;
 
-    if (tool === 'text') {
-      const text = window.prompt('Enter text:');
-      if (text) {
+      const strokeWidth = STROKE_WIDTHS[strokePreset];
+      const stroke = makeStroke(color, strokeWidth, tool);
+
+      startPosRef.current = pos;
+
+      if (tool === 'step-marker') {
+        const id = nextId();
         useAnnotateStore.getState().addShape({
-          id: nextId(),
+          id,
           tool,
           x: pos.x,
           y: pos.y,
-          text,
+          stroke,
+          stepNumber: nextStepNumber,
+        });
+        return;
+      }
+
+      if (tool === 'text') {
+        const id = nextId();
+        useAnnotateStore.getState().addShape({
+          id,
+          tool,
+          x: pos.x,
+          y: pos.y,
+          text: 'Text',
           stroke,
         });
+        useAnnotateStore.getState().setTool('select');
+        useAnnotateStore.getState().setSelectedId(id);
+        return;
       }
-      return;
-    }
 
-    const shape: AnnotationShape = {
-      id: nextId(),
-      tool,
-      stroke,
-      ...(tool === 'arrow' || tool === 'pen' || tool === 'highlighter'
-        ? { points: [pos.x, pos.y] }
-        : { x: pos.x, y: pos.y, width: 0, height: 0 }),
-    };
+      const shape: AnnotationShape = {
+        id: nextId(),
+        tool,
+        stroke,
+        ...(tool === 'arrow' || tool === 'pen' || tool === 'highlighter'
+          ? { points: [pos.x, pos.y] }
+          : { x: pos.x, y: pos.y, width: 0, height: 0 }),
+      };
 
-    useAnnotateStore.getState().setCurrentShape(shape);
-    useAnnotateStore.getState().setIsDrawing(true);
-  }, [getPointerPos]);
+      useAnnotateStore.getState().setCurrentShape(shape);
+      useAnnotateStore.getState().setIsDrawing(true);
+    },
+    [getPointerPos, stageRef],
+  );
 
   const handleMouseMove = useCallback(() => {
     const { isDrawing, currentShape } = useAnnotateStore.getState();
