@@ -214,4 +214,52 @@ describe('useAnnotateStore', () => {
     useAnnotateStore.getState().reset();
     expect(useAnnotateStore.getState().sourceImage).toBeNull();
   });
+
+  it('isDirty starts false on a fresh store', () => {
+    expect(useAnnotateStore.getState().isDirty).toBe(false);
+  });
+
+  it('addShape, updateShape, deleteShape, setCropRegion, confirmCrop all set isDirty', () => {
+    const s = useAnnotateStore.getState();
+    s.addShape(shapeA);
+    expect(useAnnotateStore.getState().isDirty).toBe(true);
+
+    s.markClean();
+    expect(useAnnotateStore.getState().isDirty).toBe(false);
+
+    s.updateShape('sh-a', { x: 5 });
+    expect(useAnnotateStore.getState().isDirty).toBe(true);
+
+    s.markClean();
+    s.deleteShape('sh-a');
+    expect(useAnnotateStore.getState().isDirty).toBe(true);
+
+    s.markClean();
+    s.setCropRegion({ x: 0, y: 0, width: 10, height: 10 });
+    expect(useAnnotateStore.getState().isDirty).toBe(true);
+
+    s.markClean();
+    s.confirmCrop();
+    expect(useAnnotateStore.getState().isDirty).toBe(true);
+  });
+
+  it('markClean preserves shapes, crop, and history', () => {
+    const s = useAnnotateStore.getState();
+    s.addShape(shapeA);
+    s.setCropRegion({ x: 0, y: 0, width: 50, height: 50 });
+    s.markClean();
+    const after = useAnnotateStore.getState();
+    expect(after.shapes).toHaveLength(1);
+    expect(after.cropRegion).toEqual({ x: 0, y: 0, width: 50, height: 50 });
+    expect(after.undoStack.length).toBeGreaterThan(0);
+    expect(after.isDirty).toBe(false);
+  });
+
+  it('reset clears isDirty', () => {
+    const s = useAnnotateStore.getState();
+    s.addShape(shapeA);
+    expect(useAnnotateStore.getState().isDirty).toBe(true);
+    s.reset();
+    expect(useAnnotateStore.getState().isDirty).toBe(false);
+  });
 });

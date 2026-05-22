@@ -50,6 +50,7 @@ interface AnnotateState {
   currentShape: AnnotationShape | null;
   selectedId: string | null;
   sourceImage: HTMLImageElement | null;
+  isDirty: boolean;
 
   setTool: (tool: AnnotationTool) => void;
   setColor: (color: string) => void;
@@ -65,6 +66,7 @@ interface AnnotateState {
   setCurrentShape: (shape: AnnotationShape | null) => void;
   setSelectedId: (id: string | null) => void;
   setSourceImage: (img: HTMLImageElement | null) => void;
+  markClean: () => void;
   reset: () => void;
 }
 
@@ -82,6 +84,7 @@ const initialState = {
   currentShape: null as AnnotationShape | null,
   selectedId: null as string | null,
   sourceImage: null as HTMLImageElement | null,
+  isDirty: false,
 };
 
 function snapshot(s: {
@@ -111,6 +114,7 @@ export const useAnnotateStore = create<AnnotateState>((set, get) => ({
       shapes: [...state.shapes, shape],
       nextStepNumber:
         shape.tool === 'step-marker' ? state.nextStepNumber + 1 : state.nextStepNumber,
+      isDirty: true,
     });
   },
 
@@ -120,6 +124,7 @@ export const useAnnotateStore = create<AnnotateState>((set, get) => ({
       undoStack: [...state.undoStack, snapshot(state)],
       redoStack: [],
       shapes: state.shapes.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+      isDirty: true,
     });
   },
 
@@ -130,6 +135,7 @@ export const useAnnotateStore = create<AnnotateState>((set, get) => ({
       redoStack: [],
       shapes: state.shapes.filter((s) => s.id !== id),
       selectedId: state.selectedId === id ? null : state.selectedId,
+      isDirty: true,
     });
   },
 
@@ -169,6 +175,7 @@ export const useAnnotateStore = create<AnnotateState>((set, get) => ({
       redoStack: [],
       cropRegion: region,
       cropConfirmed: false,
+      isDirty: true,
     });
   },
   confirmCrop: () => {
@@ -178,11 +185,13 @@ export const useAnnotateStore = create<AnnotateState>((set, get) => ({
       redoStack: [],
       cropConfirmed: true,
       tool: 'select',
+      isDirty: true,
     });
   },
   setIsDrawing: (drawing) => set({ isDrawing: drawing }),
   setCurrentShape: (shape) => set({ currentShape: shape }),
   setSelectedId: (id) => set({ selectedId: id }),
   setSourceImage: (img) => set({ sourceImage: img }),
+  markClean: () => set({ isDirty: false }),
   reset: () => set(initialState),
 }));
