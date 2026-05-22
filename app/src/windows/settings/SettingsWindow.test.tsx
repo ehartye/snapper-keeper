@@ -38,7 +38,7 @@ describe('<SettingsWindow />', () => {
   it('clicking a theme card persists the new theme and applies it', async () => {
     renderWithQuery(<SettingsWindow />);
     const cards = await screen.findAllByText('Memphis Machine');
-    fireEvent.click(cards[0]);
+    fireEvent.click(cards[0]!);
     await waitFor(() => {
       expect(invoke).toHaveBeenCalledWith('plugin:snk-library|set_setting', {
         key: 'theme',

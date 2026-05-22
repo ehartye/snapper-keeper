@@ -1,6 +1,7 @@
 {
   "extends": "../tsconfig.base.json",
   "include": ["src"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test"],
   "compilerOptions": {
     "outDir": "dist",
     "noEmit": true

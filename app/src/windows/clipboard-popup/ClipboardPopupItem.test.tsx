@@ -9,8 +9,10 @@ const baseItem: ClipboardItem = {
   content_hash: 'abc',
   kind: 'text',
   text_content: 'hello world',
-  image_path: null,
+  file_path: null,
   source_app: 'Firefox',
+  source_window_title: null,
+  sensitive: false,
   pinned: false,
   created_at: Date.now(),
 };
@@ -43,7 +45,7 @@ describe('<ClipboardPopupItem />', () => {
       id: 'cb-2',
       kind: 'image',
       text_content: null,
-      image_path: 'clip/x.png',
+      file_path: 'clip/x.png',
     };
     render(<ClipboardPopupItem item={img} index={1} isSelected={false} onSelect={vi.fn()} />);
     expect(screen.getByText('[image]')).toBeInTheDocument();

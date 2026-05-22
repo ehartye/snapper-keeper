@@ -82,7 +82,7 @@ describe('useAnnotateStore', () => {
     const s = useAnnotateStore.getState();
     s.addShape(shapeA);
     s.updateShape('sh-a', { x: 100, y: 100 });
-    const updated = useAnnotateStore.getState().shapes[0];
+    const updated = useAnnotateStore.getState().shapes[0]!;
     expect(updated.x).toBe(100);
     expect(updated.y).toBe(100);
     // and pushes undo
@@ -97,7 +97,7 @@ describe('useAnnotateStore', () => {
     s.deleteShape('sh-b');
     const after = useAnnotateStore.getState();
     expect(after.shapes).toHaveLength(1);
-    expect(after.shapes[0].id).toBe('sh-a');
+    expect(after.shapes[0]!.id).toBe('sh-a');
     expect(after.selectedId).toBeNull();
   });
 
