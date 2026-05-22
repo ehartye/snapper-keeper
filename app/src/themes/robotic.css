@@ -1,0 +1,124 @@
+/* ========================================================================
+ *  MR ROBOTIC — CRT amber phosphor, scanlines, terminal glow, cursor blink.
+ *  fsociety. Dark variant is the iconic CRT; light variant is dot-matrix
+ *  tractor-feed paper printed in amber ribbon.
+ * ====================================================================== */
+
+html[data-theme='robotic-dark'] {
+  --bg: #0a0a0a;
+  --bg-soft: #121212;
+  --surface: #1a1a1a;
+  --surface-2: #232323;
+  --border: #3a2a00;
+  --text: #ffb000;
+  --text-muted: #8a6500;
+  --primary: #ff9500;
+  --accent: #00ff41;
+  --accent-2: #00d4ff;
+  --accent-3: #ff003c;
+  --accent-4: #ffb000;
+  --danger: #ff003c;
+  --display-font: 'VT323', ui-monospace, monospace;
+  --body-font: 'IBM Plex Mono', ui-monospace, monospace;
+  --halo: radial-gradient(
+    1200px circle at 50% 50%,
+    rgba(255, 176, 0, 0.04),
+    transparent 70%
+  );
+  --grain: none;
+}
+
+html[data-theme='robotic-light'] {
+  --bg: #f5efde;
+  --bg-soft: #ebe3ce;
+  --surface: #fdfaf0;
+  --surface-2: #f0e9d4;
+  --border: #6e5a1f;
+  --text: #3a2800;
+  --text-muted: #7a5d24;
+  --primary: #b87400;
+  --accent: #0d5e2b;
+  --accent-2: #1a4a7a;
+  --accent-3: #a52a2a;
+  --accent-4: #b87400;
+  --danger: #a52a2a;
+  --display-font: 'VT323', ui-monospace, monospace;
+  --body-font: 'IBM Plex Mono', ui-monospace, monospace;
+  --halo: none;
+  --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2' /><feColorMatrix values='0 0 0 0 0.23 0 0 0 0 0.16 0 0 0 0 0 0 0 0 0.05 0' /></filter><rect width='200' height='200' filter='url(%23n)' /></svg>");
+}
+
+/* CRT scanlines layered over body */
+html[data-theme^='robotic'] body {
+  background-image: var(--halo),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0,
+      transparent 2px,
+      rgba(0, 0, 0, 0.12) 2px,
+      rgba(0, 0, 0, 0.12) 3px
+    ),
+    var(--grain);
+}
+html[data-theme='robotic-dark'] body {
+  background-image: var(--halo),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0,
+      transparent 2px,
+      rgba(0, 0, 0, 0.4) 2px,
+      rgba(0, 0, 0, 0.4) 3px
+    );
+}
+
+html[data-theme^='robotic'] .font-display {
+  letter-spacing: 0;
+  line-height: 1;
+}
+html[data-theme='robotic-dark'] .font-display {
+  text-shadow:
+    0 0 4px rgba(255, 176, 0, 0.55),
+    0 0 10px rgba(255, 176, 0, 0.25);
+}
+
+html[data-theme^='robotic'] .holo-shimmer {
+  background-image: linear-gradient(90deg, var(--accent), var(--accent));
+}
+
+/* Divider — hex memory dump. Address in --accent (Matrix/forest green),
+   bytes in --text-muted. Bytes 41 6C 6C 0A 2D 54 41 47 53 = "All\n-TAGS". */
+html[data-theme^='robotic'] .menu-divider {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  background-image: none;
+  user-select: none;
+}
+html[data-theme^='robotic'] .menu-divider::before {
+  content: "0x00FF";
+  color: var(--accent);
+}
+html[data-theme^='robotic'] .menu-divider::after {
+  content: "41 6C 6C 0A 2D 54 41 47 53";
+  color: var(--text-muted);
+}
+
+html[data-theme^='robotic'] ::-webkit-scrollbar-thumb {
+  background: var(--text);
+  border-radius: 0;
+}
+
+/* Blinking CRT caret style available as .crt-cursor::after */
+.crt-cursor::after {
+  content: '_';
+  display: inline-block;
+  margin-left: 0.15em;
+  animation: crt-blink 1s steps(2, start) infinite;
+}
+@keyframes crt-blink { to { visibility: hidden; } }

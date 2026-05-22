@@ -1,0 +1,40 @@
+/* ========================================================================
+ *  THEME BASE — fallback palette + cross-theme primitives.
+ *  Per-family rules live in their own file and are imported by index.css.
+ * ====================================================================== */
+
+:root {
+  /* Fallback (Memphis Machine dark) — applies if no [data-theme] is set on
+     <html>. The real palette is set by the theme files below. */
+  --bg: #050505;
+  --bg-soft: #141414;
+  --surface: #1f1f1f;
+  --surface-2: #2a2a2a;
+  --border: #2e2e2e;
+  --text: #fafaf5;
+  --text-muted: #a0a09a;
+  --primary: #ff1744;
+  --accent: #ffea00;
+  --accent-2: #2979ff;
+  --accent-3: #00e676;
+  --danger: #ff1744;
+  --display-font: 'Bungee', system-ui, sans-serif;
+  --body-font: 'IBM Plex Mono', ui-monospace, monospace;
+  --halo: none;
+  --grain: none;
+}
+
+/* Menu divider — theme-aware. Default is a thin hairline (safe fallback for
+   any theme without an explicit override). Each per-family theme file
+   overrides this rule. The `divider` CSS counter is used by themes that
+   surface position (e.g. corporate's Roman serial mark). */
+aside { counter-reset: divider; }
+
+.menu-divider {
+  height: 12px;
+  counter-increment: divider;
+  background-image: linear-gradient(to right, var(--border), var(--border));
+  background-repeat: no-repeat;
+  background-size: 100% 1px;
+  background-position: center;
+}

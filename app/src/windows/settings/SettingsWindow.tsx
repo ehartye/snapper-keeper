@@ -10,7 +10,7 @@ import {
 import { getSetting, setSetting } from '@snk/library';
 
 import { queryKeys } from '../../lib/queryKeys';
-import { THEMES, useTheme, type ThemeId } from '../../lib/theme';
+import { THEMES, THEME_FAMILIES, familyOf, useTheme, type ThemeId } from '../../lib/theme';
 
 interface SettingRowProps {
   label: string;
@@ -92,75 +92,6 @@ function useAutostart(): [boolean, (v: boolean) => void, boolean] {
   return [data ?? false, update, isLoading];
 }
 
-interface FamilyPreview {
-  swatches: string[];
-  bgLight: string;
-  bgDark: string;
-  fgLight: string;
-  fgDark: string;
-  mutedLight: string;
-  mutedDark: string;
-  displayFont: string;
-  bodyFont: string;
-  shape: 'round' | 'memphis' | 'terminal' | 'card';
-  swatchShape: 'round' | 'square';
-}
-
-const FAMILY_PREVIEW: Record<string, FamilyPreview> = {
-  holo: {
-    swatches: ['#ff2d95', '#c77dff', '#00e5ff', '#7affd7'],
-    bgLight: 'linear-gradient(135deg, #fff5f7, #ffe4ec)',
-    bgDark: 'linear-gradient(135deg, #1a0b2e, #3d1a66)',
-    fgLight: '#3d1a4d',
-    fgDark: '#ffe5f1',
-    mutedLight: '#8b6da6',
-    mutedDark: '#c9a3d6',
-    displayFont: "'Rubik Bubbles', sans-serif",
-    bodyFont: "'Fredoka', sans-serif",
-    shape: 'round',
-    swatchShape: 'round',
-  },
-  memphis: {
-    swatches: ['#ff3838', '#ffd93d', '#2e5bff', '#00b894'],
-    bgLight: '#ffffff',
-    bgDark: '#1f1f1f',
-    fgLight: '#0a0a0a',
-    fgDark: '#fafaf5',
-    mutedLight: '#555550',
-    mutedDark: '#9a9a92',
-    displayFont: "'Bungee', sans-serif",
-    bodyFont: "'IBM Plex Mono', monospace",
-    shape: 'memphis',
-    swatchShape: 'square',
-  },
-  robotic: {
-    swatches: ['#ffb000', '#00ff41', '#00d4ff', '#ff003c'],
-    bgLight: '#f5efde',
-    bgDark: '#0a0a0a',
-    fgLight: '#3a2800',
-    fgDark: '#ffb000',
-    mutedLight: '#7a5d24',
-    mutedDark: '#8a6500',
-    displayFont: "'VT323', monospace",
-    bodyFont: "'IBM Plex Mono', monospace",
-    shape: 'terminal',
-    swatchShape: 'square',
-  },
-  corporate: {
-    swatches: ['#09090b', '#1e3a5f', '#991b1b', '#71717a'],
-    bgLight: '#ffffff',
-    bgDark: '#18181b',
-    fgLight: '#09090b',
-    fgDark: '#fafafa',
-    mutedLight: '#52525b',
-    mutedDark: '#a1a1aa',
-    displayFont: "'Big Shoulders Display', sans-serif",
-    bodyFont: "'Archivo', sans-serif",
-    shape: 'card',
-    swatchShape: 'square',
-  },
-};
-
 function ThemeCard({
   themeId,
   label,
@@ -172,9 +103,9 @@ function ThemeCard({
   active: boolean;
   onSelect: () => void;
 }) {
-  const family = themeId.split('-')[0]!;
+  const family = familyOf(themeId);
   const isDark = themeId.endsWith('dark');
-  const preview = FAMILY_PREVIEW[family]!;
+  const preview = THEME_FAMILIES[family].preview;
 
   const shapeClass = (() => {
     switch (preview.shape) {
