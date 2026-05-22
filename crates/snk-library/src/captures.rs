@@ -306,6 +306,21 @@ pub fn set_annotated_path(db: &Db, id: &str, annotated_path: &str) -> Result<()>
     })
 }
 
+pub fn set_annotation_state(db: &Db, id: &str, state_json: &str) -> Result<()> {
+    db.with_conn(|conn| {
+        let changed = conn.execute(
+            "UPDATE captures SET annotation_state = ?1 WHERE id = ?2 AND deleted_at IS NULL",
+            rusqlite::params![state_json, id],
+        )?;
+        if changed == 0 {
+            return Err(crate::LibraryError::NotFound {
+                what: format!("capture {id}"),
+            });
+        }
+        Ok(())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -500,6 +515,36 @@ mod tests {
     fn set_annotated_path_nonexistent_returns_not_found() {
         let db = fresh_db();
         match set_annotated_path(&db, "no-such-id", "x.annotated.png") {
+            Err(crate::LibraryError::NotFound { .. }) => {}
+            other => panic!("expected NotFound, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn set_annotation_state_updates_column() {
+        let db = fresh_db();
+        let c = insert(&db, mk(1)).unwrap();
+        let json = r#"{"version":1,"shapes":[],"crop_region":null,"crop_confirmed":false}"#;
+        set_annotation_state(&db, &c.id, json).unwrap();
+        let updated = get(&db, &c.id).unwrap();
+        assert_eq!(updated.annotation_state.as_deref(), Some(json));
+    }
+
+    #[test]
+    fn set_annotation_state_overwrites_previous_value() {
+        let db = fresh_db();
+        let c = insert(&db, mk(2)).unwrap();
+        set_annotation_state(&db, &c.id, r#"{"version":1,"first":true}"#).unwrap();
+        set_annotation_state(&db, &c.id, r#"{"version":1,"second":true}"#).unwrap();
+        let updated = get(&db, &c.id).unwrap();
+        assert!(updated.annotation_state.unwrap().contains("second"));
+    }
+
+    #[test]
+    fn set_annotation_state_returns_not_found_for_missing_id() {
+        let db = fresh_db();
+        let result = set_annotation_state(&db, "no-such-id", "{}");
+        match result {
             Err(crate::LibraryError::NotFound { .. }) => {}
             other => panic!("expected NotFound, got {other:?}"),
         }
