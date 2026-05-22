@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { invoke } from '@tauri-apps/api/core';
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 
 import { Sidebar, type SidebarSelection } from './Sidebar';
 import { renderWithQuery } from '../../test/renderWithQuery';
@@ -48,6 +49,14 @@ describe('<Sidebar />', () => {
     renderWithQuery(<Sidebar selection={ALL_SECTION} onSelect={onSelect} />);
     fireEvent.click(screen.getByText('Clipboard History'));
     expect(onSelect).toHaveBeenCalledWith({ type: 'clipboard' });
+  });
+
+  it('opens the settings window when Settings is clicked', async () => {
+    renderWithQuery(<Sidebar selection={ALL_SECTION} onSelect={vi.fn()} />);
+    fireEvent.click(screen.getByText('Settings'));
+    await waitFor(() => {
+      expect(WebviewWindow.getByLabel).toHaveBeenCalledWith('settings');
+    });
   });
 
   it('highlights the active smart section', () => {

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 
 import { listTags } from '@snk/library';
 import type { ListCapturesQuery, Tag } from '@snk/library';
@@ -50,6 +51,14 @@ export function Sidebar({ selection, onSelect }: Props) {
 
   const tags: Tag[] = tagsQuery.data ?? [];
   const [tagDialogOpen, setTagDialogOpen] = useState(false);
+
+  const openSettings = async () => {
+    const settings = await WebviewWindow.getByLabel('settings');
+    if (settings) {
+      await settings.show();
+      await settings.setFocus();
+    }
+  };
 
   return (
     <aside className="w-60 shrink-0 border-r border-border flex flex-col overflow-y-auto bg-bg-soft">
@@ -143,6 +152,19 @@ export function Sidebar({ selection, onSelect }: Props) {
           <span>Clipboard History</span>
         </button>
       </nav>
+
+      <div className="mt-auto">
+        <div className="squiggle-divider mx-3 my-2" />
+        <nav className="p-3">
+          <button
+            className="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors text-fg-muted hover:bg-surface hover:text-fg"
+            onClick={openSettings}
+          >
+            <span className="w-5 text-base leading-none">⚙</span>
+            <span>Settings</span>
+          </button>
+        </nav>
+      </div>
       <TagDialog open={tagDialogOpen} onClose={() => setTagDialogOpen(false)} />
     </aside>
   );
