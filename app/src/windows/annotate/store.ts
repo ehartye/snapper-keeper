@@ -41,6 +41,7 @@ interface AnnotateState {
   isDrawing: boolean;
   currentShape: AnnotationShape | null;
   selectedId: string | null;
+  sourceImage: HTMLImageElement | null;
 
   setTool: (tool: AnnotationTool) => void;
   setColor: (color: string) => void;
@@ -55,6 +56,7 @@ interface AnnotateState {
   setIsDrawing: (drawing: boolean) => void;
   setCurrentShape: (shape: AnnotationShape | null) => void;
   setSelectedId: (id: string | null) => void;
+  setSourceImage: (img: HTMLImageElement | null) => void;
   reset: () => void;
 }
 
@@ -71,6 +73,7 @@ const initialState = {
   isDrawing: false,
   currentShape: null as AnnotationShape | null,
   selectedId: null as string | null,
+  sourceImage: null as HTMLImageElement | null,
 };
 
 export const useAnnotateStore = create<AnnotateState>((set, get) => ({
@@ -138,5 +141,6 @@ export const useAnnotateStore = create<AnnotateState>((set, get) => ({
   setIsDrawing: (drawing) => set({ isDrawing: drawing }),
   setCurrentShape: (shape) => set({ currentShape: shape }),
   setSelectedId: (id) => set({ selectedId: id }),
+  setSourceImage: (img) => set({ sourceImage: img }),
   reset: () => set(initialState),
 }));

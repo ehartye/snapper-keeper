@@ -157,4 +157,21 @@ describe('useAnnotateStore', () => {
     expect(after.selectedId).toBeNull();
     expect(after.tool).toBe('select');
   });
+
+  it('sourceImage starts null and round-trips through setSourceImage', () => {
+    expect(useAnnotateStore.getState().sourceImage).toBeNull();
+    const img = new window.Image();
+    useAnnotateStore.getState().setSourceImage(img);
+    expect(useAnnotateStore.getState().sourceImage).toBe(img);
+    useAnnotateStore.getState().setSourceImage(null);
+    expect(useAnnotateStore.getState().sourceImage).toBeNull();
+  });
+
+  it('reset clears sourceImage back to null', () => {
+    const img = new window.Image();
+    useAnnotateStore.getState().setSourceImage(img);
+    expect(useAnnotateStore.getState().sourceImage).toBe(img);
+    useAnnotateStore.getState().reset();
+    expect(useAnnotateStore.getState().sourceImage).toBeNull();
+  });
 });
