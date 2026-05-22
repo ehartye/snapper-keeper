@@ -23,7 +23,7 @@ Spec: `docs/superpowers/specs/2026-05-22-crop-as-new-capture-design.md`.
   - `arrow`, `pen`, `highlighter` use `points: number[]` — interleaved `[x0, y0, x1, y1, ...]`.
   - `rectangle`, `ellipse`, `blur`, `text`, `step-marker` use `x`, `y` (and `width`/`height` where applicable).
 - `AnnotateTopBar.tsx` is the file with `handleSave`. It currently calls `saveAnnotation(captureId, png, state)`. The crop branch will call `deriveCapture(captureId, png, width, height, shiftedState)` instead. After either save, `markClean()` runs.
-- `AnnotateTopBar.tsx` and `AnnotateCanvas.tsx` are excluded from Vitest coverage (Konva-bound, happy-dom has no canvas). Verification for tasks that touch only those is `pnpm typecheck` + `pnpm lint`. Tasks adding pure helpers DO add tests.
+- `AnnotateCanvas.tsx`, `AnnotateWindow.tsx`, `useDrawing.tsx`, and `shapes/**` are excluded from Vitest coverage (Konva-bound, happy-dom has no canvas). `AnnotateTopBar.tsx` is NOT excluded — it already has happy-dom tests that mock the Konva `Stage` ref, and the crop-routing logic in `handleSave` is testable in vitest (store state + invoke mock, no canvas dep). Tasks adding pure helpers DO add tests.
 - This plan executes on `main` directly (no worktree), same as the previous two plans in this session.
 
 ---
@@ -762,7 +762,7 @@ handleSave branch when the store has a confirmed crop.
 **Files:**
 - Modify: `app/src/windows/annotate/AnnotateTopBar.tsx`
 
-`AnnotateTopBar.tsx` is excluded from coverage; verification is `pnpm typecheck` + `pnpm lint` + tests still passing + manual smoke (Task 6).
+`AnnotateTopBar.tsx` IS testable in vitest — the existing `AnnotateTopBar.test.tsx` mocks the Konva `Stage` ref, and the new crop-routing branch in `handleSave` operates on store state + the `invoke` mock with no canvas dependency. Add unit tests for both branches (crop-confirmed → `derive_capture` invoke; no-crop → `save_annotation` invoke). Verification: `pnpm --filter @snk/app test` (142 passing — 140 from Tasks 1-2 + 2 new) + `pnpm typecheck` + `pnpm lint`.
 
 **Step 1: Update imports**
 
@@ -980,4 +980,4 @@ Then hand off to `h-superpowers:finishing-a-development-branch` for the merge/pu
 
 ## Test coverage notes
 
-`AnnotateTopBar.tsx` and `AnnotateCanvas.tsx` are intentionally in Vitest's coverage exclude list (Konva-bound, happy-dom has no canvas). Tasks 3 and 5 add no automated tests for them — by design, matching the existing convention. The pure helpers (`shiftShapesForCrop`) and binding (`deriveCapture`) DO get tests; that's where automated coverage lives.
+`AnnotateCanvas.tsx`, `AnnotateWindow.tsx`, `useDrawing.tsx`, and `shapes/**` are in Vitest's coverage exclude list (Konva-bound, happy-dom has no canvas). `AnnotateTopBar.tsx` is **not** — its crop-routing branch is testable via mocked `invoke` + Konva `Stage` ref stub. Task 5 adds two contract tests for the crop-confirmed and no-crop branches. The pure helpers (`shiftShapesForCrop`) and binding (`deriveCapture`) also get tests; Task 3 (Rust Tauri command) is integration-glue without unit tests.
