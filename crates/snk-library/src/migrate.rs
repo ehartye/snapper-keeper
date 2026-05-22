@@ -6,9 +6,10 @@ use crate::Result;
 const V001: &str = include_str!("../migrations/V001__initial.sql");
 const V002: &str = include_str!("../migrations/V002__clipboard_items.sql");
 const V003: &str = include_str!("../migrations/V003__ocr_fts.sql");
+const V004: &str = include_str!("../migrations/V004__annotation_state.sql");
 
 pub fn migrations() -> Migrations<'static> {
-    Migrations::new(vec![M::up(V001), M::up(V002), M::up(V003)])
+    Migrations::new(vec![M::up(V001), M::up(V002), M::up(V003), M::up(V004)])
 }
 
 pub fn migrate(conn: &mut Connection) -> Result<()> {
@@ -16,7 +17,7 @@ pub fn migrate(conn: &mut Connection) -> Result<()> {
         .to_latest(conn)
         .map_err(|e| crate::LibraryError::Migration {
             from: 0,
-            to: 3,
+            to: 4,
             recoverable: e.to_string().contains("Backup"),
         })?;
     Ok(())

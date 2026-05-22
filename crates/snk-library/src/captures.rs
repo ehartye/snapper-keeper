@@ -10,6 +10,7 @@ pub struct Capture {
     pub id: String,
     pub file_path: String,
     pub annotated_path: Option<String>,
+    pub annotation_state: Option<String>,
     pub width: u32,
     pub height: u32,
     pub source_app: Option<String>,
@@ -75,6 +76,7 @@ pub fn insert(db: &Db, new: NewCapture) -> Result<Capture> {
         id,
         file_path,
         annotated_path: None,
+        annotation_state: None,
         width: new.width,
         height: new.height,
         source_app: new.source_app,
@@ -91,6 +93,7 @@ fn row_to_capture(row: &rusqlite::Row<'_>) -> rusqlite::Result<Capture> {
         id: row.get("id")?,
         file_path: row.get("file_path")?,
         annotated_path: row.get("annotated_path")?,
+        annotation_state: row.get("annotation_state")?,
         width: row.get::<_, i64>("width")? as u32,
         height: row.get::<_, i64>("height")? as u32,
         source_app: row.get("source_app")?,
@@ -894,5 +897,13 @@ mod tests {
             Err(crate::LibraryError::NotFound { .. }) => {}
             other => panic!("expected NotFound, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn new_capture_has_null_annotation_state() {
+        let db = fresh_db();
+        let c = insert(&db, mk(1)).unwrap();
+        let fetched = get(&db, &c.id).unwrap();
+        assert!(fetched.annotation_state.is_none());
     }
 }
