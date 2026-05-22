@@ -71,10 +71,15 @@ export function AnnotateWindow() {
   // annotation_state. The fresh reset() in the open-listener wipes the
   // store first, so this either populates it (re-edit case) or leaves
   // it empty (first edit / legacy capture).
+  //
+  // Keyed on capture.data?.id (not capture.data) so a background
+  // refetch with a fresh object reference doesn't silently overwrite
+  // unsaved edits. We only want to hydrate once per loaded capture id.
   useEffect(() => {
-    if (!capture.data?.annotation_state) return;
+    const data = capture.data;
+    if (!data?.annotation_state) return;
     try {
-      const parsed = JSON.parse(capture.data.annotation_state) as {
+      const parsed = JSON.parse(data.annotation_state) as {
         version: number;
         shapes: AnnotationShape[];
         crop_region: { x: number; y: number; width: number; height: number } | null;
@@ -92,7 +97,8 @@ export function AnnotateWindow() {
     } catch (e) {
       console.warn('annotation_state parse failed; opening clean', e);
     }
-  }, [capture.data]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: we want once-per-id, not once-per-reference
+  }, [capture.data?.id]);
 
   if (!captureId || !capture.data || !root.data) {
     return (

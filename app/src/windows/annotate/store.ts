@@ -139,6 +139,12 @@ export const useAnnotateStore = create<AnnotateState>((set, get) => ({
     });
   },
 
+  // undo/redo intentionally do NOT touch isDirty. Restoring from history
+  // is not a 'change' in the user's mental model — and tracking the
+  // precise diff against the last saved state isn't worth the
+  // complexity. A user who edits then undoes back to baseline will
+  // still see the dirty prompt on close; that's an accepted
+  // trade-off.
   undo: () => {
     const state = get();
     if (state.undoStack.length === 0) return;
