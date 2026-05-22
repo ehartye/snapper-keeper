@@ -83,37 +83,47 @@ export function ClipboardPopup() {
 
   const handleKeyDown = useCallback(
     async (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      // Handler is attached to both the input and the wrapper so it fires
+      // regardless of which element holds focus; stop propagation so it
+      // doesn't run twice for the same event.
+      const handled = () => {
         e.preventDefault();
+        e.stopPropagation();
+      };
+
+      if (e.key === 'Escape') {
+        handled();
         await dismiss();
         return;
       }
       if (e.key === 'ArrowDown') {
-        e.preventDefault();
+        handled();
         moveSelection(1);
         return;
       }
       if (e.key === 'ArrowUp') {
-        e.preventDefault();
+        handled();
         moveSelection(-1);
         return;
       }
       if (e.key === 'Enter') {
-        e.preventDefault();
+        handled();
         const item = items[selectedIndex];
-        if (item) {
-          await handlePaste(item.id);
+        if (item) await handlePaste(item.id);
+        return;
+      }
+      // Digit shortcuts only with a modifier so typing digits in the filter
+      // input still works as filter text.
+      if ((e.ctrlKey || e.altKey || e.metaKey) && /^[1-9]$/.test(e.key)) {
+        const idx = parseInt(e.key, 10) - 1;
+        if (items[idx]) {
+          handled();
+          await handlePaste(items[idx]!.id);
         }
         return;
       }
-      const num = parseInt(e.key, 10);
-      if (num >= 1 && num <= 9 && items[num - 1]) {
-        e.preventDefault();
-        await handlePaste(items[num - 1]!.id);
-        return;
-      }
       if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
-        e.preventDefault();
+        handled();
         const item = items[selectedIndex];
         if (item) {
           await toggleClipboardPin(item.id, !item.pinned);
@@ -138,6 +148,7 @@ export function ClipboardPopup() {
           type="text"
           value={filter}
           onChange={handleFilterChange}
+          onKeyDown={handleKeyDown}
           placeholder="filter…"
           className="w-full bg-bg-soft text-xs text-fg px-3 py-1.5 rounded-md border border-border outline-none focus:border-primary placeholder:text-fg-muted"
         />
