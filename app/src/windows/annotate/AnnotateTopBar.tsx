@@ -65,7 +65,15 @@ export function AnnotateTopBar({ captureId, stageRef }: Props) {
     try {
       const png = await exportPng();
       if (!png) throw new Error('nothing to save');
-      await saveAnnotation(captureId, png);
+      const store = useAnnotateStore.getState();
+      const state = {
+        version: 1 as const,
+        shapes: store.shapes,
+        crop_region: store.cropRegion,
+        crop_confirmed: store.cropConfirmed,
+      };
+      await saveAnnotation(captureId, png, state);
+      useAnnotateStore.getState().markClean();
       flashSave('ok');
     } catch (e) {
       console.error('save annotation failed', e);
