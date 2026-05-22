@@ -137,6 +137,9 @@ pub struct ListCapturesQuery {
     pub pinned_only: bool,
     pub tag_id: Option<String>,
     pub deleted_only: bool,
+    /// Pagination cursor — return rows older than this `created_at`
+    /// timestamp. Pair with `limit` for infinite-scroll style fetching.
+    pub before: Option<i64>,
 }
 
 pub fn list(db: &Db, q: ListCapturesQuery) -> Result<Vec<Capture>> {
@@ -154,6 +157,11 @@ pub fn list(db: &Db, q: ListCapturesQuery) -> Result<Vec<Capture>> {
         if let Some(since) = q.since {
             values.push(rusqlite::types::Value::Integer(since));
             clauses.push("created_at >= ?".into());
+        }
+
+        if let Some(before) = q.before {
+            values.push(rusqlite::types::Value::Integer(before));
+            clauses.push("created_at < ?".into());
         }
 
         if q.pinned_only {

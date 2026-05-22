@@ -1,8 +1,9 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { path } from '@tauri-apps/api';
 
 import { listCaptures, purgeTrash } from '@snk/library';
-import type { ListCapturesQuery } from '@snk/library';
+import type { Capture, ListCapturesQuery } from '@snk/library';
 
 import { captureAssetUrl } from '../../lib/assetUrl';
 import { queryKeys } from '../../lib/queryKeys';
@@ -12,31 +13,67 @@ interface Props {
   query?: ListCapturesQuery;
 }
 
+const PAGE_SIZE = 60;
+
 export function CaptureGrid({ query }: Props) {
   const queryClient = useQueryClient();
   const inTrash = query?.deleted_only === true;
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const root = useQuery({
     queryKey: ['app-data-dir'],
     queryFn: () => path.appDataDir(),
   });
-  const captures = useQuery({
+
+  const pages = useInfiniteQuery({
     queryKey: queryKeys.captures.list(query),
-    queryFn: () => listCaptures(query),
+    queryFn: ({ pageParam }) =>
+      listCaptures({
+        ...(query ?? {}),
+        limit: PAGE_SIZE,
+        ...(pageParam !== undefined ? { before: pageParam } : {}),
+      }),
+    initialPageParam: undefined as number | undefined,
+    getNextPageParam: (lastPage: Capture[]) => {
+      // If we got a full page, there might be more. Cursor = oldest row's
+      // created_at; the next request fetches rows created BEFORE that.
+      if (lastPage.length < PAGE_SIZE) return undefined;
+      return lastPage[lastPage.length - 1]?.created_at;
+    },
   });
 
-  if (root.isLoading || captures.isLoading) {
+  const rows = pages.data?.pages.flat() ?? [];
+
+  // Trigger fetchNextPage when the sentinel scrolls into view.
+  useEffect(() => {
+    const el = loadMoreRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (
+          entries[0]?.isIntersecting &&
+          pages.hasNextPage &&
+          !pages.isFetchingNextPage
+        ) {
+          pages.fetchNextPage();
+        }
+      },
+      { rootMargin: '300px' },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [pages, rows.length]);
+
+  if (root.isLoading || (pages.isLoading && rows.length === 0)) {
     return <p className="text-fg-muted">Loading…</p>;
   }
-  if (root.error || captures.error) {
+  if (root.error || pages.error) {
     return (
       <p className="text-danger">
-        Error loading library: {String(root.error ?? captures.error)}
+        Error loading library: {String(root.error ?? pages.error)}
       </p>
     );
   }
-
-  const rows = captures.data ?? [];
 
   const handleEmptyTrash = async () => {
     if (rows.length === 0) return;
@@ -76,7 +113,9 @@ export function CaptureGrid({ query }: Props) {
           <div className="text-sm">
             <span className="font-display text-base">Trash</span>
             <span className="text-fg-muted ml-2">
-              {rows.length} item{rows.length === 1 ? '' : 's'} · click an item to permanently delete
+              {rows.length}
+              {pages.hasNextPage ? '+' : ''} item{rows.length === 1 ? '' : 's'}
+              {' '}· click an item to permanently delete
             </span>
           </div>
           <button
@@ -96,6 +135,20 @@ export function CaptureGrid({ query }: Props) {
             inTrash={inTrash}
           />
         ))}
+      </div>
+
+      {/* Infinite-scroll sentinel — fetching the next page is triggered when
+       * this scrolls within 300px of the viewport. */}
+      <div ref={loadMoreRef} className="h-12 flex items-center justify-center mt-4">
+        {pages.isFetchingNextPage ? (
+          <span className="font-display text-xs uppercase tracking-wider text-fg-muted">
+            loading more…
+          </span>
+        ) : pages.hasNextPage ? (
+          <span className="text-fg-muted text-xs">scroll for more</span>
+        ) : rows.length > PAGE_SIZE ? (
+          <span className="text-fg-muted text-xs">— end —</span>
+        ) : null}
       </div>
     </div>
   );

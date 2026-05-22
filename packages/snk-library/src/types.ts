@@ -19,6 +19,8 @@ export interface ListCapturesQuery {
   pinned_only?: boolean;
   tag_id?: string;
   deleted_only?: boolean;
+  /** Pagination cursor — return rows older than this created_at ms timestamp. */
+  before?: number;
 }
 
 export type SearchResult =
