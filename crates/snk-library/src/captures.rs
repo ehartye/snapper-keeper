@@ -185,6 +185,21 @@ pub fn list(db: &Db, q: ListCapturesQuery) -> Result<Vec<Capture>> {
     })
 }
 
+pub fn set_pinned(db: &Db, id: &str, pinned: bool) -> Result<()> {
+    db.with_conn(|conn| {
+        let changed = conn.execute(
+            "UPDATE captures SET pinned = ?1 WHERE id = ?2 AND deleted_at IS NULL",
+            rusqlite::params![pinned as i64, id],
+        )?;
+        if changed == 0 {
+            return Err(crate::LibraryError::NotFound {
+                what: format!("capture {id}"),
+            });
+        }
+        Ok(())
+    })
+}
+
 pub fn soft_delete(db: &Db, id: &str) -> Result<()> {
     let now = chrono::Utc::now().timestamp_millis();
     db.with_conn(|conn| {
@@ -199,6 +214,73 @@ pub fn soft_delete(db: &Db, id: &str) -> Result<()> {
         }
         Ok(())
     })
+}
+
+/// Permanently delete a capture: removes the DB row (cascades to capture_tags
+/// and ocr_text), the FTS index entry, and the on-disk PNG(s). Best-effort on
+/// the files — a missing file is not an error.
+pub fn hard_delete(db: &Db, library_root: &std::path::Path, id: &str) -> Result<()> {
+    // Fetch file paths directly — `get()` filters out soft-deleted rows, but
+    // hard-delete must work on trashed captures too.
+    let (file_path, annotated_path): (String, Option<String>) = db.with_conn(|conn| {
+        conn.query_row(
+            "SELECT file_path, annotated_path FROM captures WHERE id = ?1",
+            rusqlite::params![id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => crate::LibraryError::NotFound {
+                what: format!("capture {id}"),
+            },
+            other => other.into(),
+        })
+    })?;
+
+    db.with_conn(|conn| {
+        conn.execute("DELETE FROM captures WHERE id = ?1", [id])?;
+        Ok(())
+    })?;
+    crate::search::remove_capture_index(db, id)?;
+
+    let _ = std::fs::remove_file(library_root.join(&file_path));
+    if let Some(anno) = annotated_path {
+        let _ = std::fs::remove_file(library_root.join(anno));
+    }
+    Ok(())
+}
+
+/// Permanently delete every soft-deleted capture. Returns the count purged.
+pub fn purge_trash(db: &Db, library_root: &std::path::Path) -> Result<u32> {
+    let trash = list(
+        db,
+        ListCapturesQuery {
+            deleted_only: true,
+            limit: Some(1_000_000),
+            ..Default::default()
+        },
+    )?;
+    let count = trash.len() as u32;
+    if count == 0 {
+        return Ok(0);
+    }
+
+    db.with_conn(|conn| {
+        conn.execute(
+            "DELETE FROM captures WHERE deleted_at IS NOT NULL",
+            [],
+        )?;
+        Ok(())
+    })?;
+
+    for cap in &trash {
+        let _ = crate::search::remove_capture_index(db, &cap.id);
+        let _ = std::fs::remove_file(library_root.join(&cap.file_path));
+        if let Some(anno) = &cap.annotated_path {
+            let _ = std::fs::remove_file(library_root.join(anno));
+        }
+    }
+
+    Ok(count)
 }
 
 pub fn set_annotated_path(db: &Db, id: &str, annotated_path: &str) -> Result<()> {

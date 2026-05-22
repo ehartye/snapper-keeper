@@ -16,6 +16,18 @@ export function softDeleteCapture(id: string): Promise<void> {
   return invoke<void>('plugin:snk-library|soft_delete_capture', { id });
 }
 
+export function hardDeleteCapture(id: string): Promise<void> {
+  return invoke<void>('plugin:snk-library|hard_delete_capture', { id });
+}
+
+export function purgeTrash(): Promise<number> {
+  return invoke<number>('plugin:snk-library|purge_trash');
+}
+
+export function setCapturePinned(id: string, pinned: boolean): Promise<void> {
+  return invoke<void>('plugin:snk-library|set_capture_pinned', { id, pinned });
+}
+
 export function searchLibrary(query: string, limit?: number): Promise<SearchResult[]> {
   return invoke<SearchResult[]>('plugin:snk-library|search_library', { query, limit });
 }

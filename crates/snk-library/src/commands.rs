@@ -35,6 +35,33 @@ pub fn soft_delete_capture<R: Runtime>(
 }
 
 #[tauri::command]
+pub fn set_capture_pinned<R: Runtime>(
+    state: State<'_, LibraryState>,
+    _app: tauri::AppHandle<R>,
+    id: String,
+    pinned: bool,
+) -> Result<()> {
+    captures::set_pinned(&state.db, &id, pinned)
+}
+
+#[tauri::command]
+pub fn hard_delete_capture<R: Runtime>(
+    state: State<'_, LibraryState>,
+    _app: tauri::AppHandle<R>,
+    id: String,
+) -> Result<()> {
+    captures::hard_delete(&state.db, &state.root, &id)
+}
+
+#[tauri::command]
+pub fn purge_trash<R: Runtime>(
+    state: State<'_, LibraryState>,
+    _app: tauri::AppHandle<R>,
+) -> Result<u32> {
+    captures::purge_trash(&state.db, &state.root)
+}
+
+#[tauri::command]
 pub fn list_clipboard_items<R: Runtime>(
     state: State<'_, LibraryState>,
     _app: tauri::AppHandle<R>,
