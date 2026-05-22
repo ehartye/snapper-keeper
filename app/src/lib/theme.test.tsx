@@ -14,14 +14,23 @@ function wrap({ children }: { children: ReactNode }) {
 }
 
 describe('theme module', () => {
-  it('exposes 8 themes across 4 families with light + dark each', () => {
-    expect(THEMES).toHaveLength(8);
+  it('exposes 10 themes across 5 families with light + dark each', () => {
+    expect(THEMES).toHaveLength(10);
     const families = new Set(THEMES.map((t) => t.family));
-    expect(families).toEqual(new Set(['holo', 'memphis', 'robotic', 'corporate']));
+    expect(families).toEqual(
+      new Set(['holo', 'memphis', 'robotic', 'corporate', 'wabi-sabi']),
+    );
     for (const fam of families) {
       const inFam = THEMES.filter((t) => t.family === fam);
       expect(inFam.map((t) => t.mode).sort()).toEqual(['dark', 'light']);
     }
+  });
+
+  it('familyOf handles multi-hyphen family slugs', async () => {
+    const { familyOf } = await import('./theme');
+    expect(familyOf('holo-dark')).toBe('holo');
+    expect(familyOf('wabi-sabi-light')).toBe('wabi-sabi');
+    expect(familyOf('wabi-sabi-dark')).toBe('wabi-sabi');
   });
 
   it('default theme is in the list', () => {

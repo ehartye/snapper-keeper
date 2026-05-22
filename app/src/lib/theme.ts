@@ -113,6 +113,23 @@ export const THEME_FAMILIES = {
       swatchShape: 'square',
     },
   },
+  'wabi-sabi': {
+    label: 'Wabi-Sabi',
+    tagline: 'Washi paper and sumi ink. Hanko stamps and wandering brush strokes.',
+    preview: {
+      swatches: ['#c54a3a', '#8a6f4c', '#3a4a5e', '#5a6e3e'],
+      bgLight: '#f5efe0',
+      bgDark: '#14100c',
+      fgLight: '#1a1612',
+      fgDark: '#e8d8c0',
+      mutedLight: '#6e5a48',
+      mutedDark: '#8a7560',
+      displayFont: "'Shippori Mincho', 'Yu Mincho', serif",
+      bodyFont: "'Cormorant Garamond', Georgia, serif",
+      shape: 'card',
+      swatchShape: 'round',
+    },
+  },
 } as const satisfies Record<string, FamilyDef>;
 
 export type ThemeFamily = keyof typeof THEME_FAMILIES;

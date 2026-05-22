@@ -50,6 +50,9 @@ importers:
       '@fontsource/bungee':
         specifier: ^5.2.7
         version: 5.2.7
+      '@fontsource/cormorant-garamond':
+        specifier: ^5.2.11
+        version: 5.2.11
       '@fontsource/fredoka':
         specifier: ^5.2.10
         version: 5.2.10
@@ -59,6 +62,9 @@ importers:
       '@fontsource/rubik-bubbles':
         specifier: ^5.2.7
         version: 5.2.7
+      '@fontsource/shippori-mincho':
+        specifier: ^5.2.8
+        version: 5.2.8
       '@fontsource/vt323':
         specifier: ^5.2.7
         version: 5.2.7
@@ -541,6 +547,9 @@ packages:
   '@fontsource/bungee@5.2.7':
     resolution: {integrity: sha512-pzUlTXEFdiDM5p0inlWRM+1ovS3vTWG6NplJ65EpfBwZNQmM6wNS6z22tml07+NWKK+e8/FPPupBVbzd0th54w==}
 
+  '@fontsource/cormorant-garamond@5.2.11':
+    resolution: {integrity: sha512-5JjpN023lhA5soijgVT0BdRGzmlijm402ppjccMd6h+vRE0mX2lJnE+41UPfnlidrkV9/rCo1mf58WZlHnB0CA==}
+
   '@fontsource/fredoka@5.2.10':
     resolution: {integrity: sha512-DyzPCmTf0PkBbAu+gNvnPzfD/dYIXlyp+Zcb76jEQyt/vmRKGZgkH8FFF9W2sICDaA5p+GLk1XGFjWh5PPX+lg==}
 
@@ -549,6 +558,9 @@ packages:
 
   '@fontsource/rubik-bubbles@5.2.7':
     resolution: {integrity: sha512-oxEY6N9aZdsY5mn1VQwb2ZvHA+gZCcWKFDO0uonbnfWBN92auBdeSB7SaZ6tE9NrhJs6b5IHu+/w1rit0t/frQ==}
+
+  '@fontsource/shippori-mincho@5.2.8':
+    resolution: {integrity: sha512-GoWDgrzVyB1oUufPKN9suBaM+TpliiBcMwEalqqMeO38xdGJzY/ZwhehZsxyOoR56c1l98vwXbj+tXWHyGefJA==}
 
   '@fontsource/vt323@5.2.7':
     resolution: {integrity: sha512-8JTMM23vMhQxin9Cn/ijty8cNwXW4INrln0VAJ2227Rz0CVfkzM3qr3l/CqudZJ6BXCnbCGUTdf2ym3cTNex8A==}
@@ -2738,11 +2750,15 @@ snapshots:
 
   '@fontsource/bungee@5.2.7': {}
 
+  '@fontsource/cormorant-garamond@5.2.11': {}
+
   '@fontsource/fredoka@5.2.10': {}
 
   '@fontsource/ibm-plex-mono@5.2.7': {}
 
   '@fontsource/rubik-bubbles@5.2.7': {}
+
+  '@fontsource/shippori-mincho@5.2.8': {}
 
   '@fontsource/vt323@5.2.7': {}
 

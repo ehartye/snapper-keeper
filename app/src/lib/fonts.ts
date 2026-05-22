@@ -33,3 +33,13 @@ import '@fontsource/archivo/latin-500.css';
 import '@fontsource/archivo/latin-600.css';
 import '@fontsource/archivo/latin-700.css';
 import '@fontsource/archivo/latin-800.css';
+
+// Wabi-Sabi: Shippori Mincho (display, Japanese-influenced serif) + Cormorant Garamond (body)
+// The japanese-800 subset is loaded for the kanji 章 used in the hanko-stamp divider.
+import '@fontsource/shippori-mincho/latin-500.css';
+import '@fontsource/shippori-mincho/latin-800.css';
+import '@fontsource/shippori-mincho/japanese-800.css';
+import '@fontsource/cormorant-garamond/latin-400.css';
+import '@fontsource/cormorant-garamond/latin-400-italic.css';
+import '@fontsource/cormorant-garamond/latin-500.css';
+import '@fontsource/cormorant-garamond/latin-600.css';
