@@ -1,6 +1,11 @@
 import { useEffect, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import {
+  isEnabled as isAutostartEnabled,
+  enable as enableAutostart,
+  disable as disableAutostart,
+} from '@tauri-apps/plugin-autostart';
 
 import { getSetting, setSetting } from '@snk/library';
 
@@ -63,6 +68,28 @@ function useSetting<T>(key: string, defaultValue: T): [T, (v: T) => void, boolea
   };
 
   return [value, update, isLoading];
+}
+
+// Launch-at-login is managed by the autostart plugin, not the settings table,
+// so it has its own little hook.
+function useAutostart(): [boolean, (v: boolean) => void, boolean] {
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ['autostart-enabled'],
+    queryFn: () => isAutostartEnabled(),
+  });
+
+  const update = async (v: boolean) => {
+    try {
+      if (v) await enableAutostart();
+      else await disableAutostart();
+      queryClient.invalidateQueries({ queryKey: ['autostart-enabled'] });
+    } catch (e) {
+      console.error('autostart toggle failed', e);
+    }
+  };
+
+  return [data ?? false, update, isLoading];
 }
 
 interface FamilyPreview {
@@ -239,6 +266,7 @@ export function SettingsWindow() {
   const [trackImages, setTrackImages] = useSetting('clipboard.track_images', true);
   const [trackFiles, setTrackFiles] = useSetting('clipboard.track_files', true);
   const [ocrEnabled, setOcrEnabled] = useSetting('ocr.enabled', true);
+  const [autostart, setAutostart] = useAutostart();
 
   return (
     <main className="h-full flex flex-col bg-bg text-fg">
@@ -336,6 +364,18 @@ export function SettingsWindow() {
               description="Automatically extract text from captures using Tesseract"
             >
               <Toggle value={ocrEnabled as boolean} onChange={setOcrEnabled} />
+            </SettingRow>
+          </div>
+        </section>
+
+        <section>
+          <h2 className="font-display text-sm mb-3">Startup</h2>
+          <div className="bg-surface rounded-xl border border-border px-4 divide-y divide-border">
+            <SettingRow
+              label="Launch at login"
+              description="Start snapper-keeper automatically when you sign in"
+            >
+              <Toggle value={autostart} onChange={setAutostart} />
             </SettingRow>
           </div>
         </section>

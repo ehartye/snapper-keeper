@@ -61,6 +61,15 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        // Launch-at-login support. The plugin manages the platform-specific
+        // bits (registry entry on Windows, LaunchAgent on macOS). The user
+        // toggles it from Settings → Startup.
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            // No extra args — the app reads its own state to decide whether
+            // to start hidden or focused.
+            None,
+        ))
         .plugin(snk_library::init())
         .plugin(snk_hotkeys::init())
         .plugin(snk_capture::init())

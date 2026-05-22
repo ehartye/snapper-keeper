@@ -26,6 +26,7 @@
     "@snk/library": "workspace:*",
     "@tanstack/react-query": "^5.40.0",
     "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-autostart": "^2.5.1",
     "@tauri-apps/plugin-global-shortcut": "^2.0.0",
     "konva": "^10.3.0",
     "react": "^18.3.0",

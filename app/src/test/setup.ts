@@ -66,6 +66,12 @@ vi.mock('@tauri-apps/api', () => ({
   },
 }));
 
+vi.mock('@tauri-apps/plugin-autostart', () => ({
+  isEnabled: vi.fn().mockResolvedValue(false),
+  enable: vi.fn().mockResolvedValue(undefined),
+  disable: vi.fn().mockResolvedValue(undefined),
+}));
+
 // IntersectionObserver isn't implemented in happy-dom; provide a no-op
 // stub so components that use it (CaptureGrid sentinel) don't crash.
 class IntersectionObserverStub {
