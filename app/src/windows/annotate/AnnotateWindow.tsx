@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import type Konva from 'konva';
 
 import { getCapture } from '@snk/library';
+import type { AnnotationShape } from '@snk/annotate';
 
 import { captureAssetUrl } from '../../lib/assetUrl';
 import { queryKeys } from '../../lib/queryKeys';
@@ -75,13 +76,13 @@ export function AnnotateWindow() {
     try {
       const parsed = JSON.parse(capture.data.annotation_state) as {
         version: number;
-        shapes: unknown[];
+        shapes: AnnotationShape[];
         crop_region: { x: number; y: number; width: number; height: number } | null;
         crop_confirmed: boolean;
       };
       if (parsed.version !== 1) return;
       useAnnotateStore.setState({
-        shapes: parsed.shapes as never,
+        shapes: parsed.shapes,
         cropRegion: parsed.crop_region,
         cropConfirmed: parsed.crop_confirmed,
         undoStack: [],
