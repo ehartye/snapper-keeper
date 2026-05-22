@@ -1,4 +1,4 @@
-import { useCallback, useRef, type MutableRefObject } from 'react';
+import { useCallback, useRef, useState, type MutableRefObject } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type Konva from 'konva';
 
@@ -11,9 +11,22 @@ interface Props {
   stageRef: MutableRefObject<Konva.Stage | null>;
 }
 
+type ButtonStatus = 'idle' | 'ok' | 'err';
+
+function useFlash(): [ButtonStatus, (s: 'ok' | 'err') => void] {
+  const [status, setStatus] = useState<ButtonStatus>('idle');
+  const flash = useCallback((s: 'ok' | 'err') => {
+    setStatus(s);
+    window.setTimeout(() => setStatus('idle'), 1500);
+  }, []);
+  return [status, flash];
+}
+
 export function AnnotateTopBar({ captureId, stageRef }: Props) {
   const saving = useRef(false);
   const cropRegion = useAnnotateStore((s) => s.cropRegion);
+  const [saveStatus, flashSave] = useFlash();
+  const [copyStatus, flashCopy] = useFlash();
 
   const exportPng = useCallback(async (): Promise<number[] | null> => {
     const stage = stageRef.current;
@@ -47,36 +60,44 @@ export function AnnotateTopBar({ captureId, stageRef }: Props) {
     saving.current = true;
     try {
       const png = await exportPng();
-      if (png) {
-        await saveAnnotation(captureId, png);
-      }
+      if (!png) throw new Error('nothing to save');
+      await saveAnnotation(captureId, png);
+      flashSave('ok');
     } catch (e) {
       console.error('save annotation failed', e);
+      flashSave('err');
     } finally {
       saving.current = false;
     }
-  }, [captureId, exportPng]);
+  }, [captureId, exportPng, flashSave]);
 
   const handleCopy = useCallback(async () => {
     const stage = stageRef.current;
-    if (!stage) return;
+    if (!stage) {
+      flashCopy('err');
+      return;
+    }
     try {
       const blob = (await stage.toBlob({ pixelRatio: 1 / (stage.scaleX() || 1) })) as Blob | null;
-      if (blob) {
-        await navigator.clipboard.write([
-          new ClipboardItem({ 'image/png': blob }),
-        ]);
-      }
+      if (!blob) throw new Error('encode failed');
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      flashCopy('ok');
     } catch (e) {
       console.error('copy failed', e);
+      flashCopy('err');
     }
-  }, [stageRef]);
+  }, [stageRef, flashCopy]);
 
   const handleDone = useCallback(async () => {
     useAnnotateStore.getState().reset();
     const win = getCurrentWindow();
     await win.hide();
   }, []);
+
+  const saveLabel =
+    saveStatus === 'ok' ? 'saved ✓' : saveStatus === 'err' ? 'failed' : 'save';
+  const copyLabel =
+    copyStatus === 'ok' ? 'copied ✓' : copyStatus === 'err' ? 'failed' : 'copy';
 
   return (
     <div className="flex items-center gap-2 px-4 py-2.5 bg-bg-soft border-b border-border">
@@ -85,15 +106,27 @@ export function AnnotateTopBar({ captureId, stageRef }: Props) {
       </span>
       <button
         onClick={handleCopy}
-        className="px-3 py-1 text-xs font-display uppercase tracking-wider text-fg hover:bg-surface-2 rounded-lg"
+        className={`px-3 py-1 text-xs font-display uppercase tracking-wider rounded-lg transition-colors ${
+          copyStatus === 'ok'
+            ? 'bg-accent-3 text-bg'
+            : copyStatus === 'err'
+              ? 'bg-danger text-bg'
+              : 'text-fg hover:bg-surface-2'
+        }`}
       >
-        copy
+        {copyLabel}
       </button>
       <button
         onClick={handleSave}
-        className="px-3 py-1 text-xs font-display uppercase tracking-wider text-bg bg-accent-2 hover:opacity-90 rounded-lg"
+        className={`px-3 py-1 text-xs font-display uppercase tracking-wider rounded-lg transition-colors ${
+          saveStatus === 'ok'
+            ? 'bg-accent-3 text-bg'
+            : saveStatus === 'err'
+              ? 'bg-danger text-bg'
+              : 'bg-accent-2 text-bg hover:opacity-90'
+        }`}
       >
-        save
+        {saveLabel}
       </button>
       <button
         onClick={handleDone}
