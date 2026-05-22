@@ -1,5 +1,6 @@
 .superpowers/
 .research/
+.claude/
 
 # Node
 node_modules/
