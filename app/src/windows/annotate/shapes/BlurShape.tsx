@@ -43,7 +43,6 @@ export function BlurShape({ shape, draggable, onSelect, registerNode }: ShapePro
       y={y}
       width={w}
       height={h}
-      // `crop` tells Konva to draw only this region of the source image.
       // The screenshot fills the layer at (0,0) at native pixel size,
       // so the shape's rect and the crop region happen to be identical.
       crop={{ x, y, width: w, height: h }}
@@ -65,8 +64,8 @@ export function BlurShape({ shape, draggable, onSelect, registerNode }: ShapePro
         updateShape(shape.id, {
           x: node.x(),
           y: node.y(),
-          width: Math.max(5, w * scaleX),
-          height: Math.max(5, h * scaleY),
+          width: Math.max(5, node.width() * scaleX),
+          height: Math.max(5, node.height() * scaleY),
         });
       }}
     />
