@@ -255,7 +255,24 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
                 }
               />
             ))}
-            {currentShape && <ShapeRenderer shape={currentShape} />}
+            {currentShape && currentShape.tool === 'blur' ? (
+              // While the user is dragging out a new blur rect, draw a
+              // cheap dashed Rect instead of running Pixelate + cache on
+              // every mousemove. The real BlurShape only renders for
+              // committed shapes in the `shapes` array.
+              <Rect
+                x={currentShape.x ?? 0}
+                y={currentShape.y ?? 0}
+                width={currentShape.width ?? 0}
+                height={currentShape.height ?? 0}
+                stroke="#3b82f6"
+                strokeWidth={2}
+                dash={[6, 3]}
+                fill="rgba(59, 130, 246, 0.15)"
+              />
+            ) : currentShape ? (
+              <ShapeRenderer shape={currentShape} />
+            ) : null}
             {tool === 'select' && canTransformSelected && (
               <Transformer
                 ref={transformerRef}
