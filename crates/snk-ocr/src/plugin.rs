@@ -28,7 +28,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             // so a packaged build can use it without requiring a system install.
             match app.path().resource_dir() {
                 Ok(dir) => crate::sidecar::set_bundled_resource_dir(dir),
-                Err(e) => tracing::debug!(error = %e, "no resource dir; falling back to system tesseract"),
+                Err(e) => {
+                    tracing::debug!(error = %e, "no resource dir; falling back to system tesseract")
+                }
             }
 
             let queue = OcrQueue::start(Arc::clone(&db), root);

@@ -36,18 +36,20 @@ mod tests {
 
     #[test]
     fn display_messages_include_relevant_fields() {
-        assert!(
-            AnnotateError::Image { message: "bad".into() }
-                .to_string()
-                .contains("bad")
-        );
-        assert!(
-            AnnotateError::InvalidInput { reason: "empty".into() }
-                .to_string()
-                .contains("empty")
-        );
+        assert!(AnnotateError::Image {
+            message: "bad".into()
+        }
+        .to_string()
+        .contains("bad"));
+        assert!(AnnotateError::InvalidInput {
+            reason: "empty".into()
+        }
+        .to_string()
+        .contains("empty"));
         let lib_err = snk_library::LibraryError::NotFound { what: "x".into() };
-        assert!(AnnotateError::Library(lib_err).to_string().contains("library"));
+        assert!(AnnotateError::Library(lib_err)
+            .to_string()
+            .contains("library"));
     }
 
     #[test]
@@ -74,10 +76,8 @@ mod tests {
 
     #[test]
     fn serde_uses_kind_discriminator_in_kebab_case() {
-        let json = serde_json::to_string(&AnnotateError::InvalidInput {
-            reason: "x".into(),
-        })
-        .unwrap();
+        let json =
+            serde_json::to_string(&AnnotateError::InvalidInput { reason: "x".into() }).unwrap();
         assert!(json.contains("\"kind\":\"invalid-input\""));
     }
 }

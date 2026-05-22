@@ -51,21 +51,19 @@ mod tests {
     #[test]
     fn display_messages_include_relevant_fields() {
         assert!(CaptureError::NoMonitors.to_string().contains("no monitors"));
-        assert!(
-            CaptureError::WindowNotFound { id: 42 }
-                .to_string()
-                .contains("42")
-        );
-        assert!(
-            CaptureError::Os { message: "boom".into() }
-                .to_string()
-                .contains("boom")
-        );
-        assert!(
-            CaptureError::Encode { message: "bad png".into() }
-                .to_string()
-                .contains("bad png")
-        );
+        assert!(CaptureError::WindowNotFound { id: 42 }
+            .to_string()
+            .contains("42"));
+        assert!(CaptureError::Os {
+            message: "boom".into()
+        }
+        .to_string()
+        .contains("boom"));
+        assert!(CaptureError::Encode {
+            message: "bad png".into()
+        }
+        .to_string()
+        .contains("bad png"));
         let lib_err = snk_library::LibraryError::NotFound { what: "x".into() };
         let wrapped = CaptureError::Library(lib_err);
         assert!(wrapped.to_string().contains("library"));

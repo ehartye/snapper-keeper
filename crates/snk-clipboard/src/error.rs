@@ -39,23 +39,25 @@ mod tests {
 
     #[test]
     fn display_messages_include_relevant_fields() {
-        assert!(
-            ClipboardError::Access { message: "denied".into() }
-                .to_string()
-                .contains("denied")
-        );
-        assert!(
-            ClipboardError::PasteFailed { reason: "too short".into() }
-                .to_string()
-                .contains("too short")
-        );
-        assert!(
-            ClipboardError::NotFound { what: "item x".into() }
-                .to_string()
-                .contains("item x")
-        );
+        assert!(ClipboardError::Access {
+            message: "denied".into()
+        }
+        .to_string()
+        .contains("denied"));
+        assert!(ClipboardError::PasteFailed {
+            reason: "too short".into()
+        }
+        .to_string()
+        .contains("too short"));
+        assert!(ClipboardError::NotFound {
+            what: "item x".into()
+        }
+        .to_string()
+        .contains("item x"));
         let lib_err = snk_library::LibraryError::NotFound { what: "y".into() };
-        assert!(ClipboardError::Library(lib_err).to_string().contains("library"));
+        assert!(ClipboardError::Library(lib_err)
+            .to_string()
+            .contains("library"));
     }
 
     #[test]
@@ -80,10 +82,7 @@ mod tests {
 
     #[test]
     fn serde_uses_kind_discriminator_in_kebab_case() {
-        let json = serde_json::to_string(&ClipboardError::NotFound {
-            what: "x".into(),
-        })
-        .unwrap();
+        let json = serde_json::to_string(&ClipboardError::NotFound { what: "x".into() }).unwrap();
         assert!(json.contains("\"kind\":\"not-found\""));
     }
 }

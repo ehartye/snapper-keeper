@@ -88,18 +88,20 @@ pub fn grab_region(monitor_id: u32, x: u32, y: u32, w: u32, h: u32) -> Result<Gr
     let mon = monitors
         .into_iter()
         .find(|m| m.id() == monitor_id)
-        .or_else(|| Monitor::all().ok().and_then(|v| v.into_iter().find(|m| m.is_primary())))
+        .or_else(|| {
+            Monitor::all()
+                .ok()
+                .and_then(|v| v.into_iter().find(|m| m.is_primary()))
+        })
         .or_else(|| Monitor::all().ok().and_then(|mut v| v.pop()))
         .ok_or(crate::CaptureError::NoMonitors)?;
 
     let monitor_name = mon.name().to_string();
     let full_image = mon.capture_image()?;
 
-    let (x, y, w, h) =
-        clamp_region(full_image.width(), full_image.height(), x, y, w, h).ok_or_else(|| {
-            crate::CaptureError::Os {
-                message: "region has zero area".into(),
-            }
+    let (x, y, w, h) = clamp_region(full_image.width(), full_image.height(), x, y, w, h)
+        .ok_or_else(|| crate::CaptureError::Os {
+            message: "region has zero area".into(),
         })?;
 
     let cropped = image::imageops::crop_imm(&full_image, x, y, w, h).to_image();

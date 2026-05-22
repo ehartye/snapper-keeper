@@ -26,7 +26,10 @@ pub fn set_bundled_resource_dir(dir: PathBuf) {
 
 /// Path to the tessdata directory if we resolved to a bundled tesseract.
 fn bundled_tessdata_dir() -> Option<PathBuf> {
-    let dir = BUNDLED_RESOURCE_DIR.get()?.join("tesseract").join("tessdata");
+    let dir = BUNDLED_RESOURCE_DIR
+        .get()?
+        .join("tesseract")
+        .join("tessdata");
     if dir.is_dir() {
         Some(dir)
     } else {
@@ -322,10 +325,7 @@ mod tests {
             None => std::env::remove_var("SNK_TESSERACT_PATH"),
         }
         if let Some(p) = got {
-            assert_ne!(
-                p.to_string_lossy(),
-                "/path/that/does/not/exist/anywhere"
-            );
+            assert_ne!(p.to_string_lossy(), "/path/that/does/not/exist/anywhere");
         }
     }
 

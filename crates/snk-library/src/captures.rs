@@ -273,10 +273,7 @@ pub fn purge_trash(db: &Db, library_root: &std::path::Path) -> Result<u32> {
     }
 
     db.with_conn(|conn| {
-        conn.execute(
-            "DELETE FROM captures WHERE deleted_at IS NOT NULL",
-            [],
-        )?;
+        conn.execute("DELETE FROM captures WHERE deleted_at IS NOT NULL", [])?;
         Ok(())
     })?;
 
@@ -660,8 +657,7 @@ mod tests {
 
     #[test]
     fn query_deserializes_from_partial_json() {
-        let q: ListCapturesQuery =
-            serde_json::from_str(r#"{"pinned_only": true}"#).unwrap();
+        let q: ListCapturesQuery = serde_json::from_str(r#"{"pinned_only": true}"#).unwrap();
         assert!(q.pinned_only);
         assert!(!q.include_deleted);
         assert!(!q.deleted_only);

@@ -56,9 +56,12 @@ pub struct ScreenPreview {
 #[tauri::command]
 pub fn grab_screen_preview<R: Runtime>(app: tauri::AppHandle<R>) -> Result<ScreenPreview> {
     let result = crate::grab::grab_primary_monitor()?;
-    let dir = app.path().app_data_dir().map_err(|e| crate::CaptureError::Os {
-        message: format!("app data dir: {e}"),
-    })?;
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| crate::CaptureError::Os {
+            message: format!("app data dir: {e}"),
+        })?;
     let preview_path = dir.join(".preview.png");
     std::fs::create_dir_all(&dir).map_err(|e| crate::CaptureError::Os {
         message: format!("create dir: {e}"),

@@ -70,7 +70,7 @@ describe('<SettingsWindow />', () => {
       }
       return Promise.resolve(undefined);
     });
-    const { container } = renderWithQuery(<SettingsWindow />);
+    renderWithQuery(<SettingsWindow />);
     // Wait for the initial query so the toggle reflects 'true'.
     await waitFor(() => expect(mockedInvoke).toHaveBeenCalled());
 

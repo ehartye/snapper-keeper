@@ -29,7 +29,10 @@ fn tray_icon_for(family: &str) -> Image<'static> {
 }
 
 #[tauri::command]
-fn set_tray_theme<R: tauri::Runtime>(app: tauri::AppHandle<R>, family: String) -> Result<(), String> {
+fn set_tray_theme<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    family: String,
+) -> Result<(), String> {
     let icon = tray_icon_for(&family);
     if let Some(tray) = app.tray_by_id("main") {
         tray.set_icon(Some(icon.clone()))

@@ -134,10 +134,7 @@ mod tests {
 
     #[test]
     fn serde_uses_kind_discriminator_in_kebab_case() {
-        let json = serde_json::to_string(&LibraryError::NotFound {
-            what: "x".into(),
-        })
-        .unwrap();
+        let json = serde_json::to_string(&LibraryError::NotFound { what: "x".into() }).unwrap();
         assert!(json.contains("\"kind\":\"not-found\""));
     }
 }
