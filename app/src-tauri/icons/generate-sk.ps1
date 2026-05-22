@@ -151,7 +151,7 @@ New-SkIcon `
     -TextColor ([System.Drawing.Color]::FromArgb(255, 9, 9, 11)) `
     -Rounded $false
 
-# Wabi-Sabi: vermillion hanko-red square (rounded), washi cream "SK" italic serif
+# Wabi-Sabi: vermillion hanko-red square (rounded), washi cream "SK" bold serif
 New-SkIcon `
     -OutPath (Join-Path $here 'sk-wabi-sabi.png') `
     -FontName 'Cormorant Garamond' `
