@@ -2,6 +2,7 @@ export interface Capture {
   id: string;
   file_path: string;
   annotated_path: string | null;
+  annotation_state: string | null;
   width: number;
   height: number;
   source_app: string | null;
