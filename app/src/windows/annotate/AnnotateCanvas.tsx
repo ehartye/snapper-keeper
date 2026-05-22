@@ -336,15 +336,27 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
                   height={preview.height}
                   fill="rgba(0, 0, 0, 0.45)"
                 />
-                <Rect
-                  x={preview.x}
-                  y={preview.y}
-                  width={preview.width}
-                  height={preview.height}
-                  stroke={confirmed ? '#22c55e' : '#3b82f6'}
-                  strokeWidth={confirmed ? 3 : 2}
-                  dash={confirmed ? undefined : [6, 3]}
-                />
+                {(() => {
+                  // Konva centers stroke on the path, so half the stroke
+                  // straddles INTO the kept region — and stage.toDataURL
+                  // with the crop bounds would bake that into the saved
+                  // PNG (visible as a thin green border on derivations).
+                  // Push the path outward by half a stroke so the stroke
+                  // sits entirely outside the kept region.
+                  const strokeW = confirmed ? 3 : 2;
+                  const half = strokeW / 2;
+                  return (
+                    <Rect
+                      x={preview.x - half}
+                      y={preview.y - half}
+                      width={preview.width + strokeW}
+                      height={preview.height + strokeW}
+                      stroke={confirmed ? '#22c55e' : '#3b82f6'}
+                      strokeWidth={strokeW}
+                      dash={confirmed ? undefined : [6, 3]}
+                    />
+                  );
+                })()}
               </Layer>
             );
           })()}
