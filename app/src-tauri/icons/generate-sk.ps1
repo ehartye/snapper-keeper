@@ -16,7 +16,12 @@ function New-SkIcon {
         [System.Drawing.Color]$BgFrom,
         [System.Drawing.Color]$BgTo,
         [System.Drawing.Color]$TextColor,
-        [bool]$Rounded
+        [bool]$Rounded,
+        [System.Drawing.Color]$GhostColor = [System.Drawing.Color]::Empty,
+        [int]$GhostOffsetX = 0,
+        [int]$GhostOffsetY = 0,
+        [System.Drawing.Color]$BorderColor = [System.Drawing.Color]::Empty,
+        [single]$TextRotation = 0
     )
 
     $size = 256
@@ -44,12 +49,18 @@ function New-SkIcon {
         $gradBrush = New-Object System.Drawing.Drawing2D.LinearGradientBrush $p1, $p2, $BgFrom, $BgTo
         $g.FillPath($gradBrush, $gp)
         $gradBrush.Dispose()
+        if ($BorderColor -ne [System.Drawing.Color]::Empty) {
+            $borderPen = New-Object System.Drawing.Pen $BorderColor, 8
+            $g.DrawPath($borderPen, $gp)
+            $borderPen.Dispose()
+        }
         $gp.Dispose()
     } else {
         $bgBrush = New-Object System.Drawing.SolidBrush $BgFrom
         $g.FillRectangle($bgBrush, $rect)
         $bgBrush.Dispose()
-        $borderPen = New-Object System.Drawing.Pen $TextColor, 8
+        $effectiveBorder = if ($BorderColor -ne [System.Drawing.Color]::Empty) { $BorderColor } else { $TextColor }
+        $borderPen = New-Object System.Drawing.Pen $effectiveBorder, 8
         $g.DrawRectangle($borderPen, $rect)
         $borderPen.Dispose()
     }
@@ -73,6 +84,24 @@ function New-SkIcon {
     $format.Alignment = [System.Drawing.StringAlignment]::Center
     $format.LineAlignment = [System.Drawing.StringAlignment]::Center
 
+    # Apply rotation around the icon center if requested.
+    if ($TextRotation -ne 0) {
+        $cx = $rect.X + $rect.Width / 2
+        $cy = $rect.Y + $rect.Height / 2
+        $g.TranslateTransform($cx, $cy)
+        $g.RotateTransform($TextRotation)
+        $g.TranslateTransform(-$cx, -$cy)
+    }
+
+    # Ghost pass — draw "SK" once in the offset/ghost color underneath.
+    if ($GhostColor -ne [System.Drawing.Color]::Empty) {
+        $ghostBrush = New-Object System.Drawing.SolidBrush $GhostColor
+        $ghostRect = New-Object System.Drawing.RectangleF ($rect.X + $GhostOffsetX), ($rect.Y - 8 + $GhostOffsetY), $rect.Width, $rect.Height
+        $g.DrawString('SK', $font, $ghostBrush, $ghostRect, $format)
+        $ghostBrush.Dispose()
+    }
+
+    # Foreground pass — primary text color on top.
     $textRect = New-Object System.Drawing.RectangleF $rect.X, ($rect.Y - 8), $rect.Width, $rect.Height
     $g.DrawString('SK', $font, $textBrush, $textRect, $format)
 
