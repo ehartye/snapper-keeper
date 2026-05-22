@@ -34,6 +34,22 @@ export function PenShape({ shape, draggable, onSelect, registerNode }: ShapeProp
         e.target.y(0);
         updateShape(shape.id, { points: pts });
       }}
+      onTransformEnd={() => {
+        const node = ref.current;
+        if (!node) return;
+        const tx = node.x();
+        const ty = node.y();
+        const sx = node.scaleX();
+        const sy = node.scaleY();
+        const pts = (shape.points ?? []).map((v, i) =>
+          i % 2 === 0 ? tx + v * sx : ty + v * sy,
+        );
+        node.x(0);
+        node.y(0);
+        node.scaleX(1);
+        node.scaleY(1);
+        updateShape(shape.id, { points: pts });
+      }}
     />
   );
 }

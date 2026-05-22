@@ -107,7 +107,16 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
     transformer.getLayer()?.batchDraw();
   }, [selectedId, shapes]);
 
-  const transformableTools = new Set(['rectangle', 'ellipse', 'blur', 'text']);
+  const transformableTools = new Set([
+    'rectangle',
+    'ellipse',
+    'blur',
+    'text',
+    'arrow',
+    'pen',
+    'highlighter',
+    'step-marker',
+  ]);
   const canTransformSelected =
     selectedShape !== null && transformableTools.has(selectedShape.tool);
 
