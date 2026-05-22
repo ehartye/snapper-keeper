@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { LogicalPosition } from '@tauri-apps/api/dpi';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 import {
   CAPTURE_FULL_SCREEN_EVENT,
@@ -38,6 +39,24 @@ export function LibraryWindow() {
 
   const [wizardDismissed, setWizardDismissed] = useState(false);
   const showWizard = !wizardDismissed && firstRun.data !== true;
+
+  // X button → hide to tray instead of destroying the webview. The library
+  // window owns the global hotkey listeners (capture, clipboard popup, etc.);
+  // if it gets destroyed those events have nowhere to go and Ctrl+Shift+V
+  // stops working. Quit via tray menu only.
+  useEffect(() => {
+    let cleanup: (() => void) | undefined;
+    getCurrentWindow()
+      .onCloseRequested(async (event) => {
+        event.preventDefault();
+        await getCurrentWindow().hide();
+      })
+      .then((fn) => {
+        cleanup = fn;
+      })
+      .catch((e) => console.error('library close listener failed', e));
+    return () => cleanup?.();
+  }, []);
 
   const refreshCaptures = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: ['captures'] });

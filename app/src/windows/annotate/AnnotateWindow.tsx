@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { path } from '@tauri-apps/api';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useQuery } from '@tanstack/react-query';
 import type Konva from 'konva';
 
@@ -32,6 +33,24 @@ export function AnnotateWindow() {
       })
       .catch((e) => console.error('annotate listen failed', e));
     return () => unlisten?.();
+  }, []);
+
+  // X button → hide instead of destroy, so the next time a thumbnail or the
+  // capture toolbar opens this window the listeners are still live.
+  useEffect(() => {
+    let cleanup: (() => void) | undefined;
+    getCurrentWindow()
+      .onCloseRequested(async (event) => {
+        event.preventDefault();
+        useAnnotateStore.getState().reset();
+        setCaptureId(null);
+        await getCurrentWindow().hide();
+      })
+      .then((fn) => {
+        cleanup = fn;
+      })
+      .catch((e) => console.error('annotate close listener failed', e));
+    return () => cleanup?.();
   }, []);
 
   const root = useQuery({
