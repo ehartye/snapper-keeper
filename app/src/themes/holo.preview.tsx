@@ -1,9 +1,9 @@
 /** Mockup of the .menu-divider rule defined in holo.css. Lives here so a
  *  future maintainer touching the divider visual updates both files in one
  *  place. Rendered inside the Settings theme picker card. */
-import type { DividerPreviewComponent } from '../lib/theme';
+import type { DividerPreviewProps } from '../lib/theme';
 
-const HoloDividerPreview: DividerPreviewComponent = ({ preview }) => {
+function HoloDividerPreview({ preview }: DividerPreviewProps) {
   const primary = preview.swatches[0]!;
   const accent2 = preview.swatches[1]!;
   const accent = preview.swatches[2]!;
@@ -18,6 +18,6 @@ const HoloDividerPreview: DividerPreviewComponent = ({ preview }) => {
       }}
     />
   );
-};
+}
 
 export default HoloDividerPreview;
