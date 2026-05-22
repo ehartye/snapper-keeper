@@ -76,7 +76,9 @@ pub fn capture_region(
     )
 }
 
-fn persist(
+/// Write a captured PNG to the library on disk and insert the row in SQLite.
+/// Public so it can be unit-tested without a real monitor.
+pub fn persist(
     db: &Arc<Db>,
     library_root: &std::path::Path,
     png_bytes: &[u8],
@@ -100,4 +102,58 @@ fn persist(
         },
     )?;
     Ok(row)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::foreground::ForegroundInfo;
+
+    fn fresh_db() -> Arc<Db> {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sk.db");
+        std::mem::forget(dir);
+        Arc::new(Db::open(&path).unwrap())
+    }
+
+    fn small_png() -> Vec<u8> {
+        // 2x1 red pixel encoded so write_atomic doesn't fall over.
+        let rgba = [255u8, 0, 0, 255, 255, 0, 0, 255];
+        crate::grab::encode_rgba_to_png(&rgba, 2, 1).unwrap()
+    }
+
+    #[test]
+    fn persist_writes_file_and_db_row() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = fresh_db();
+        let row = persist(
+            &db,
+            tmp.path(),
+            &small_png(),
+            2,
+            1,
+            Some("Mon0".into()),
+            Some(ForegroundInfo {
+                app_name: "Firefox".into(),
+                window_title: "github".into(),
+            }),
+        )
+        .unwrap();
+        assert_eq!(row.width, 2);
+        assert_eq!(row.height, 1);
+        assert_eq!(row.source_app.as_deref(), Some("Firefox"));
+        assert_eq!(row.source_window_title.as_deref(), Some("github"));
+        assert_eq!(row.monitor.as_deref(), Some("Mon0"));
+        assert!(tmp.path().join(&row.file_path).exists());
+    }
+
+    #[test]
+    fn persist_handles_missing_foreground_info() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = fresh_db();
+        let row = persist(&db, tmp.path(), &small_png(), 2, 1, None, None).unwrap();
+        assert!(row.source_app.is_none());
+        assert!(row.source_window_title.is_none());
+        assert!(row.monitor.is_none());
+    }
 }

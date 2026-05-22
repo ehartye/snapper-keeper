@@ -28,6 +28,21 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
 
+  ts-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run vitest across all packages + app
+        run: pnpm -r --filter "@snk/*" --filter @snk/app test
+
   rust-test:
     runs-on: ubuntu-latest
     steps:
@@ -45,6 +60,29 @@ jobs:
       - run: cargo fmt -- --check
       - run: cargo clippy --workspace --exclude snapper-keeper-app -- -D warnings
       - run: cargo test --workspace --exclude snapper-keeper-app
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Linux Tauri deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libxdo-dev libssl-dev
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --locked
+      - name: Run coverage on testable surface
+        # Excludes Tauri integration glue (plugins, command wrappers) and
+        # platform-bound code (hotkeys, watcher, paste, caret, grab, orchestrate,
+        # foreground) — those need a real Tauri runtime or live monitors/keyboard.
+        run: |
+          cargo llvm-cov --workspace --exclude snapper-keeper-app \
+            --ignore-filename-regex '(plugin\.rs|commands\.rs|caret\.rs|paste\.rs|watcher\.rs|hotkeys.src.lib\.rs|queue\.rs|build\.rs|foreground\.rs|capture.src.grab\.rs|capture.src.orchestrate\.rs)' \
+            --fail-under-lines 90 --summary-only
 
   build-app:
     needs: [lint-typecheck, rust-test]

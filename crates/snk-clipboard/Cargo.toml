@@ -31,3 +31,6 @@ windows = { version = "0.61", features = [
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = "0.24"
 core-foundation = "0.10"
+
+[dev-dependencies]
+serde_json = { workspace = true }

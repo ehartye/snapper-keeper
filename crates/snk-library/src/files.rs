@@ -70,4 +70,39 @@ mod tests {
         // tmp should be gone
         assert!(!full.with_extension("png.tmp").exists());
     }
+
+    #[test]
+    fn write_atomic_handles_extensionless_filenames() {
+        let dir = tempfile::tempdir().unwrap();
+        let rel = Path::new("captures/no-ext-file");
+        let full = write_atomic(dir.path(), rel, b"hi").unwrap();
+        assert!(full.exists());
+        assert_eq!(std::fs::read(&full).unwrap(), b"hi");
+    }
+
+    #[test]
+    fn write_atomic_overwrites_existing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let rel = Path::new("a.png");
+        write_atomic(dir.path(), rel, b"first").unwrap();
+        let full = write_atomic(dir.path(), rel, b"second").unwrap();
+        assert_eq!(std::fs::read(&full).unwrap(), b"second");
+    }
+
+    #[test]
+    fn clipboard_image_relative_path_uses_clipboard_year_month() {
+        let id = Uuid::now_v7();
+        let p = clipboard_image_relative_path(&id);
+        let s = p.to_string_lossy();
+        assert!(s.starts_with("clipboard/") || s.starts_with("clipboard\\"));
+        assert!(s.ends_with(".png"));
+    }
+
+    #[test]
+    fn relative_paths_embed_the_uuid_as_filename() {
+        let id = Uuid::now_v7();
+        let p = capture_relative_path(&id, "jpg");
+        let fname = p.file_name().unwrap().to_string_lossy().into_owned();
+        assert_eq!(fname, format!("{id}.jpg"));
+    }
 }

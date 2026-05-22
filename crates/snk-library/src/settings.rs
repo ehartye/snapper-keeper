@@ -95,4 +95,45 @@ mod tests {
         delete(&db, "temp.key").unwrap();
         assert_eq!(get(&db, "temp.key").unwrap(), None);
     }
+
+    #[test]
+    fn delete_unknown_key_is_a_noop() {
+        let db = fresh_db();
+        // Should not error even when the row doesn't exist.
+        delete(&db, "never.set").unwrap();
+    }
+
+    #[test]
+    fn get_returns_none_for_unset_key() {
+        let db = fresh_db();
+        assert_eq!(get(&db, "no.such").unwrap(), None);
+    }
+
+    #[test]
+    fn get_corrupt_json_returns_database_error() {
+        let db = fresh_db();
+        // Bypass set() to plant a literal that isn't valid JSON.
+        db.with_conn(|conn| {
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES (?1, ?2)",
+                rusqlite::params!["broken", "not-json{"],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+        match get(&db, "broken") {
+            Err(crate::LibraryError::Database { message, .. }) => {
+                assert!(message.contains("invalid JSON"));
+            }
+            other => panic!("expected Database error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn set_round_trips_complex_values() {
+        let db = fresh_db();
+        let v = json!({"a": 1, "b": [2, 3], "c": {"d": true}});
+        set(&db, "nested", &v).unwrap();
+        assert_eq!(get(&db, "nested").unwrap(), Some(v));
+    }
 }

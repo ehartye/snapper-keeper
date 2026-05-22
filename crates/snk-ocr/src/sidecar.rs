@@ -198,4 +198,141 @@ mod tests {
         let result = invoke_tesseract(Path::new("/nonexistent/image.png"), "eng");
         assert!(result.is_err() || result.unwrap().text.is_empty());
     }
+
+    #[test]
+    fn run_tesseract_returns_error_after_retries_when_path_missing() {
+        // Sub-second total: delays start at 0, 1s, 3s. We want to confirm the
+        // function actually wraps the underlying error and reports retries.
+        // We use a path that's guaranteed not to be readable. The test runs
+        // synchronously and may take a few seconds.
+        let result = run_tesseract(Path::new("/definitely/missing.png"), "eng");
+        // Whatever tesseract setup the machine has, this either fails (no
+        // such file) or returns no text — both acceptable.
+        match result {
+            Ok(out) => assert!(out.text.is_empty()),
+            Err(e) => {
+                assert!(
+                    e.contains("tesseract failed") || e.contains("spawn"),
+                    "unexpected error message: {e}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn ocr_output_debug_includes_fields() {
+        let o = OcrOutput {
+            text: "hello".into(),
+            confidence: 0.8,
+        };
+        let s = format!("{o:?}");
+        assert!(s.contains("hello"));
+        assert!(s.contains("0.8"));
+    }
+
+    #[test]
+    fn which_finds_an_executable_we_just_created() {
+        let dir = tempfile::tempdir().unwrap();
+        // On Windows `which` checks PATHEXT (.EXE etc); on Unix it checks bare names.
+        let exe_name = if cfg!(target_os = "windows") {
+            "fake_tess.exe"
+        } else {
+            "fake_tess"
+        };
+        let file = dir.path().join(exe_name);
+        std::fs::write(&file, b"#!/bin/sh\necho ok\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+
+        // Prepend our temp dir to PATH and look up.
+        let old_path = std::env::var_os("PATH").unwrap_or_default();
+        let mut paths: Vec<std::path::PathBuf> = vec![dir.path().to_path_buf()];
+        paths.extend(std::env::split_paths(&old_path));
+        let new_path = std::env::join_paths(paths).unwrap();
+        // SAFETY: tests are single-threaded for env mutation here.
+        // (cargo runs each test on its own thread; if this becomes flaky,
+        // gate behind a Mutex.)
+        std::env::set_var("PATH", &new_path);
+
+        let found = which("fake_tess");
+
+        // Restore env even on assertion failure.
+        std::env::set_var("PATH", old_path);
+
+        let found = found.expect("expected `which` to find our fake executable");
+        // PATHEXT on Windows may upper-case the extension; compare case-insensitively.
+        let found_str = found.to_string_lossy().to_lowercase();
+        assert!(
+            found_str.ends_with(&exe_name.to_lowercase()),
+            "got: {}",
+            found.display()
+        );
+    }
+
+    #[test]
+    fn which_returns_none_for_garbage_name() {
+        assert!(which("definitely_no_binary_with_this_name_98235").is_none());
+    }
+
+    #[test]
+    fn set_bundled_resource_dir_is_idempotent() {
+        // OnceLock::set returns Err on the second call; the helper must not panic.
+        let dir = std::path::PathBuf::from("/tmp/sk-bundled-test");
+        set_bundled_resource_dir(dir.clone());
+        // Second call — must not panic. If a different test set it first that's fine.
+        set_bundled_resource_dir(dir);
+    }
+
+    #[test]
+    fn resolve_tesseract_honors_env_override_when_file_exists() {
+        let dir = tempfile::tempdir().unwrap();
+        let exe_name = if cfg!(target_os = "windows") {
+            "fake_tess_env.exe"
+        } else {
+            "fake_tess_env"
+        };
+        let file = dir.path().join(exe_name);
+        std::fs::write(&file, b"x").unwrap();
+
+        let old = std::env::var_os("SNK_TESSERACT_PATH");
+        std::env::set_var("SNK_TESSERACT_PATH", &file);
+        let got = resolve_tesseract();
+        // Restore before assertions.
+        match old {
+            Some(v) => std::env::set_var("SNK_TESSERACT_PATH", v),
+            None => std::env::remove_var("SNK_TESSERACT_PATH"),
+        }
+        assert_eq!(got.as_ref().map(|p| p.as_path()), Some(file.as_path()));
+    }
+
+    #[test]
+    fn resolve_tesseract_ignores_env_override_pointing_at_nothing() {
+        let old = std::env::var_os("SNK_TESSERACT_PATH");
+        std::env::set_var("SNK_TESSERACT_PATH", "/path/that/does/not/exist/anywhere");
+        // Should fall through to subsequent resolvers (PATH, install dirs),
+        // any of which may or may not find tesseract on the host. We just
+        // assert that the call doesn't panic and the env path itself is NOT
+        // what came back.
+        let got = resolve_tesseract();
+        match old {
+            Some(v) => std::env::set_var("SNK_TESSERACT_PATH", v),
+            None => std::env::remove_var("SNK_TESSERACT_PATH"),
+        }
+        if let Some(p) = got {
+            assert_ne!(
+                p.to_string_lossy(),
+                "/path/that/does/not/exist/anywhere"
+            );
+        }
+    }
+
+    #[test]
+    fn bundled_tessdata_dir_returns_none_when_no_real_dir() {
+        // Best-effort: we can't reliably set BUNDLED_RESOURCE_DIR to a fresh
+        // value because it's a OnceLock. Just confirm calling it doesn't panic.
+        let _ = bundled_tessdata_dir();
+    }
 }

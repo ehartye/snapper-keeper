@@ -666,4 +666,237 @@ mod tests {
         assert!(!q.include_deleted);
         assert!(!q.deleted_only);
     }
+
+    fn mk(i: u32) -> NewCapture {
+        NewCapture {
+            file_path: PathBuf::from(format!("{i}.png")),
+            width: i,
+            height: i,
+            source_app: None,
+            source_window_title: None,
+            monitor: None,
+        }
+    }
+
+    #[test]
+    fn set_pinned_toggles_pinned_flag() {
+        let db = fresh_db();
+        let c = insert(&db, mk(1)).unwrap();
+        assert!(!c.pinned);
+
+        set_pinned(&db, &c.id, true).unwrap();
+        let after = get(&db, &c.id).unwrap();
+        assert!(after.pinned);
+
+        set_pinned(&db, &c.id, false).unwrap();
+        let again = get(&db, &c.id).unwrap();
+        assert!(!again.pinned);
+    }
+
+    #[test]
+    fn set_pinned_on_unknown_id_returns_not_found() {
+        let db = fresh_db();
+        match set_pinned(&db, "no-such-id", true) {
+            Err(crate::LibraryError::NotFound { .. }) => {}
+            other => panic!("expected NotFound, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn set_pinned_on_soft_deleted_returns_not_found() {
+        let db = fresh_db();
+        let c = insert(&db, mk(1)).unwrap();
+        soft_delete(&db, &c.id).unwrap();
+        match set_pinned(&db, &c.id, true) {
+            Err(crate::LibraryError::NotFound { .. }) => {}
+            other => panic!("expected NotFound, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn hard_delete_removes_row_and_works_on_soft_deleted() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = Db::open(&tmp.path().join("sk.db")).unwrap();
+
+        let c = insert(&db, mk(1)).unwrap();
+        // PNG file must exist for the unlink to fire its happy path; we
+        // still don't error if it's missing.
+        let png_path = tmp.path().join(&c.file_path);
+        std::fs::create_dir_all(png_path.parent().unwrap()).unwrap();
+        std::fs::write(&png_path, b"fake").unwrap();
+        assert!(png_path.is_file());
+
+        // Move to trash, then hard-delete — confirms the function reads the
+        // file path with no `deleted_at IS NULL` filter.
+        soft_delete(&db, &c.id).unwrap();
+        hard_delete(&db, tmp.path(), &c.id).unwrap();
+
+        // Row gone (get() filters out soft-deleted, so use a raw count).
+        let count: i64 = db
+            .with_conn(|conn| {
+                conn.query_row(
+                    "SELECT COUNT(*) FROM captures WHERE id = ?1",
+                    [&c.id],
+                    |r| r.get(0),
+                )
+                .map_err(Into::into)
+            })
+            .unwrap();
+        assert_eq!(count, 0);
+        assert!(!png_path.exists());
+    }
+
+    #[test]
+    fn hard_delete_unknown_id_returns_not_found() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = Db::open(&tmp.path().join("sk.db")).unwrap();
+        match hard_delete(&db, tmp.path(), "no-such-id") {
+            Err(crate::LibraryError::NotFound { .. }) => {}
+            other => panic!("expected NotFound, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn hard_delete_tolerates_missing_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = Db::open(&tmp.path().join("sk.db")).unwrap();
+        let c = insert(&db, mk(1)).unwrap();
+        // No file written on disk — hard_delete should still succeed.
+        hard_delete(&db, tmp.path(), &c.id).unwrap();
+    }
+
+    #[test]
+    fn hard_delete_also_removes_annotated_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = Db::open(&tmp.path().join("sk.db")).unwrap();
+        let c = insert(&db, mk(1)).unwrap();
+        let primary = tmp.path().join(&c.file_path);
+        std::fs::write(&primary, b"orig").unwrap();
+        let annotated_rel = "1.annotated.png";
+        let annotated_full = tmp.path().join(annotated_rel);
+        std::fs::write(&annotated_full, b"ann").unwrap();
+        set_annotated_path(&db, &c.id, annotated_rel).unwrap();
+
+        hard_delete(&db, tmp.path(), &c.id).unwrap();
+        assert!(!primary.exists());
+        assert!(!annotated_full.exists());
+    }
+
+    #[test]
+    fn purge_trash_only_removes_soft_deleted() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = Db::open(&tmp.path().join("sk.db")).unwrap();
+
+        let keep = insert(&db, mk(1)).unwrap();
+        let drop1 = insert(&db, mk(2)).unwrap();
+        let drop2 = insert(&db, mk(3)).unwrap();
+        std::fs::write(tmp.path().join(&drop1.file_path), b"x").unwrap();
+        std::fs::write(tmp.path().join(&drop2.file_path), b"x").unwrap();
+
+        soft_delete(&db, &drop1.id).unwrap();
+        soft_delete(&db, &drop2.id).unwrap();
+
+        let count = purge_trash(&db, tmp.path()).unwrap();
+        assert_eq!(count, 2);
+
+        // Kept row is still there
+        let alive = list(&db, ListCapturesQuery::default()).unwrap();
+        assert_eq!(alive.len(), 1);
+        assert_eq!(alive[0].id, keep.id);
+
+        // Trashed rows + their files are gone
+        let trash = list(
+            &db,
+            ListCapturesQuery {
+                deleted_only: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(trash.len(), 0);
+        assert!(!tmp.path().join(&drop1.file_path).exists());
+        assert!(!tmp.path().join(&drop2.file_path).exists());
+    }
+
+    #[test]
+    fn purge_trash_returns_zero_when_trash_is_empty() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = Db::open(&tmp.path().join("sk.db")).unwrap();
+        // No captures at all.
+        assert_eq!(purge_trash(&db, tmp.path()).unwrap(), 0);
+        // One alive capture, no trash — still zero.
+        let _ = insert(&db, mk(1)).unwrap();
+        assert_eq!(purge_trash(&db, tmp.path()).unwrap(), 0);
+    }
+
+    #[test]
+    fn list_before_cursor_returns_older_rows() {
+        let db = fresh_db();
+        let a = insert(&db, mk(1)).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        let b = insert(&db, mk(2)).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        let c = insert(&db, mk(3)).unwrap();
+
+        // "older than c" should return b then a.
+        let page = list(
+            &db,
+            ListCapturesQuery {
+                before: Some(c.created_at),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let ids: Vec<&str> = page.iter().map(|r| r.id.as_str()).collect();
+        assert_eq!(ids, vec![b.id.as_str(), a.id.as_str()]);
+    }
+
+    #[test]
+    fn list_respects_limit_clamping() {
+        let db = fresh_db();
+        for i in 0..5 {
+            insert(&db, mk(i)).unwrap();
+        }
+        // limit None → default 200, returns all 5.
+        let all = list(&db, ListCapturesQuery::default()).unwrap();
+        assert_eq!(all.len(), 5);
+        // limit Some(2) → exactly 2.
+        let two = list(
+            &db,
+            ListCapturesQuery {
+                limit: Some(2),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(two.len(), 2);
+        // limit Some(huge) → clamped to 1000 (we only have 5 so we get 5).
+        let huge = list(
+            &db,
+            ListCapturesQuery {
+                limit: Some(100_000),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(huge.len(), 5);
+    }
+
+    #[test]
+    fn annotated_relative_path_appends_annotated_segment() {
+        let out = annotated_relative_path("captures/2026/05/abc.png");
+        // ".annotated.png" suffix, same directory.
+        let s = out.to_string_lossy();
+        assert!(s.starts_with("captures/2026/05/") || s.starts_with("captures\\2026\\05\\"));
+        assert!(s.ends_with(".annotated.png"));
+    }
+
+    #[test]
+    fn get_returns_not_found_for_unknown_id() {
+        let db = fresh_db();
+        match get(&db, "no-such-id") {
+            Err(crate::LibraryError::NotFound { .. }) => {}
+            other => panic!("expected NotFound, got {other:?}"),
+        }
+    }
 }
