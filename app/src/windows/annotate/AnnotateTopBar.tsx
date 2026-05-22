@@ -82,7 +82,19 @@ export function AnnotateTopBar({ captureId, stageRef }: Props) {
       return;
     }
     try {
-      const blob = (await stage.toBlob({ pixelRatio: 1 / (stage.scaleX() || 1) })) as Blob | null;
+      const s = stage.scaleX() || 1;
+      // Mirror exportPng: when a crop is confirmed, copy only the kept
+      // region. Otherwise we'd grab the whole stage including the
+      // dim-outside mask, which is the opposite of what the user wants.
+      const blob = (await (cropRegion && cropConfirmed
+        ? stage.toBlob({
+            x: cropRegion.x * s,
+            y: cropRegion.y * s,
+            width: cropRegion.width * s,
+            height: cropRegion.height * s,
+            pixelRatio: 1 / s,
+          })
+        : stage.toBlob({ pixelRatio: 1 / s }))) as Blob | null;
       if (!blob) throw new Error('encode failed');
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
       flashCopy('ok');
@@ -90,7 +102,7 @@ export function AnnotateTopBar({ captureId, stageRef }: Props) {
       console.error('copy failed', e);
       flashCopy('err');
     }
-  }, [stageRef, flashCopy]);
+  }, [stageRef, flashCopy, cropRegion, cropConfirmed]);
 
   const handleDone = useCallback(async () => {
     useAnnotateStore.getState().reset();

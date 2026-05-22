@@ -286,6 +286,44 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
           </Layer>
           {cropRegion && (
             <Layer listening={false}>
+              {cropConfirmed && (
+                <>
+                  {/* Dim everything outside the confirmed crop so it's
+                      visually clear what will and won't be in the saved
+                      PNG. The four rects cover the top/bottom/left/right
+                      bands around the kept region. Export uses the same
+                      crop bounds, so these dimmed pixels never appear
+                      in the output file. */}
+                  <Rect
+                    x={0}
+                    y={0}
+                    width={imageWidth}
+                    height={cropRegion.y}
+                    fill="rgba(0, 0, 0, 0.45)"
+                  />
+                  <Rect
+                    x={0}
+                    y={cropRegion.y + cropRegion.height}
+                    width={imageWidth}
+                    height={Math.max(0, imageHeight - (cropRegion.y + cropRegion.height))}
+                    fill="rgba(0, 0, 0, 0.45)"
+                  />
+                  <Rect
+                    x={0}
+                    y={cropRegion.y}
+                    width={cropRegion.x}
+                    height={cropRegion.height}
+                    fill="rgba(0, 0, 0, 0.45)"
+                  />
+                  <Rect
+                    x={cropRegion.x + cropRegion.width}
+                    y={cropRegion.y}
+                    width={Math.max(0, imageWidth - (cropRegion.x + cropRegion.width))}
+                    height={cropRegion.height}
+                    fill="rgba(0, 0, 0, 0.45)"
+                  />
+                </>
+              )}
               <Rect
                 x={cropRegion.x}
                 y={cropRegion.y}
