@@ -44,6 +44,9 @@ importers:
       '@fontsource/archivo':
         specifier: ^5.2.8
         version: 5.2.8
+      '@fontsource/bebas-neue':
+        specifier: ^5.2.7
+        version: 5.2.7
       '@fontsource/big-shoulders-display':
         specifier: ^5.2.5
         version: 5.2.5
@@ -59,6 +62,9 @@ importers:
       '@fontsource/ibm-plex-mono':
         specifier: ^5.2.7
         version: 5.2.7
+      '@fontsource/karla':
+        specifier: ^5.2.8
+        version: 5.2.8
       '@fontsource/rubik-bubbles':
         specifier: ^5.2.7
         version: 5.2.7
@@ -541,6 +547,9 @@ packages:
   '@fontsource/archivo@5.2.8':
     resolution: {integrity: sha512-Fc4yuMt85MmcYooUVpYHAJRJTymPv2+J9HsMP2f5mxR/0pIWgE2V5XfgNTavPpklX2rJFprdT36iE6Rr8ds9MA==}
 
+  '@fontsource/bebas-neue@5.2.7':
+    resolution: {integrity: sha512-DsmBrmq55d9BCU0mt4DT4RZDdH8vhWRKEUOfbuNB1EEjMuwbtFvM8N+3gIlkYSFbsb10P8Q19BV5OdpMu2h0fA==}
+
   '@fontsource/big-shoulders-display@5.2.5':
     resolution: {integrity: sha512-qqqqNaT2DRcrpytJ82ZjFeDsQFdrncGna3OqLS+F9XwOS65rxOnXFBgnubh3hQVj8RzUS/LQNVtUXvdsZLKtkA==}
 
@@ -555,6 +564,9 @@ packages:
 
   '@fontsource/ibm-plex-mono@5.2.7':
     resolution: {integrity: sha512-MKAb8qV+CaiMQn2B0dIi1OV3565NYzp3WN5b4oT6LTkk+F0jR6j0ZN+5BKJiIhffDC3rtBULsYZE65+0018z9w==}
+
+  '@fontsource/karla@5.2.8':
+    resolution: {integrity: sha512-uZMA4ugNcHFYMpjr/9FIHQC3ldtILlqPdK3f4P9XInDgRL0NxdIyRwH9MuGZUT7sdup0kshk9zsGXitq1xpFAw==}
 
   '@fontsource/rubik-bubbles@5.2.7':
     resolution: {integrity: sha512-oxEY6N9aZdsY5mn1VQwb2ZvHA+gZCcWKFDO0uonbnfWBN92auBdeSB7SaZ6tE9NrhJs6b5IHu+/w1rit0t/frQ==}
@@ -2746,6 +2758,8 @@ snapshots:
 
   '@fontsource/archivo@5.2.8': {}
 
+  '@fontsource/bebas-neue@5.2.7': {}
+
   '@fontsource/big-shoulders-display@5.2.5': {}
 
   '@fontsource/bungee@5.2.7': {}
@@ -2755,6 +2769,8 @@ snapshots:
   '@fontsource/fredoka@5.2.10': {}
 
   '@fontsource/ibm-plex-mono@5.2.7': {}
+
+  '@fontsource/karla@5.2.8': {}
 
   '@fontsource/rubik-bubbles@5.2.7': {}
 

@@ -130,6 +130,23 @@ export const THEME_FAMILIES = {
       swatchShape: 'round',
     },
   },
+  riso: {
+    label: 'Risograph Zine',
+    tagline: 'Duotone print plus intentional misregistration. Fluorescent inks, halftone dots.',
+    preview: {
+      swatches: ['#ff5589', '#1f4587', '#3d7e47', '#d4a024'],
+      bgLight: '#f5f0e5',
+      bgDark: '#0d0d0d',
+      fgLight: '#1a1f2a',
+      fgDark: '#fbf7ed',
+      mutedLight: '#5a6478',
+      mutedDark: '#8a7a6c',
+      displayFont: "'Bebas Neue', sans-serif",
+      bodyFont: "'Karla', sans-serif",
+      shape: 'card',
+      swatchShape: 'square',
+    },
+  },
 } as const satisfies Record<string, FamilyDef>;
 
 export type ThemeFamily = keyof typeof THEME_FAMILIES;

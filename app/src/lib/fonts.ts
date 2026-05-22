@@ -43,3 +43,11 @@ import '@fontsource/cormorant-garamond/latin-400.css';
 import '@fontsource/cormorant-garamond/latin-400-italic.css';
 import '@fontsource/cormorant-garamond/latin-500.css';
 import '@fontsource/cormorant-garamond/latin-600.css';
+
+// Risograph Zine: Bebas Neue (display, condensed bold) + Karla (body, humanist sans)
+import '@fontsource/bebas-neue/latin-400.css';
+import '@fontsource/karla/latin-400.css';
+import '@fontsource/karla/latin-400-italic.css';
+import '@fontsource/karla/latin-500.css';
+import '@fontsource/karla/latin-600.css';
+import '@fontsource/karla/latin-700.css';

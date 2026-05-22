@@ -1,0 +1,120 @@
+/* ========================================================================
+ *  RISOGRAPH ZINE — duotone print + intentional misregistration.
+ *  Light: cream zine paper, federal blue + fluorescent pink inks.
+ *  Dark:  photocopy at midnight — neon inks on jet black.
+ *
+ *  Misregistration is a feature, not a glitch: display headlines and the
+ *  menu divider both carry a 2px color ghost as a default rule.
+ * ====================================================================== */
+
+html[data-theme='riso-light'] {
+  --bg: #f5f0e5;
+  --bg-soft: #ebe5d4;
+  --surface: #fbf7ed;
+  --surface-2: #efe9d6;
+  --border: #1f4587;
+  --text: #1a1f2a;
+  --text-muted: #5a6478;
+  --primary: #ff5589;
+  --accent: #1f4587;
+  --accent-2: #3d7e47;
+  --accent-3: #d4a024;
+  --accent-4: #ff5589;
+  --danger: #c5304a;
+  --display-font: 'Bebas Neue', 'Oswald', sans-serif;
+  --body-font: 'Karla', system-ui, sans-serif;
+  --halo: none;
+  --grain: none;
+
+  /* Per-family tokens used by bespoke rules below. */
+  --riso-ghost: var(--accent);    /* second ink color used for misreg shadows */
+  --riso-dot:   rgba(31, 69, 135, 0.07);
+}
+
+html[data-theme='riso-dark'] {
+  --bg: #0d0d0d;
+  --bg-soft: #161616;
+  --surface: #1f1f1f;
+  --surface-2: #2a2a2a;
+  --border: #ff3d8c;
+  --text: #fbf7ed;
+  --text-muted: #8a7a6c;
+  --primary: #ff3d8c;
+  --accent: #00d4e8;
+  --accent-2: #4eff88;
+  --accent-3: #ffe04a;
+  --accent-4: #ff3d8c;
+  --danger: #ff3d8c;
+  --display-font: 'Bebas Neue', 'Oswald', sans-serif;
+  --body-font: 'Karla', system-ui, sans-serif;
+  --halo: none;
+  --grain: none;
+
+  --riso-ghost: var(--accent);
+  --riso-dot:   rgba(255, 61, 140, 0.08);
+}
+
+/* Halftone dot pattern overlay on the body — subtle, visible under zoom. */
+html[data-theme^='riso'] body {
+  background-image: radial-gradient(circle, var(--riso-dot) 1.5px, transparent 2px);
+  background-size: 8px 8px;
+  background-attachment: fixed;
+}
+
+/* Display text — Bebas Neue, condensed, all-caps, with the misregistration
+   ghost as a default rule. */
+html[data-theme^='riso'] .font-display {
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-shadow: 2px 1px 0 var(--riso-ghost);
+}
+
+html[data-theme^='riso'] body {
+  font-weight: 500;
+}
+
+/* Shimmer takes the misregistration treatment instead of an animated gradient:
+   primary fill + ghost shadow. */
+html[data-theme^='riso'] .holo-shimmer {
+  background-image: linear-gradient(90deg, var(--primary), var(--primary));
+  text-shadow: 2px 1px 0 var(--riso-ghost);
+}
+
+/* Divider — two parallel hairlines, intentionally misregistered.
+   Top line is --primary (pink), bottom line is --accent (blue/cyan)
+   offset 2px right + 2px down. */
+html[data-theme^='riso'] .menu-divider {
+  position: relative;
+  height: 12px;
+  background-image: none;
+}
+html[data-theme^='riso'] .menu-divider::before,
+html[data-theme^='riso'] .menu-divider::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1.5px;
+}
+html[data-theme^='riso'] .menu-divider::before {
+  background: var(--primary);
+  top: 5px;
+  opacity: 0.85;
+}
+html[data-theme^='riso'] .menu-divider::after {
+  background: var(--accent);
+  top: 7px;
+  left: 2px;
+  opacity: 0.85;
+}
+html[data-theme='riso-dark'] .menu-divider::before,
+html[data-theme='riso-dark'] .menu-divider::after {
+  opacity: 0.95;
+}
+
+/* Scrollbar — flat, no rounding, with the primary ink. */
+html[data-theme^='riso'] ::-webkit-scrollbar-thumb {
+  background: var(--primary);
+  border-radius: 0;
+}
