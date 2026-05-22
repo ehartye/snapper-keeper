@@ -1,9 +1,9 @@
 /** Mockup of the .menu-divider rule defined in atomic.css.
  *  4-point compass starburst in mustard/marigold, masked by the card bg
  *  to occlude the line behind it — Saul Bass mid-century mark. */
-import type { DividerPreviewComponent } from '../lib/theme';
+import type { DividerPreviewProps } from '../lib/theme';
 
-const AtomicDividerPreview: DividerPreviewComponent = ({ mode, preview }) => {
+function AtomicDividerPreview({ mode, preview }: DividerPreviewProps) {
   const isDark = mode === 'dark';
   const fg = isDark ? preview.fgDark : preview.fgLight;
   const bg = isDark ? preview.bgDark : preview.bgLight;
@@ -37,6 +37,6 @@ const AtomicDividerPreview: DividerPreviewComponent = ({ mode, preview }) => {
       />
     </div>
   );
-};
+}
 
 export default AtomicDividerPreview;

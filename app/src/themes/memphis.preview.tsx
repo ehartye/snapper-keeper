@@ -1,7 +1,7 @@
 /** Mockup of the .menu-divider rule defined in memphis.css. */
-import type { DividerPreviewComponent } from '../lib/theme';
+import type { DividerPreviewProps } from '../lib/theme';
 
-const MemphisDividerPreview: DividerPreviewComponent = ({ mode, preview }) => {
+function MemphisDividerPreview({ mode, preview }: DividerPreviewProps) {
   const fg = mode === 'dark' ? preview.fgDark : preview.fgLight;
   const stroke = encodeURIComponent(fg);
   return (
@@ -14,6 +14,6 @@ const MemphisDividerPreview: DividerPreviewComponent = ({ mode, preview }) => {
       }}
     />
   );
-};
+}
 
 export default MemphisDividerPreview;
