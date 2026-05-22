@@ -5,6 +5,7 @@ import type Konva from 'konva';
 import { saveAnnotation } from '@snk/annotate';
 
 import { useAnnotateStore } from './store';
+import { confirmDiscardIfDirty } from './dirtyGuard';
 
 interface Props {
   captureId: string;
@@ -113,6 +114,7 @@ export function AnnotateTopBar({ captureId, stageRef }: Props) {
   }, [stageRef, flashCopy, cropRegion, cropConfirmed]);
 
   const handleDone = useCallback(async () => {
+    if (!confirmDiscardIfDirty()) return;
     useAnnotateStore.getState().reset();
     const win = getCurrentWindow();
     await win.hide();

@@ -79,6 +79,9 @@ describe('<AnnotateTopBar />', () => {
   });
 
   it('Done hides the window and resets the store', async () => {
+    // Dirty state triggers the discard-confirm prompt; simulate the user
+    // choosing to discard so handleDone proceeds to reset.
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     useAnnotateStore.getState().addShape({
       id: 'sh-1',
       tool: 'rectangle',
@@ -95,5 +98,6 @@ describe('<AnnotateTopBar />', () => {
       fireEvent.click(screen.getByText('done'));
     });
     expect(useAnnotateStore.getState().shapes).toHaveLength(0);
+    confirmSpy.mockRestore();
   });
 });

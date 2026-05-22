@@ -10,6 +10,7 @@ import { getCapture } from '@snk/library';
 import { captureAssetUrl } from '../../lib/assetUrl';
 import { queryKeys } from '../../lib/queryKeys';
 import { useAnnotateStore } from './store';
+import { confirmDiscardIfDirty } from './dirtyGuard';
 import { AnnotateToolbar } from './AnnotateToolbar';
 import { AnnotateCanvas } from './AnnotateCanvas';
 import { AnnotateTopBar } from './AnnotateTopBar';
@@ -42,6 +43,7 @@ export function AnnotateWindow() {
     getCurrentWindow()
       .onCloseRequested(async (event) => {
         event.preventDefault();
+        if (!confirmDiscardIfDirty()) return;
         useAnnotateStore.getState().reset();
         setCaptureId(null);
         await getCurrentWindow().hide();

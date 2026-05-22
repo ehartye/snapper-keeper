@@ -4,6 +4,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import type Konva from 'konva';
 
 import { useAnnotateStore } from './store';
+import { confirmDiscardIfDirty } from './dirtyGuard';
 import { ShapeRenderer } from './shapes';
 import { useDrawing } from './useDrawing';
 
@@ -119,6 +120,7 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
           setSelectedId(null);
           return;
         }
+        if (!confirmDiscardIfDirty()) return;
         useAnnotateStore.getState().reset();
         getCurrentWindow().hide();
         return;
