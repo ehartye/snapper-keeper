@@ -13,12 +13,20 @@ const TRAY_HOLO_PNG: &[u8] = include_bytes!("../icons/sk-holo.png");
 const TRAY_MEMPHIS_PNG: &[u8] = include_bytes!("../icons/sk-memphis.png");
 const TRAY_ROBOTIC_PNG: &[u8] = include_bytes!("../icons/sk-robotic.png");
 const TRAY_CORPORATE_PNG: &[u8] = include_bytes!("../icons/sk-corporate.png");
+const TRAY_WABI_SABI_PNG: &[u8] = include_bytes!("../icons/sk-wabi-sabi.png");
+const TRAY_RISO_PNG: &[u8] = include_bytes!("../icons/sk-riso.png");
+const TRAY_CONSTRUCTIVIST_PNG: &[u8] = include_bytes!("../icons/sk-constructivist.png");
+const TRAY_ATOMIC_PNG: &[u8] = include_bytes!("../icons/sk-atomic.png");
 
 fn tray_icon_for(family: &str) -> Image<'static> {
     let bytes = match family {
         "memphis" => TRAY_MEMPHIS_PNG,
         "robotic" => TRAY_ROBOTIC_PNG,
         "corporate" => TRAY_CORPORATE_PNG,
+        "wabi-sabi" => TRAY_WABI_SABI_PNG,
+        "riso" => TRAY_RISO_PNG,
+        "constructivist" => TRAY_CONSTRUCTIVIST_PNG,
+        "atomic" => TRAY_ATOMIC_PNG,
         _ => TRAY_HOLO_PNG,
     };
     let img = image::load_from_memory(bytes)
