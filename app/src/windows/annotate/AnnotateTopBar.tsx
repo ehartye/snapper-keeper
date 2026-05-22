@@ -2,10 +2,11 @@ import { useCallback, useRef, useState, type MutableRefObject } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type Konva from 'konva';
 
-import { saveAnnotation } from '@snk/annotate';
+import { saveAnnotation, deriveCapture, type AnnotationState } from '@snk/annotate';
 
 import { useAnnotateStore } from './store';
 import { confirmDiscardIfDirty } from './dirtyGuard';
+import { shiftShapesForCrop } from './cropDerivation';
 
 interface Props {
   captureId: string;
@@ -67,13 +68,38 @@ export function AnnotateTopBar({ captureId, stageRef }: Props) {
       const png = await exportPng();
       if (!png) throw new Error('nothing to save');
       const store = useAnnotateStore.getState();
-      const state = {
-        version: 1 as const,
-        shapes: store.shapes,
-        crop_region: store.cropRegion,
-        crop_confirmed: store.cropConfirmed,
-      };
-      await saveAnnotation(captureId, png, state);
+      const hasCrop =
+        store.cropRegion !== null && store.cropConfirmed;
+      if (hasCrop && store.cropRegion) {
+        // Crop-save: build a NEW capture from the parent. Shape
+        // coordinates need to land relative to the cropped image's
+        // origin, and the saved state has no further crop region of
+        // its own (the crop is baked into the file).
+        const shifted: AnnotationState = {
+          version: 1,
+          shapes: shiftShapesForCrop(store.shapes, {
+            x: store.cropRegion.x,
+            y: store.cropRegion.y,
+          }),
+          crop_region: null,
+          crop_confirmed: false,
+        };
+        await deriveCapture(
+          captureId,
+          png,
+          Math.round(store.cropRegion.width),
+          Math.round(store.cropRegion.height),
+          shifted,
+        );
+      } else {
+        const state: AnnotationState = {
+          version: 1,
+          shapes: store.shapes,
+          crop_region: store.cropRegion,
+          crop_confirmed: store.cropConfirmed,
+        };
+        await saveAnnotation(captureId, png, state);
+      }
       useAnnotateStore.getState().markClean();
       flashSave('ok');
     } catch (e) {
