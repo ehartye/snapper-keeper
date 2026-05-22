@@ -370,12 +370,25 @@ function, fully unit-tested, no side effects.
 ## Task 3: Add the `derive_capture` Tauri command
 
 **Files:**
+- Modify: `crates/snk-annotate/Cargo.toml`
 - Modify: `crates/snk-annotate/src/commands.rs`
 - Modify: `crates/snk-annotate/src/plugin.rs`
 - Modify: `crates/snk-annotate/build.rs`
 - Modify: `crates/snk-annotate/permissions/default.toml`
 
 This file isn't unit-tested (it's Tauri integration glue, same as `save_annotation`). Verification: `cargo build -p snapper-keeper-app`, `cargo clippy --workspace --exclude snapper-keeper-app -- -D warnings`, `cargo fmt --all -- --check`, `cargo test -p snk-library`.
+
+**Step 0: Add the uuid workspace dependency**
+
+`derive_capture` uses `uuid::Uuid::now_v7()`, but `crates/snk-annotate/Cargo.toml` does not yet depend on the `uuid` crate. The workspace root already declares `uuid = { version = "1", features = ["v7", "serde"] }`, so the per-crate addition is a single line.
+
+In `crates/snk-annotate/Cargo.toml`, under the `[dependencies]` block, add:
+
+```toml
+uuid.workspace = true
+```
+
+Place it alphabetically among the existing workspace-inherited deps (e.g. next to `tauri.workspace = true` or wherever fits the crate's current style).
 
 **Step 1: Add the new command to the COMMANDS array**
 
