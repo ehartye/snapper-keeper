@@ -25,6 +25,7 @@ function useFlash(): [ButtonStatus, (s: 'ok' | 'err') => void] {
 export function AnnotateTopBar({ captureId, stageRef }: Props) {
   const saving = useRef(false);
   const cropRegion = useAnnotateStore((s) => s.cropRegion);
+  const cropConfirmed = useAnnotateStore((s) => s.cropConfirmed);
   const [saveStatus, flashSave] = useFlash();
   const [copyStatus, flashCopy] = useFlash();
 
@@ -33,13 +34,16 @@ export function AnnotateTopBar({ captureId, stageRef }: Props) {
     if (!stage) return null;
 
     let dataUrl: string;
-    if (cropRegion) {
+    if (cropRegion && cropConfirmed) {
+      // Konva stage.toDataURL takes screen-pixel x/y/w/h (post-scale), but
+      // cropRegion is stored in image coords. Multiply by the stage scale.
+      const s = stage.scaleX() || 1;
       dataUrl = stage.toDataURL({
-        x: cropRegion.x,
-        y: cropRegion.y,
-        width: cropRegion.width,
-        height: cropRegion.height,
-        pixelRatio: 1 / (stage.scaleX() || 1),
+        x: cropRegion.x * s,
+        y: cropRegion.y * s,
+        width: cropRegion.width * s,
+        height: cropRegion.height * s,
+        pixelRatio: 1 / s,
       });
     } else {
       dataUrl = stage.toDataURL({ pixelRatio: 1 / (stage.scaleX() || 1) });
@@ -53,7 +57,7 @@ export function AnnotateTopBar({ captureId, stageRef }: Props) {
       bytes[i] = binary.charCodeAt(i);
     }
     return Array.from(bytes);
-  }, [stageRef, cropRegion]);
+  }, [stageRef, cropRegion, cropConfirmed]);
 
   const handleSave = useCallback(async () => {
     if (saving.current) return;

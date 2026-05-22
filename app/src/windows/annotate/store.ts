@@ -37,6 +37,7 @@ interface AnnotateState {
   redoStack: AnnotationShape[][];
   nextStepNumber: number;
   cropRegion: CropRegion | null;
+  cropConfirmed: boolean;
   isDrawing: boolean;
   currentShape: AnnotationShape | null;
   selectedId: string | null;
@@ -50,6 +51,7 @@ interface AnnotateState {
   undo: () => void;
   redo: () => void;
   setCropRegion: (region: CropRegion | null) => void;
+  confirmCrop: () => void;
   setIsDrawing: (drawing: boolean) => void;
   setCurrentShape: (shape: AnnotationShape | null) => void;
   setSelectedId: (id: string | null) => void;
@@ -65,6 +67,7 @@ const initialState = {
   redoStack: [] as AnnotationShape[][],
   nextStepNumber: 1,
   cropRegion: null as CropRegion | null,
+  cropConfirmed: false,
   isDrawing: false,
   currentShape: null as AnnotationShape | null,
   selectedId: null as string | null,
@@ -128,7 +131,10 @@ export const useAnnotateStore = create<AnnotateState>((set, get) => ({
     });
   },
 
-  setCropRegion: (region) => set({ cropRegion: region }),
+  // Drawing a fresh region resets the confirmation; the user must
+  // explicitly Apply it before it counts at export time.
+  setCropRegion: (region) => set({ cropRegion: region, cropConfirmed: false }),
+  confirmCrop: () => set({ cropConfirmed: true, tool: 'select' }),
   setIsDrawing: (drawing) => set({ isDrawing: drawing }),
   setCurrentShape: (shape) => set({ currentShape: shape }),
   setSelectedId: (id) => set({ selectedId: id }),

@@ -35,8 +35,11 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
   const shapes = useAnnotateStore((s) => s.shapes);
   const currentShape = useAnnotateStore((s) => s.currentShape);
   const cropRegion = useAnnotateStore((s) => s.cropRegion);
+  const cropConfirmed = useAnnotateStore((s) => s.cropConfirmed);
   const selectedId = useAnnotateStore((s) => s.selectedId);
   const setSelectedId = useAnnotateStore((s) => s.setSelectedId);
+  const setCropRegion = useAnnotateStore((s) => s.setCropRegion);
+  const confirmCrop = useAnnotateStore((s) => s.confirmCrop);
   const deleteShape = useAnnotateStore((s) => s.deleteShape);
   const updateShape = useAnnotateStore((s) => s.updateShape);
 
@@ -260,9 +263,9 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
                 y={cropRegion.y}
                 width={cropRegion.width}
                 height={cropRegion.height}
-                stroke="#3b82f6"
-                strokeWidth={2}
-                dash={[6, 3]}
+                stroke={cropConfirmed ? '#22c55e' : '#3b82f6'}
+                strokeWidth={cropConfirmed ? 3 : 2}
+                dash={cropConfirmed ? undefined : [6, 3]}
               />
             </Layer>
           )}
@@ -307,6 +310,29 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
           >
             edit
           </button>
+        )}
+
+        {cropRegion && !cropConfirmed && (
+          <div
+            className="absolute flex gap-1.5 pointer-events-auto"
+            style={{
+              left: (cropRegion.x + cropRegion.width) * scale - 110,
+              top: (cropRegion.y + cropRegion.height) * scale + 6,
+            }}
+          >
+            <button
+              onClick={() => setCropRegion(null)}
+              className="font-display text-[10px] uppercase tracking-wider px-3 py-1.5 bg-surface text-fg border-2 border-border shadow-[2px_2px_0_0_var(--border)] hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[0_0_0_0_var(--border)] transition-transform"
+            >
+              cancel
+            </button>
+            <button
+              onClick={confirmCrop}
+              className="font-display text-[10px] uppercase tracking-wider px-3 py-1.5 bg-accent-3 text-bg border-2 border-border shadow-[2px_2px_0_0_var(--border)] hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[0_0_0_0_var(--border)] transition-transform"
+            >
+              apply ✓
+            </button>
+          </div>
         )}
       </div>
     </div>
