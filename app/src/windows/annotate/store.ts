@@ -28,13 +28,21 @@ interface CropRegion {
   height: number;
 }
 
+// One snapshot per undoable action. Crop draw/confirm/cancel mutate fields
+// outside `shapes`, so the history stack has to carry them too.
+interface HistoryEntry {
+  shapes: AnnotationShape[];
+  cropRegion: CropRegion | null;
+  cropConfirmed: boolean;
+}
+
 interface AnnotateState {
   tool: AnnotationTool;
   color: string;
   strokePreset: StrokePreset;
   shapes: AnnotationShape[];
-  undoStack: AnnotationShape[][];
-  redoStack: AnnotationShape[][];
+  undoStack: HistoryEntry[];
+  redoStack: HistoryEntry[];
   nextStepNumber: number;
   cropRegion: CropRegion | null;
   cropConfirmed: boolean;
@@ -65,8 +73,8 @@ const initialState = {
   color: '#ef4444',
   strokePreset: 'medium' as StrokePreset,
   shapes: [] as AnnotationShape[],
-  undoStack: [] as AnnotationShape[][],
-  redoStack: [] as AnnotationShape[][],
+  undoStack: [] as HistoryEntry[],
+  redoStack: [] as HistoryEntry[],
   nextStepNumber: 1,
   cropRegion: null as CropRegion | null,
   cropConfirmed: false,
@@ -76,6 +84,18 @@ const initialState = {
   sourceImage: null as HTMLImageElement | null,
 };
 
+function snapshot(s: {
+  shapes: AnnotationShape[];
+  cropRegion: CropRegion | null;
+  cropConfirmed: boolean;
+}): HistoryEntry {
+  return {
+    shapes: s.shapes,
+    cropRegion: s.cropRegion,
+    cropConfirmed: s.cropConfirmed,
+  };
+}
+
 export const useAnnotateStore = create<AnnotateState>((set, get) => ({
   ...initialState,
 
@@ -84,60 +104,82 @@ export const useAnnotateStore = create<AnnotateState>((set, get) => ({
   setStrokePreset: (preset) => set({ strokePreset: preset }),
 
   addShape: (shape) => {
-    const { shapes, nextStepNumber } = get();
+    const state = get();
     set({
-      undoStack: [...get().undoStack, shapes],
+      undoStack: [...state.undoStack, snapshot(state)],
       redoStack: [],
-      shapes: [...shapes, shape],
-      nextStepNumber: shape.tool === 'step-marker' ? nextStepNumber + 1 : nextStepNumber,
+      shapes: [...state.shapes, shape],
+      nextStepNumber:
+        shape.tool === 'step-marker' ? state.nextStepNumber + 1 : state.nextStepNumber,
     });
   },
 
   updateShape: (id, patch) => {
-    const { shapes } = get();
+    const state = get();
     set({
-      undoStack: [...get().undoStack, shapes],
+      undoStack: [...state.undoStack, snapshot(state)],
       redoStack: [],
-      shapes: shapes.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+      shapes: state.shapes.map((s) => (s.id === id ? { ...s, ...patch } : s)),
     });
   },
 
   deleteShape: (id) => {
-    const { shapes, selectedId } = get();
+    const state = get();
     set({
-      undoStack: [...get().undoStack, shapes],
+      undoStack: [...state.undoStack, snapshot(state)],
       redoStack: [],
-      shapes: shapes.filter((s) => s.id !== id),
-      selectedId: selectedId === id ? null : selectedId,
+      shapes: state.shapes.filter((s) => s.id !== id),
+      selectedId: state.selectedId === id ? null : state.selectedId,
     });
   },
 
   undo: () => {
-    const { undoStack, shapes } = get();
-    if (undoStack.length === 0) return;
-    const prev = undoStack[undoStack.length - 1]!;
+    const state = get();
+    if (state.undoStack.length === 0) return;
+    const prev = state.undoStack[state.undoStack.length - 1]!;
     set({
-      undoStack: undoStack.slice(0, -1),
-      redoStack: [...get().redoStack, shapes],
-      shapes: prev,
+      undoStack: state.undoStack.slice(0, -1),
+      redoStack: [...state.redoStack, snapshot(state)],
+      shapes: prev.shapes,
+      cropRegion: prev.cropRegion,
+      cropConfirmed: prev.cropConfirmed,
     });
   },
 
   redo: () => {
-    const { redoStack, shapes } = get();
-    if (redoStack.length === 0) return;
-    const next = redoStack[redoStack.length - 1]!;
+    const state = get();
+    if (state.redoStack.length === 0) return;
+    const next = state.redoStack[state.redoStack.length - 1]!;
     set({
-      redoStack: redoStack.slice(0, -1),
-      undoStack: [...get().undoStack, shapes],
-      shapes: next,
+      redoStack: state.redoStack.slice(0, -1),
+      undoStack: [...state.undoStack, snapshot(state)],
+      shapes: next.shapes,
+      cropRegion: next.cropRegion,
+      cropConfirmed: next.cropConfirmed,
     });
   },
 
   // Drawing a fresh region resets the confirmation; the user must
-  // explicitly Apply it before it counts at export time.
-  setCropRegion: (region) => set({ cropRegion: region, cropConfirmed: false }),
-  confirmCrop: () => set({ cropConfirmed: true, tool: 'select' }),
+  // explicitly Apply it before it counts at export time. Snapshots the
+  // pre-mutation state so Ctrl+Z restores it.
+  setCropRegion: (region) => {
+    const state = get();
+    set({
+      undoStack: [...state.undoStack, snapshot(state)],
+      redoStack: [],
+      cropRegion: region,
+      cropConfirmed: false,
+    });
+  },
+  confirmCrop: () => {
+    const state = get();
+    set({
+      undoStack: [...state.undoStack, snapshot(state)],
+      redoStack: [],
+      cropConfirmed: true,
+      tool: 'select',
+    });
+  },
   setIsDrawing: (drawing) => set({ isDrawing: drawing }),
   setCurrentShape: (shape) => set({ currentShape: shape }),
   setSelectedId: (id) => set({ selectedId: id }),

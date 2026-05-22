@@ -145,6 +145,46 @@ describe('useAnnotateStore', () => {
     expect(useAnnotateStore.getState().tool).toBe('select');
   });
 
+  it('setCropRegion is undoable: Ctrl+Z restores the previous (null) region', () => {
+    const s = useAnnotateStore.getState();
+    s.setCropRegion({ x: 10, y: 20, width: 30, height: 40 });
+    expect(useAnnotateStore.getState().cropRegion).toEqual({ x: 10, y: 20, width: 30, height: 40 });
+    s.undo();
+    expect(useAnnotateStore.getState().cropRegion).toBeNull();
+  });
+
+  it('confirmCrop is undoable: Ctrl+Z restores cropConfirmed to false', () => {
+    const s = useAnnotateStore.getState();
+    s.setCropRegion({ x: 0, y: 0, width: 50, height: 50 });
+    s.confirmCrop();
+    expect(useAnnotateStore.getState().cropConfirmed).toBe(true);
+    s.undo();
+    expect(useAnnotateStore.getState().cropConfirmed).toBe(false);
+    expect(useAnnotateStore.getState().cropRegion).toEqual({ x: 0, y: 0, width: 50, height: 50 });
+  });
+
+  it('cancelling a crop (setCropRegion(null)) is undoable', () => {
+    const s = useAnnotateStore.getState();
+    s.setCropRegion({ x: 1, y: 2, width: 3, height: 4 });
+    s.setCropRegion(null);
+    expect(useAnnotateStore.getState().cropRegion).toBeNull();
+    s.undo();
+    expect(useAnnotateStore.getState().cropRegion).toEqual({ x: 1, y: 2, width: 3, height: 4 });
+  });
+
+  it('undo restores shapes and crop state together', () => {
+    const s = useAnnotateStore.getState();
+    s.addShape(shapeA);
+    s.setCropRegion({ x: 0, y: 0, width: 10, height: 10 });
+    s.confirmCrop();
+    s.undo();
+    expect(useAnnotateStore.getState().cropConfirmed).toBe(false);
+    s.undo();
+    expect(useAnnotateStore.getState().cropRegion).toBeNull();
+    s.undo();
+    expect(useAnnotateStore.getState().shapes).toHaveLength(0);
+  });
+
   it('reset wipes shapes, undo/redo stacks, and selection', () => {
     const s = useAnnotateStore.getState();
     s.addShape(shapeA);
