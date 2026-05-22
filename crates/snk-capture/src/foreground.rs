@@ -10,9 +10,11 @@ pub fn get_foreground_info() -> Option<ForegroundInfo> {
     // Approximation: xcap::Window::all() does not guarantee z-order, so the first
     // non-minimized window is a best-effort foreground guess until we wrap native APIs.
     let windows = Window::all().ok()?;
-    let win = windows.into_iter().find(|w| !w.is_minimized())?;
+    let win = windows
+        .into_iter()
+        .find(|w| !w.is_minimized().unwrap_or(true))?;
     Some(ForegroundInfo {
-        app_name: win.app_name().to_string(),
-        window_title: win.title().to_string(),
+        app_name: win.app_name().unwrap_or_default(),
+        window_title: win.title().unwrap_or_default(),
     })
 }

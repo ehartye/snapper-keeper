@@ -17,13 +17,13 @@ pub fn grab_primary_monitor() -> Result<GrabResult> {
     let monitors = Monitor::all()?;
     let primary = monitors
         .into_iter()
-        .find(|m| m.is_primary())
+        .find(|m| m.is_primary().unwrap_or(false))
         .or_else(|| Monitor::all().ok().and_then(|mut v| v.pop()))
         .ok_or(crate::CaptureError::NoMonitors)?;
 
     let image = primary.capture_image()?;
     let (w, h) = (image.width(), image.height());
-    let name = primary.name().to_string();
+    let name = primary.name().unwrap_or_default();
 
     let mut buf = Cursor::new(Vec::with_capacity((w * h * 4) as usize / 2));
     PngEncoder::new(&mut buf).write_image(image.as_raw(), w, h, ColorType::Rgba8.into())?;
@@ -49,13 +49,17 @@ pub fn list_capturable_windows() -> Result<Vec<WindowInfo>> {
     let windows = Window::all()?;
     let infos = windows
         .into_iter()
-        .filter(|w| !w.is_minimized() && w.width() > 0 && w.height() > 0)
+        .filter(|w| {
+            !w.is_minimized().unwrap_or(true)
+                && w.width().unwrap_or(0) > 0
+                && w.height().unwrap_or(0) > 0
+        })
         .map(|w| WindowInfo {
-            id: w.id(),
-            app_name: w.app_name().to_string(),
-            title: w.title().to_string(),
-            width: w.width(),
-            height: w.height(),
+            id: w.id().unwrap_or(0),
+            app_name: w.app_name().unwrap_or_default(),
+            title: w.title().unwrap_or_default(),
+            width: w.width().unwrap_or(0),
+            height: w.height().unwrap_or(0),
         })
         .collect();
     Ok(infos)
@@ -65,10 +69,14 @@ pub fn grab_window(window_id: u32) -> Result<GrabResult> {
     let windows = Window::all()?;
     let target = windows
         .into_iter()
-        .find(|w| w.id() == window_id)
+        .find(|w| w.id().unwrap_or(0) == window_id)
         .ok_or(crate::CaptureError::WindowNotFound { id: window_id })?;
 
-    let monitor_name = target.current_monitor().name().to_string();
+    let monitor_name = target
+        .current_monitor()
+        .ok()
+        .and_then(|m| m.name().ok())
+        .unwrap_or_default();
     let image = target.capture_image()?;
     let (w, h) = (image.width(), image.height());
 
@@ -87,16 +95,16 @@ pub fn grab_region(monitor_id: u32, x: u32, y: u32, w: u32, h: u32) -> Result<Gr
     let monitors = Monitor::all()?;
     let mon = monitors
         .into_iter()
-        .find(|m| m.id() == monitor_id)
+        .find(|m| m.id().unwrap_or(0) == monitor_id)
         .or_else(|| {
             Monitor::all()
                 .ok()
-                .and_then(|v| v.into_iter().find(|m| m.is_primary()))
+                .and_then(|v| v.into_iter().find(|m| m.is_primary().unwrap_or(false)))
         })
         .or_else(|| Monitor::all().ok().and_then(|mut v| v.pop()))
         .ok_or(crate::CaptureError::NoMonitors)?;
 
-    let monitor_name = mon.name().to_string();
+    let monitor_name = mon.name().unwrap_or_default();
     let full_image = mon.capture_image()?;
 
     let (x, y, w, h) = clamp_region(full_image.width(), full_image.height(), x, y, w, h)
