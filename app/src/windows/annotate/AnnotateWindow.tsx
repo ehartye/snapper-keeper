@@ -66,6 +66,33 @@ export function AnnotateWindow() {
     enabled: !!captureId,
   });
 
+  // When a capture loads, hydrate the store from its persisted
+  // annotation_state. The fresh reset() in the open-listener wipes the
+  // store first, so this either populates it (re-edit case) or leaves
+  // it empty (first edit / legacy capture).
+  useEffect(() => {
+    if (!capture.data?.annotation_state) return;
+    try {
+      const parsed = JSON.parse(capture.data.annotation_state) as {
+        version: number;
+        shapes: unknown[];
+        crop_region: { x: number; y: number; width: number; height: number } | null;
+        crop_confirmed: boolean;
+      };
+      if (parsed.version !== 1) return;
+      useAnnotateStore.setState({
+        shapes: parsed.shapes as never,
+        cropRegion: parsed.crop_region,
+        cropConfirmed: parsed.crop_confirmed,
+        undoStack: [],
+        redoStack: [],
+        isDirty: false,
+      });
+    } catch (e) {
+      console.warn('annotation_state parse failed; opening clean', e);
+    }
+  }, [capture.data]);
+
   if (!captureId || !capture.data || !root.data) {
     return (
       <div className="h-full flex items-center justify-center bg-bg text-fg-muted text-sm font-display uppercase tracking-wider">
