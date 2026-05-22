@@ -1,11 +1,14 @@
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { invoke } from '@tauri-apps/api/core';
+import { emit, listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 import { getSetting, setSetting } from '@snk/library';
 
 import { queryKeys } from './queryKeys';
+
+export const THEME_CHANGED_EVENT = 'theme:changed';
 
 export type ThemeFamily = 'holo' | 'memphis' | 'robotic' | 'corporate';
 
@@ -63,18 +66,30 @@ export function useTheme() {
     applyTheme(theme);
   }, [theme]);
 
-  // Re-apply when the OS gets a focus event (other windows might have changed it).
+  // Re-apply on focus (backup) and whenever any window broadcasts a theme change.
   useEffect(() => {
     const refresh = () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.settings.one(SETTING_KEY) });
     };
     window.addEventListener('focus', refresh);
-    return () => window.removeEventListener('focus', refresh);
+
+    let unlisten: (() => void) | undefined;
+    listen(THEME_CHANGED_EVENT, refresh)
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch(() => {});
+
+    return () => {
+      window.removeEventListener('focus', refresh);
+      unlisten?.();
+    };
   }, [queryClient]);
 
   const update = async (next: ThemeId) => {
     applyTheme(next);
     await setSetting(SETTING_KEY, next);
+    await emit(THEME_CHANGED_EVENT, next);
     queryClient.invalidateQueries({ queryKey: queryKeys.settings.one(SETTING_KEY) });
   };
 
