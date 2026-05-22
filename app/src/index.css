@@ -340,16 +340,86 @@ html[data-theme^='memphis'] .memphis-card-accent {
   box-shadow: 6px 6px 0 0 var(--accent);
 }
 
-/* Squiggle divider — SVG path inlined */
-.squiggle-divider {
+/* Menu divider — theme-aware. Default is a thin hairline (safe fallback for
+   any theme without an explicit override). Each theme below overrides to
+   match its visual language. The `divider` CSS counter is used by themes
+   that surface position (e.g. corporate's Roman serial mark). */
+aside { counter-reset: divider; }
+
+.menu-divider {
   height: 12px;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 12' preserveAspectRatio='none'><path d='M0 6 Q 12.5 0 25 6 T 50 6 T 75 6 T 100 6' stroke='%23000' stroke-width='2.5' fill='none' /></svg>");
-  background-repeat: repeat-x;
-  background-size: 50px 12px;
+  counter-increment: divider;
+  background-image: linear-gradient(to right, var(--border), var(--border));
+  background-repeat: no-repeat;
+  background-size: 100% 1px;
+  background-position: center;
 }
 
-html[data-theme='memphis-dark'] .squiggle-divider {
+/* Memphis — hand-drawn squiggle (the original) */
+html[data-theme^='memphis'] .menu-divider {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 12' preserveAspectRatio='none'><path d='M0 6 Q 12.5 0 25 6 T 50 6 T 75 6 T 100 6' stroke='%230a0a0a' stroke-width='2.5' fill='none' /></svg>");
+  background-repeat: repeat-x;
+  background-size: 50px 12px;
+  background-position: 0 0;
+}
+html[data-theme='memphis-dark'] .menu-divider {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 12' preserveAspectRatio='none'><path d='M0 6 Q 12.5 0 25 6 T 50 6 T 75 6 T 100 6' stroke='%23fafaf5' stroke-width='2.5' fill='none' /></svg>");
+}
+
+/* Robotic — hex memory dump (xxd / hexdump output styling).
+   Bytes 41 6C 6C 0A 2D 54 41 47 53 = "All\n-TAGS" (easter egg). */
+html[data-theme^='robotic'] .menu-divider {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  color: var(--text-muted);
+  background-image: none;
+  user-select: none;
+}
+html[data-theme^='robotic'] .menu-divider::before {
+  content: "0x00FF  41 6C 6C 0A 2D 54 41 47 53";
+}
+
+/* Holo — iridescent gradient fade; dark variant gets a soft pink halo */
+html[data-theme^='holo'] .menu-divider {
+  background-image: linear-gradient(
+    to right,
+    transparent 0%,
+    var(--accent) 25%,
+    var(--primary) 50%,
+    var(--accent-2) 75%,
+    transparent 100%
+  );
+  background-size: 100% 2px;
+}
+html[data-theme='holo-dark'] .menu-divider {
+  filter: drop-shadow(0 0 4px rgba(255, 45, 149, 0.4));
+}
+
+/* Corporate — stamped Roman serial. CSS counter increments per divider
+   position (I, II, III) over a centered hairline. The mark's bg-soft
+   background masks the line so the rule appears to terminate cleanly on
+   each side without explicit segment math. */
+html[data-theme^='corporate'] .menu-divider {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+html[data-theme^='corporate'] .menu-divider::before {
+  content: "№ " counter(divider, upper-roman);
+  background: var(--bg-soft);
+  padding: 0 8px;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  z-index: 1;
 }
 
 /* MR ROBOTIC — CRT scanlines, terminal glow, cursor blink */

@@ -93,7 +93,7 @@ export function Sidebar({ selection, onSelect }: Props) {
         })}
       </nav>
 
-      <div className="squiggle-divider mx-3 my-2" />
+      <div className="menu-divider mx-3 my-2" />
 
       <div className="p-3">
         <div className="flex items-baseline justify-between mb-2 px-1">
@@ -137,7 +137,7 @@ export function Sidebar({ selection, onSelect }: Props) {
         )}
       </div>
 
-      <div className="squiggle-divider mx-3 my-2" />
+      <div className="menu-divider mx-3 my-2" />
 
       <nav className="p-3">
         <button
@@ -154,7 +154,7 @@ export function Sidebar({ selection, onSelect }: Props) {
       </nav>
 
       <div className="mt-auto">
-        <div className="squiggle-divider mx-3 my-2" />
+        <div className="menu-divider mx-3 my-2" />
         <nav className="p-3">
           <button
             className="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors text-fg-muted hover:bg-surface hover:text-fg"
