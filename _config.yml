@@ -1,0 +1,10 @@
+title: Snapper Keeper
+description: >-
+  Free, local-first screen capture with OCR-indexed search and a smarter
+  clipboard. No accounts, no servers, no telemetry.
+url: "https://ehartye.github.io"
+baseurl: "/snapper-keeper"
+theme: jekyll-theme-minimal
+show_downloads: false
+markdown: kramdown
+permalink: /:title
