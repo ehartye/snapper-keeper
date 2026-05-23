@@ -103,7 +103,10 @@ export function LibraryWindow() {
       const preview = await grabScreenPreview();
       const overlay = await WebviewWindow.getByLabel('capture-overlay');
       if (overlay) {
-        await overlay.emit('overlay:preview', { path: preview.path });
+        await overlay.emit('overlay:preview', {
+          path: preview.path,
+          token: preview.token,
+        });
         await overlay.show();
         await overlay.setFocus();
       }

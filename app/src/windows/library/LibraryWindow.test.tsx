@@ -74,8 +74,7 @@ describe('<LibraryWindow />', () => {
     });
   });
 
-  it('region hotkey grabs a preview and shows the overlay', async () => {
-    // Track which event the test wants to fire.
+  it('region hotkey grabs a preview and emits overlay:preview with path+token', async () => {
     let regionHandler: ((e: { payload: unknown }) => void) | null = null;
     vi.mocked(listen).mockImplementation((event, handler) => {
       if (event === 'hotkey:capture-region') {
@@ -83,9 +82,27 @@ describe('<LibraryWindow />', () => {
       }
       return Promise.resolve(() => {});
     });
+
+    const overlayEmit = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(WebviewWindow.getByLabel).mockImplementation(async (label: string) => {
+      if (label === 'capture-overlay') {
+        return {
+          emit: overlayEmit,
+          show: vi.fn().mockResolvedValue(undefined),
+          setFocus: vi.fn().mockResolvedValue(undefined),
+        } as unknown as WebviewWindow;
+      }
+      return null;
+    });
+
     mockedInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'plugin:snk-capture|grab_screen_preview') {
-        return Promise.resolve({ path: '/tmp/p.png', width: 1, height: 1 });
+        return Promise.resolve({
+          path: '/tmp/p.png',
+          width: 1,
+          height: 1,
+          token: 'tok-xyz',
+        });
       }
       return Promise.resolve([]);
     });
@@ -97,6 +114,10 @@ describe('<LibraryWindow />', () => {
     await waitFor(() => {
       expect(invoke).toHaveBeenCalledWith('plugin:snk-capture|grab_screen_preview');
       expect(WebviewWindow.getByLabel).toHaveBeenCalledWith('capture-overlay');
+      expect(overlayEmit).toHaveBeenCalledWith('overlay:preview', {
+        path: '/tmp/p.png',
+        token: 'tok-xyz',
+      });
     });
   });
 });
