@@ -37,6 +37,50 @@ describe('useAnnotateStore', () => {
     expect(useAnnotateStore.getState().tool).toBe('select');
   });
 
+  it('setColor with no selection only updates the toolbar default', () => {
+    const s = useAnnotateStore.getState();
+    s.setColor('#abcdef');
+    const after = useAnnotateStore.getState();
+    expect(after.color).toBe('#abcdef');
+    expect(after.shapes).toHaveLength(0);
+  });
+
+  it('setColor patches the selected shape AND updates the default', () => {
+    const s = useAnnotateStore.getState();
+    s.addShape(shapeA);
+    s.setSelectedId('sh-a');
+    s.setColor('#ff00ff');
+    const after = useAnnotateStore.getState();
+    expect(after.color).toBe('#ff00ff');
+    expect(after.shapes[0]!.stroke.color).toBe('#ff00ff');
+    // Setter snapshots history so the change is undoable
+    expect(after.undoStack.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('setStrokePreset patches the selected shape AND updates the default', () => {
+    const s = useAnnotateStore.getState();
+    s.addShape(shapeA);
+    s.setSelectedId('sh-a');
+    s.setStrokePreset('thick');
+    const after = useAnnotateStore.getState();
+    expect(after.strokePreset).toBe('thick');
+    expect(after.shapes[0]!.stroke.width).toBe(STROKE_WIDTHS.thick);
+  });
+
+  it('setColor preserves the rest of the stroke config', () => {
+    const s = useAnnotateStore.getState();
+    s.addShape({
+      ...shapeA,
+      stroke: { color: '#000', width: 7, opacity: 0.35 },
+    });
+    s.setSelectedId('sh-a');
+    s.setColor('#ff0000');
+    const after = useAnnotateStore.getState().shapes[0]!.stroke;
+    expect(after.color).toBe('#ff0000');
+    expect(after.width).toBe(7);
+    expect(after.opacity).toBe(0.35);
+  });
+
   it('setTool clears the selection when switching off select', () => {
     const s = useAnnotateStore.getState();
     s.setSelectedId('sh-1');

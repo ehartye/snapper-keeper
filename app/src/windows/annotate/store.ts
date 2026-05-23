@@ -107,8 +107,50 @@ export const useAnnotateStore = create<AnnotateState>((set, get) => ({
   ...initialState,
 
   setTool: (tool) => set({ tool, selectedId: tool === 'select' ? get().selectedId : null }),
-  setColor: (color) => set({ color }),
-  setStrokePreset: (preset) => set({ strokePreset: preset }),
+
+  // Color and stroke-preset always update the toolbar's default for the
+  // next shape. If a shape is currently selected, the change also patches
+  // its stroke — so the user can re-style an existing shape by selecting
+  // it and clicking a swatch or a thickness preset.
+  setColor: (color) => {
+    const state = get();
+    const target = state.selectedId
+      ? state.shapes.find((s) => s.id === state.selectedId)
+      : undefined;
+    if (!target) {
+      set({ color });
+      return;
+    }
+    set({
+      color,
+      undoStack: [...state.undoStack, snapshot(state)],
+      redoStack: [],
+      shapes: state.shapes.map((s) =>
+        s.id === target.id ? { ...s, stroke: { ...s.stroke, color } } : s,
+      ),
+      isDirty: true,
+    });
+  },
+  setStrokePreset: (preset) => {
+    const state = get();
+    const target = state.selectedId
+      ? state.shapes.find((s) => s.id === state.selectedId)
+      : undefined;
+    if (!target) {
+      set({ strokePreset: preset });
+      return;
+    }
+    const width = STROKE_WIDTHS[preset];
+    set({
+      strokePreset: preset,
+      undoStack: [...state.undoStack, snapshot(state)],
+      redoStack: [],
+      shapes: state.shapes.map((s) =>
+        s.id === target.id ? { ...s, stroke: { ...s.stroke, width } } : s,
+      ),
+      isDirty: true,
+    });
+  },
 
   addShape: (shape) => {
     const state = get();
