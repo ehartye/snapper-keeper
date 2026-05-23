@@ -31,6 +31,14 @@ vi.mock('@tauri-apps/api/window', () => {
   };
   return {
     getCurrentWindow: () => fakeWindow,
+    availableMonitors: vi.fn().mockResolvedValue([
+      {
+        name: 'Mock Monitor',
+        position: { x: 0, y: 0 },
+        size: { width: 1920, height: 1080 },
+        scaleFactor: 1,
+      },
+    ]),
   };
 });
 
