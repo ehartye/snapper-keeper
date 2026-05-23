@@ -62,12 +62,18 @@ describe('@snk/capture bindings', () => {
     );
   });
 
-  it('grabScreenPreview returns the preview struct', async () => {
-    mockedInvoke.mockResolvedValue({ path: '/tmp/x.png', width: 800, height: 600 });
+  it('grabScreenPreview returns the preview struct including token', async () => {
+    mockedInvoke.mockResolvedValue({
+      path: '/tmp/x.png',
+      width: 800,
+      height: 600,
+      token: 'tok-abc',
+    });
     const p = await grabScreenPreview();
     expect(p.path).toBe('/tmp/x.png');
     expect(p.width).toBe(800);
     expect(p.height).toBe(600);
+    expect(p.token).toBe('tok-abc');
     expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-capture|grab_screen_preview');
   });
 });
