@@ -57,6 +57,7 @@ pub struct ScreenPreview {
     pub path: String,
     pub width: u32,
     pub height: u32,
+    pub token: String,
 }
 
 #[tauri::command]
@@ -79,6 +80,7 @@ pub fn grab_screen_preview<R: Runtime>(app: tauri::AppHandle<R>) -> Result<Scree
         path: preview_path.to_string_lossy().into_owned(),
         width: result.width,
         height: result.height,
+        token: mint_preview_token(),
     })
 }
 
