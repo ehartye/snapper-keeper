@@ -85,8 +85,14 @@ export function CaptureOverlay() {
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
-    listen<{ path: string }>('overlay:preview', (event) => {
-      setPreviewSrc(convertFileSrc(event.payload.path));
+    listen<{ path: string; token: string }>('overlay:preview', (event) => {
+      // Cache-bust: the WebView caches by URL and the preview path is
+      // stable across grabs, so ?v=<token> forces a fresh fetch. The
+      // intermediate null clears the background between region snaps
+      // so a slow refetch can't briefly show the previous frame.
+      const url = `${convertFileSrc(event.payload.path)}?v=${event.payload.token}`;
+      setPreviewSrc(null);
+      setPreviewSrc(url);
     }).then((fn) => {
       unlisten = fn;
     });
