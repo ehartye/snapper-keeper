@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { LogicalPosition } from '@tauri-apps/api/dpi';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { availableMonitors, getCurrentWindow } from '@tauri-apps/api/window';
 
 import {
   CAPTURE_FULL_SCREEN_EVENT,
@@ -130,26 +130,69 @@ export function LibraryWindow() {
     try {
       const pos = await showPopup();
       const popup = await WebviewWindow.getByLabel('clipboard-popup');
-      if (popup) {
-        const popupW = 380;
-        const popupH = 480;
-        const screenW = window.screen.width;
-        const screenH = window.screen.height;
-        const pad = 8;
+      if (!popup) return;
 
-        let x = pos.x;
-        let y = pos.y + pad;
-
-        if (y + popupH > screenH) y = pos.y - popupH - pad;
-        if (x + popupW > screenW) x = screenW - popupW - pad;
-        if (x < pad) x = pad;
-        if (y < pad) y = pad;
-
-        await popup.setPosition(new LogicalPosition(x, y));
+      // Anchor the popup to the monitor that actually contains the caret —
+      // window.screen only knows about the primary monitor and doesn't
+      // exclude the taskbar / dock, so the old logic let the popup hang
+      // into the taskbar area or off-screen on multi-monitor setups.
+      const monitors = await availableMonitors();
+      const fallback = monitors[0];
+      if (!fallback) {
+        // No monitors reported — last-resort placement at 0,0.
+        await popup.setPosition(new LogicalPosition(0, 0));
         await popup.emit(CLIPBOARD_POPUP_SHOW_EVENT, {});
         await popup.show();
         await popup.setFocus();
+        return;
       }
+      const monitor =
+        monitors.find(
+          (m) =>
+            pos.x >= m.position.x &&
+            pos.x < m.position.x + m.size.width &&
+            pos.y >= m.position.y &&
+            pos.y < m.position.y + m.size.height,
+        ) ?? fallback;
+
+      // Work in logical pixels (the popup window is sized in logical px per
+      // tauri.conf.json). Tauri's Monitor reports position/size in PHYSICAL
+      // pixels, so divide by scaleFactor.
+      const sf = monitor.scaleFactor;
+      const caretX = pos.x / sf;
+      const caretY = pos.y / sf;
+      const monLeft = monitor.position.x / sf;
+      const monTop = monitor.position.y / sf;
+      const monRight = monLeft + monitor.size.width / sf;
+      // Reserve ~50px at the bottom for the Windows taskbar / macOS dock —
+      // Tauri's Monitor doesn't expose work-area separately, so this is a
+      // heuristic. Conservative for the common case (taskbar 40-48px).
+      const monBottom = monTop + monitor.size.height / sf - 50;
+
+      const popupW = 380;
+      const popupH = 480;
+      const pad = 8;
+
+      let x = caretX;
+      let y = caretY + pad;
+
+      // Flip above the caret if the popup would clip below.
+      if (y + popupH > monBottom) y = caretY - popupH - pad;
+
+      // Clamp horizontally to the monitor.
+      if (x + popupW > monRight) x = monRight - popupW - pad;
+      if (x < monLeft + pad) x = monLeft + pad;
+
+      // Vertical safety: clamp to monitor; if the popup is somehow still too
+      // tall to fit (sub-popup-height monitor), anchor to the bottom of the
+      // work area so the filter input + first items stay visible.
+      if (y < monTop + pad) y = monTop + pad;
+      if (y + popupH > monBottom) y = monBottom - popupH;
+
+      await popup.setPosition(new LogicalPosition(x, y));
+      await popup.emit(CLIPBOARD_POPUP_SHOW_EVENT, {});
+      await popup.show();
+      await popup.setFocus();
     } catch (e) {
       console.error('clipboard popup failed', e);
     }
