@@ -147,8 +147,23 @@ export function ClipboardPopup() {
   return (
     <div className="flex flex-col h-full bg-surface border-2 border-border rounded-xl shadow-[6px_6px_0_0_var(--accent-2)] overflow-hidden">
       <div className="px-3 pt-3 pb-2 border-b border-border">
-        <div className="font-display text-[10px] uppercase tracking-widest text-accent mb-2 px-1">
-          clipboard ✦
+        {/* Drag handle — Tauri's data-tauri-drag-region attribute intercepts
+            mousedown on this element so the user can pick up the popup and
+            move it. The filter input below is a separate element and stays
+            interactive. Each child also carries the attribute so dragging
+            works whether the user grabs the grip glyph or the title text. */}
+        <div
+          data-tauri-drag-region
+          className="font-display text-[10px] uppercase tracking-widest text-accent mb-2 px-1 flex items-center gap-2 cursor-move select-none"
+        >
+          <span
+            data-tauri-drag-region
+            aria-hidden
+            className="text-[12px] leading-none text-fg-muted"
+          >
+            ⠿
+          </span>
+          <span data-tauri-drag-region>clipboard ✦</span>
         </div>
         <input
           ref={inputRef}
