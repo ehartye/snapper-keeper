@@ -31,6 +31,8 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
   const containerRef = useRef<HTMLDivElement>(null);
   const transformerRef = useRef<Konva.Transformer | null>(null);
   const nodesRef = useRef<Map<string, Konva.Node>>(new Map());
+  const cropOutlineRef = useRef<Konva.Rect | null>(null);
+  const cropTransformerRef = useRef<Konva.Transformer | null>(null);
 
   const tool = useAnnotateStore((s) => s.tool);
   const shapes = useAnnotateStore((s) => s.shapes);
@@ -40,6 +42,7 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
   const selectedId = useAnnotateStore((s) => s.selectedId);
   const setSelectedId = useAnnotateStore((s) => s.setSelectedId);
   const setCropRegion = useAnnotateStore((s) => s.setCropRegion);
+  const resizeCropRegion = useAnnotateStore((s) => s.resizeCropRegion);
   const setSourceImage = useAnnotateStore((s) => s.setSourceImage);
   const confirmCrop = useAnnotateStore((s) => s.confirmCrop);
   const deleteShape = useAnnotateStore((s) => s.deleteShape);
@@ -106,6 +109,23 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
     }
     transformer.getLayer()?.batchDraw();
   }, [selectedId, shapes]);
+
+  // Attach the crop transformer to the outline whenever both exist —
+  // the outline is the (offset-by-half-stroke) rect we draw on top of
+  // the dim mask. The user grabs handles on this rect; resize/drag
+  // commits the actual crop bounds via resizeCropRegion (preserving
+  // cropConfirmed so an Apply'd crop stays applied through resizes).
+  useEffect(() => {
+    const transformer = cropTransformerRef.current;
+    const outline = cropOutlineRef.current;
+    if (!transformer) return;
+    if (outline && cropRegion) {
+      transformer.nodes([outline]);
+    } else {
+      transformer.nodes([]);
+    }
+    transformer.getLayer()?.batchDraw();
+  }, [cropRegion, cropConfirmed, currentShape]);
 
   const transformableTools = new Set([
     'rectangle',
@@ -311,13 +331,19 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
               : cropRegion;
             if (!preview || preview.width <= 0 || preview.height <= 0) return null;
             const confirmed = !drafting && cropConfirmed;
+            const strokeW = confirmed ? 3 : 2;
+            const half = strokeW / 2;
             return (
-              <Layer listening={false}>
+              // Layer must listen so the outline's drag/transform events
+              // fire. Each dim rect is individually marked listening=false
+              // so they don't intercept clicks on the shape layer below.
+              <Layer>
                 {/* Dim everything outside the previewed crop so the user
                     can see what will be kept vs. cropped away. Export uses
                     the same crop bounds, so these dimmed pixels never
                     appear in the output file. */}
                 <Rect
+                  listening={false}
                   x={0}
                   y={0}
                   width={imageWidth}
@@ -325,6 +351,7 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
                   fill="rgba(0, 0, 0, 0.45)"
                 />
                 <Rect
+                  listening={false}
                   x={0}
                   y={preview.y + preview.height}
                   width={imageWidth}
@@ -332,6 +359,7 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
                   fill="rgba(0, 0, 0, 0.45)"
                 />
                 <Rect
+                  listening={false}
                   x={0}
                   y={preview.y}
                   width={preview.x}
@@ -339,33 +367,68 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
                   fill="rgba(0, 0, 0, 0.45)"
                 />
                 <Rect
+                  listening={false}
                   x={preview.x + preview.width}
                   y={preview.y}
                   width={Math.max(0, imageWidth - (preview.x + preview.width))}
                   height={preview.height}
                   fill="rgba(0, 0, 0, 0.45)"
                 />
-                {(() => {
-                  // Konva centers stroke on the path, so half the stroke
-                  // straddles INTO the kept region — and stage.toDataURL
-                  // with the crop bounds would bake that into the saved
-                  // PNG (visible as a thin green border on derivations).
-                  // Push the path outward by half a stroke so the stroke
-                  // sits entirely outside the kept region.
-                  const strokeW = confirmed ? 3 : 2;
-                  const half = strokeW / 2;
-                  return (
-                    <Rect
-                      x={preview.x - half}
-                      y={preview.y - half}
-                      width={preview.width + strokeW}
-                      height={preview.height + strokeW}
-                      stroke={confirmed ? '#22c55e' : '#3b82f6'}
-                      strokeWidth={strokeW}
-                      dash={confirmed ? undefined : [6, 3]}
-                    />
-                  );
-                })()}
+                {/* Konva centers stroke on the path; we shift the outline
+                    outward by half-stroke so the stroke sits entirely
+                    outside the kept region (otherwise toDataURL bakes a
+                    thin green border into saved derivations). */}
+                <Rect
+                  ref={cropOutlineRef}
+                  x={preview.x - half}
+                  y={preview.y - half}
+                  width={preview.width + strokeW}
+                  height={preview.height + strokeW}
+                  stroke={confirmed ? '#22c55e' : '#3b82f6'}
+                  strokeWidth={strokeW}
+                  dash={confirmed ? undefined : [6, 3]}
+                  draggable={!drafting}
+                  onDragEnd={(e) => {
+                    // Un-shift the half-stroke offset to recover the
+                    // actual kept-region bounds.
+                    resizeCropRegion({
+                      x: e.target.x() + half,
+                      y: e.target.y() + half,
+                      width: preview.width,
+                      height: preview.height,
+                    });
+                  }}
+                  onTransformEnd={() => {
+                    const node = cropOutlineRef.current;
+                    if (!node) return;
+                    const sx = node.scaleX();
+                    const sy = node.scaleY();
+                    const newOutW = node.width() * sx;
+                    const newOutH = node.height() * sy;
+                    const newOutX = node.x();
+                    const newOutY = node.y();
+                    node.scaleX(1);
+                    node.scaleY(1);
+                    resizeCropRegion({
+                      x: newOutX + half,
+                      y: newOutY + half,
+                      width: Math.max(5, newOutW - strokeW),
+                      height: Math.max(5, newOutH - strokeW),
+                    });
+                  }}
+                />
+                {!drafting && (
+                  <Transformer
+                    ref={cropTransformerRef}
+                    rotateEnabled={false}
+                    boundBoxFunc={(oldBox, newBox) => {
+                      if (newBox.width < 5 + strokeW || newBox.height < 5 + strokeW) {
+                        return oldBox;
+                      }
+                      return newBox;
+                    }}
+                  />
+                )}
               </Layer>
             );
           })()}

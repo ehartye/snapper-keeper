@@ -61,6 +61,7 @@ interface AnnotateState {
   undo: () => void;
   redo: () => void;
   setCropRegion: (region: CropRegion | null) => void;
+  resizeCropRegion: (region: CropRegion) => void;
   confirmCrop: () => void;
   setIsDrawing: (drawing: boolean) => void;
   setCurrentShape: (shape: AnnotationShape | null) => void;
@@ -181,6 +182,17 @@ export const useAnnotateStore = create<AnnotateState>((set, get) => ({
       redoStack: [],
       cropRegion: region,
       cropConfirmed: false,
+      isDirty: true,
+    });
+  },
+  // Resize/move of an existing region — preserves cropConfirmed so a
+  // user adjusting their applied crop doesn't have to click Apply again.
+  resizeCropRegion: (region) => {
+    const state = get();
+    set({
+      undoStack: [...state.undoStack, snapshot(state)],
+      redoStack: [],
+      cropRegion: region,
       isDirty: true,
     });
   },
