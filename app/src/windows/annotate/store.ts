@@ -67,6 +67,8 @@ interface AnnotateState {
   setCurrentShape: (shape: AnnotationShape | null) => void;
   setSelectedId: (id: string | null) => void;
   setSourceImage: (img: HTMLImageElement | null) => void;
+  editingTextId: string | null;
+  setEditingTextId: (id: string | null) => void;
   markClean: () => void;
   reset: () => void;
 }
@@ -85,6 +87,7 @@ const initialState = {
   currentShape: null as AnnotationShape | null,
   selectedId: null as string | null,
   sourceImage: null as HTMLImageElement | null,
+  editingTextId: null as string | null,
   isDirty: false,
 };
 
@@ -210,6 +213,7 @@ export const useAnnotateStore = create<AnnotateState>((set, get) => ({
   setCurrentShape: (shape) => set({ currentShape: shape }),
   setSelectedId: (id) => set({ selectedId: id }),
   setSourceImage: (img) => set({ sourceImage: img }),
+  setEditingTextId: (id) => set({ editingTextId: id }),
   markClean: () => set({ isDirty: false }),
   reset: () => set(initialState),
 }));

@@ -68,16 +68,21 @@ export function useDrawing(stageRef: MutableRefObject<Konva.Stage | null>) {
 
       if (tool === 'text') {
         const id = nextId();
+        // Start empty so abandoning the just-created shape (blur with no
+        // typing) auto-deletes via the empty-commit path. Also kicks the
+        // editor into edit mode immediately so the user can type without
+        // hunting for an "edit" affordance.
         useAnnotateStore.getState().addShape({
           id,
           tool,
           x: pos.x,
           y: pos.y,
-          text: 'Text',
+          text: '',
           stroke,
         });
         useAnnotateStore.getState().setTool('select');
         useAnnotateStore.getState().setSelectedId(id);
+        useAnnotateStore.getState().setEditingTextId(id);
         return;
       }
 
