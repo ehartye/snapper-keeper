@@ -56,7 +56,11 @@ html[data-theme^='wabi-sabi'] .font-display {
   letter-spacing: -0.005em;
 }
 html[data-theme^='wabi-sabi'] body {
-  font-weight: 500;
+  /* Cormorant Garamond is a display face; bump size + weight for body
+   * legibility (the brainstorm Pepsi Challenge tested 15/600 vs alts). */
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1.55;
 }
 
 /* Shimmer falls back to a flat ink fill — no animated rainbow. */
