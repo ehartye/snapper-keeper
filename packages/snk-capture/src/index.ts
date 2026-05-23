@@ -34,6 +34,7 @@ export interface ScreenPreview {
   path: string;
   width: number;
   height: number;
+  token: string;
 }
 
 export function grabScreenPreview(): Promise<ScreenPreview> {
