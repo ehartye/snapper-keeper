@@ -102,7 +102,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "REPLACE_WITH_PUBLIC_KEY",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFDOTVGQzkzRDY3OTI0RApSV1JOa21jOXlWL0pDdjA5akVJSUxFeHVCMm1STDhjODU2SEw0aGh2TCtGT3U1K1BySStHMVprMAo=",
       "endpoints": [
         "https://github.com/ehartye/snapper-keeper/releases/latest/download/latest.json"
       ]
