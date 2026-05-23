@@ -46,6 +46,12 @@ pub fn list_capturable_windows() -> Result<Vec<WindowInfo>> {
     crate::grab::list_capturable_windows()
 }
 
+/// Mint a fresh cache-busting token for one preview write.
+/// UUIDv7 is monotonic so two consecutive calls always differ.
+fn mint_preview_token() -> String {
+    uuid::Uuid::now_v7().to_string()
+}
+
 #[derive(serde::Serialize)]
 pub struct ScreenPreview {
     pub path: String,
@@ -74,4 +80,18 @@ pub fn grab_screen_preview<R: Runtime>(app: tauri::AppHandle<R>) -> Result<Scree
         width: result.width,
         height: result.height,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mint_preview_token_yields_unique_strings() {
+        let a = mint_preview_token();
+        let b = mint_preview_token();
+        assert_ne!(a, b, "two calls must return different tokens");
+        assert!(!a.is_empty());
+        assert!(!b.is_empty());
+    }
 }
