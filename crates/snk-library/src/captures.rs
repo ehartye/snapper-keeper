@@ -32,7 +32,11 @@ pub struct NewCapture {
 }
 
 pub fn insert(db: &Db, new: NewCapture) -> Result<Capture> {
-    let id = Uuid::now_v7().to_string();
+    insert_with_id(db, Uuid::now_v7(), new)
+}
+
+pub fn insert_with_id(db: &Db, id: uuid::Uuid, new: NewCapture) -> Result<Capture> {
+    let id_str = id.to_string();
     let created_at = chrono::Utc::now().timestamp_millis();
     let file_path = new
         .file_path
@@ -49,7 +53,7 @@ pub fn insert(db: &Db, new: NewCapture) -> Result<Capture> {
                 (id, file_path, width, height, source_app, source_window_title, monitor, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             rusqlite::params![
-                &id,
+                &id_str,
                 &file_path,
                 new.width,
                 new.height,
@@ -65,7 +69,7 @@ pub fn insert(db: &Db, new: NewCapture) -> Result<Capture> {
     // OCR text and tags are populated later by snk-ocr / tag mutations.
     crate::search::index_capture(
         db,
-        &id,
+        &id_str,
         new.source_app.as_deref(),
         new.source_window_title.as_deref(),
         None,
@@ -73,7 +77,7 @@ pub fn insert(db: &Db, new: NewCapture) -> Result<Capture> {
     )?;
 
     Ok(Capture {
-        id,
+        id: id_str,
         file_path,
         annotated_path: None,
         annotation_state: None,
@@ -950,5 +954,38 @@ mod tests {
         let c = insert(&db, mk(1)).unwrap();
         let fetched = get(&db, &c.id).unwrap();
         assert!(fetched.annotation_state.is_none());
+    }
+
+    #[test]
+    fn insert_with_id_uses_the_provided_uuid() {
+        let db = fresh_db();
+        let chosen = uuid::Uuid::now_v7();
+        let new_cap = NewCapture {
+            file_path: std::path::PathBuf::from("captures/2026/05/explicit.png"),
+            width: 100,
+            height: 50,
+            source_app: Some("test-app".into()),
+            source_window_title: None,
+            monitor: None,
+        };
+        let c = insert_with_id(&db, chosen, new_cap).unwrap();
+        assert_eq!(c.id, chosen.to_string());
+        let fetched = get(&db, &c.id).unwrap();
+        assert_eq!(fetched.id, chosen.to_string());
+    }
+
+    #[test]
+    fn insert_with_id_round_trips_distinct_ids() {
+        // Two consecutive insert_with_id calls with different ids must not collide.
+        let db = fresh_db();
+        let id1 = uuid::Uuid::now_v7();
+        let id2 = uuid::Uuid::now_v7();
+        assert_ne!(id1, id2);
+        insert_with_id(&db, id1, mk(1)).unwrap();
+        insert_with_id(&db, id2, mk(2)).unwrap();
+        let a = get(&db, &id1.to_string()).unwrap();
+        let b = get(&db, &id2.to_string()).unwrap();
+        assert_eq!(a.id, id1.to_string());
+        assert_eq!(b.id, id2.to_string());
     }
 }

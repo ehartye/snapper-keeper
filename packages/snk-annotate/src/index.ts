@@ -24,3 +24,25 @@ export function saveAnnotation(
     stateJson: JSON.stringify(state),
   });
 }
+
+// Crop-save path: creates a brand-new capture row + PNG, inheriting
+// source metadata from the parent and emitting capture:saved on the
+// Rust side so OCR runs automatically. The frontend is responsible for
+// computing the new image's dimensions and for shifting shape
+// coordinates so they're relative to the new image's origin (see
+// app/src/windows/annotate/cropDerivation.ts).
+export function deriveCapture(
+  parentId: string,
+  pngData: number[],
+  width: number,
+  height: number,
+  state: AnnotationState,
+): Promise<Capture> {
+  return invoke<Capture>('plugin:snk-annotate|derive_capture', {
+    parentId,
+    pngData,
+    width,
+    height,
+    stateJson: JSON.stringify(state),
+  });
+}

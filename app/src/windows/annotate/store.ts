@@ -61,11 +61,14 @@ interface AnnotateState {
   undo: () => void;
   redo: () => void;
   setCropRegion: (region: CropRegion | null) => void;
+  resizeCropRegion: (region: CropRegion) => void;
   confirmCrop: () => void;
   setIsDrawing: (drawing: boolean) => void;
   setCurrentShape: (shape: AnnotationShape | null) => void;
   setSelectedId: (id: string | null) => void;
   setSourceImage: (img: HTMLImageElement | null) => void;
+  editingTextId: string | null;
+  setEditingTextId: (id: string | null) => void;
   markClean: () => void;
   reset: () => void;
 }
@@ -84,6 +87,7 @@ const initialState = {
   currentShape: null as AnnotationShape | null,
   selectedId: null as string | null,
   sourceImage: null as HTMLImageElement | null,
+  editingTextId: null as string | null,
   isDirty: false,
 };
 
@@ -103,8 +107,50 @@ export const useAnnotateStore = create<AnnotateState>((set, get) => ({
   ...initialState,
 
   setTool: (tool) => set({ tool, selectedId: tool === 'select' ? get().selectedId : null }),
-  setColor: (color) => set({ color }),
-  setStrokePreset: (preset) => set({ strokePreset: preset }),
+
+  // Color and stroke-preset always update the toolbar's default for the
+  // next shape. If a shape is currently selected, the change also patches
+  // its stroke — so the user can re-style an existing shape by selecting
+  // it and clicking a swatch or a thickness preset.
+  setColor: (color) => {
+    const state = get();
+    const target = state.selectedId
+      ? state.shapes.find((s) => s.id === state.selectedId)
+      : undefined;
+    if (!target) {
+      set({ color });
+      return;
+    }
+    set({
+      color,
+      undoStack: [...state.undoStack, snapshot(state)],
+      redoStack: [],
+      shapes: state.shapes.map((s) =>
+        s.id === target.id ? { ...s, stroke: { ...s.stroke, color } } : s,
+      ),
+      isDirty: true,
+    });
+  },
+  setStrokePreset: (preset) => {
+    const state = get();
+    const target = state.selectedId
+      ? state.shapes.find((s) => s.id === state.selectedId)
+      : undefined;
+    if (!target) {
+      set({ strokePreset: preset });
+      return;
+    }
+    const width = STROKE_WIDTHS[preset];
+    set({
+      strokePreset: preset,
+      undoStack: [...state.undoStack, snapshot(state)],
+      redoStack: [],
+      shapes: state.shapes.map((s) =>
+        s.id === target.id ? { ...s, stroke: { ...s.stroke, width } } : s,
+      ),
+      isDirty: true,
+    });
+  },
 
   addShape: (shape) => {
     const state = get();
@@ -184,6 +230,17 @@ export const useAnnotateStore = create<AnnotateState>((set, get) => ({
       isDirty: true,
     });
   },
+  // Resize/move of an existing region — preserves cropConfirmed so a
+  // user adjusting their applied crop doesn't have to click Apply again.
+  resizeCropRegion: (region) => {
+    const state = get();
+    set({
+      undoStack: [...state.undoStack, snapshot(state)],
+      redoStack: [],
+      cropRegion: region,
+      isDirty: true,
+    });
+  },
   confirmCrop: () => {
     const state = get();
     set({
@@ -198,6 +255,7 @@ export const useAnnotateStore = create<AnnotateState>((set, get) => ({
   setCurrentShape: (shape) => set({ currentShape: shape }),
   setSelectedId: (id) => set({ selectedId: id }),
   setSourceImage: (img) => set({ sourceImage: img }),
+  setEditingTextId: (id) => set({ editingTextId: id }),
   markClean: () => set({ isDirty: false }),
   reset: () => set(initialState),
 }));

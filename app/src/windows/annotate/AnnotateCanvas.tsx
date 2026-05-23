@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback, type MutableRefObject } from 'react';
+import { useRef, useEffect, useState, useCallback, useMemo, type MutableRefObject } from 'react';
 import { Stage, Layer, Image as KonvaImage, Rect, Transformer } from 'react-konva';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type Konva from 'konva';
@@ -15,22 +15,20 @@ interface Props {
   stageRef: MutableRefObject<Konva.Stage | null>;
 }
 
-interface EditingText {
-  id: string;
-  value: string;
-  x: number;
-  y: number;
-  fontSize: number;
-  color: string;
-}
-
 export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: Props) {
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
-  const [editing, setEditing] = useState<EditingText | null>(null);
+  // Local buffer for the text-edit textarea. The "is editing" signal lives
+  // on the store (editingTextId) so useDrawing can trigger an edit on
+  // shape creation; the textarea's in-flight value stays local because
+  // every keystroke would otherwise dirty the store.
+  const [editValue, setEditValue] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const transformerRef = useRef<Konva.Transformer | null>(null);
   const nodesRef = useRef<Map<string, Konva.Node>>(new Map());
+  const cropOutlineRef = useRef<Konva.Rect | null>(null);
+  const cropTransformerRef = useRef<Konva.Transformer | null>(null);
 
   const tool = useAnnotateStore((s) => s.tool);
   const shapes = useAnnotateStore((s) => s.shapes);
@@ -40,10 +38,13 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
   const selectedId = useAnnotateStore((s) => s.selectedId);
   const setSelectedId = useAnnotateStore((s) => s.setSelectedId);
   const setCropRegion = useAnnotateStore((s) => s.setCropRegion);
+  const resizeCropRegion = useAnnotateStore((s) => s.resizeCropRegion);
   const setSourceImage = useAnnotateStore((s) => s.setSourceImage);
   const confirmCrop = useAnnotateStore((s) => s.confirmCrop);
   const deleteShape = useAnnotateStore((s) => s.deleteShape);
   const updateShape = useAnnotateStore((s) => s.updateShape);
+  const editingTextId = useAnnotateStore((s) => s.editingTextId);
+  const setEditingTextId = useAnnotateStore((s) => s.setEditingTextId);
 
   const { handleMouseDown, handleMouseMove, handleMouseUp } = useDrawing(stageRef);
 
@@ -107,13 +108,39 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
     transformer.getLayer()?.batchDraw();
   }, [selectedId, shapes]);
 
-  const transformableTools = new Set(['rectangle', 'ellipse', 'blur', 'text']);
+  // Attach the crop transformer to the outline whenever both exist —
+  // the outline is the (offset-by-half-stroke) rect we draw on top of
+  // the dim mask. The user grabs handles on this rect; resize/drag
+  // commits the actual crop bounds via resizeCropRegion (preserving
+  // cropConfirmed so an Apply'd crop stays applied through resizes).
+  useEffect(() => {
+    const transformer = cropTransformerRef.current;
+    const outline = cropOutlineRef.current;
+    if (!transformer) return;
+    if (outline && cropRegion) {
+      transformer.nodes([outline]);
+    } else {
+      transformer.nodes([]);
+    }
+    transformer.getLayer()?.batchDraw();
+  }, [cropRegion, cropConfirmed, currentShape]);
+
+  const transformableTools = new Set([
+    'rectangle',
+    'ellipse',
+    'blur',
+    'text',
+    'arrow',
+    'pen',
+    'highlighter',
+    'step-marker',
+  ]);
   const canTransformSelected =
     selectedShape !== null && transformableTools.has(selectedShape.tool);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (editing) return;
+      if (editingTextId) return;
 
       if (e.key === 'Escape') {
         if (selectedId) {
@@ -145,7 +172,7 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
         useAnnotateStore.getState().redo();
       }
     },
-    [editing, selectedId, setSelectedId, deleteShape],
+    [editingTextId, selectedId, setSelectedId, deleteShape],
   );
 
   useEffect(() => {
@@ -153,28 +180,60 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
-  const startEditingSelectedText = useCallback(() => {
-    if (!selectedShape || selectedShape.tool !== 'text') return;
-    setEditing({
-      id: selectedShape.id,
-      value: selectedShape.text ?? '',
-      x: selectedShape.x ?? 0,
-      y: selectedShape.y ?? 0,
-      fontSize: selectedShape.stroke.width * 6,
-      color: selectedShape.stroke.color,
-    });
-  }, [selectedShape]);
+  // The text shape that's currently in edit mode (if any). Derived from
+  // the store's editingTextId so any code path can trigger an edit by
+  // setting the id, including useDrawing on shape creation.
+  const editingShape = useMemo(
+    () =>
+      editingTextId
+        ? (shapes.find((s) => s.id === editingTextId && s.tool === 'text') ?? null)
+        : null,
+    [editingTextId, shapes],
+  );
+
+  // Re-initialize the textarea buffer + focus/select-all whenever we
+  // enter edit mode on a different shape. Keyed on the id (not the
+  // whole shape) so per-keystroke updateShape() calls don't re-fire
+  // the focus/select and steal the cursor mid-typing.
+  useEffect(() => {
+    if (!editingShape) {
+      setEditValue('');
+      return;
+    }
+    setEditValue(editingShape.text ?? '');
+    // Defer the focus/select until React has rendered the textarea.
+    const t = window.setTimeout(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.select();
+    }, 0);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: only re-init on id change, not on every text edit
+  }, [editingShape?.id]);
 
   const commitEdit = useCallback(() => {
-    if (!editing) return;
-    const trimmed = editing.value;
-    if (trimmed.length === 0) {
-      deleteShape(editing.id);
+    if (!editingShape) return;
+    if (editValue.length === 0) {
+      // Empty text is a self-cancel: a brand-new shape that was never
+      // typed into auto-deletes, and an existing shape whose contents
+      // were cleared follows the same rule.
+      deleteShape(editingShape.id);
     } else {
-      updateShape(editing.id, { text: trimmed });
+      updateShape(editingShape.id, { text: editValue });
     }
-    setEditing(null);
-  }, [editing, updateShape, deleteShape]);
+    setEditingTextId(null);
+  }, [editingShape, editValue, updateShape, deleteShape, setEditingTextId]);
+
+  const cancelEdit = useCallback(() => {
+    // Esc discards the in-flight buffer without committing. Brand-new
+    // shapes (created via the text tool) start with text:'' so an Esc
+    // before typing leaves them empty — the next blur/commit would
+    // delete them. We make the cleanup explicit here so Esc is a true
+    // "throw it away" gesture.
+    if (editingShape && (editingShape.text ?? '').length === 0) {
+      deleteShape(editingShape.id);
+    }
+    setEditingTextId(null);
+  }, [editingShape, deleteShape, setEditingTextId]);
 
   const handleStageMouseDown = useCallback(
     (evt: Konva.KonvaEventObject<MouseEvent>) => {
@@ -201,13 +260,15 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
     [],
   );
 
-  // Position of the text edit overlay in screen pixels (scaled by stage scale)
-  const editScreenStyle = editing
+  // Position of the in-place text editor in screen pixels (scaled by
+  // stage scale). Matches the Konva Text's font + color so the textarea
+  // visually IS the shape being edited.
+  const editScreenStyle = editingShape
     ? {
-        left: editing.x * scale,
-        top: editing.y * scale,
-        fontSize: editing.fontSize * scale,
-        color: editing.color,
+        left: (editingShape.x ?? 0) * scale,
+        top: (editingShape.y ?? 0) * scale,
+        fontSize: editingShape.stroke.width * 6 * scale,
+        color: editingShape.stroke.color,
       }
     : undefined;
 
@@ -231,32 +292,30 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
             {image && <KonvaImage image={image} width={imageWidth} height={imageHeight} />}
           </Layer>
           <Layer>
-            {shapes.map((s) => (
-              <ShapeRenderer
-                key={s.id}
-                shape={s}
-                draggable={tool === 'select'}
-                onSelect={() => {
-                  if (tool === 'select') setSelectedId(s.id);
-                }}
-                registerNode={registerNode(s.id)}
-                onStartEditText={
-                  s.tool === 'text' && tool === 'select'
-                    ? () => {
-                        setSelectedId(s.id);
-                        setEditing({
-                          id: s.id,
-                          value: s.text ?? '',
-                          x: s.x ?? 0,
-                          y: s.y ?? 0,
-                          fontSize: s.stroke.width * 6,
-                          color: s.stroke.color,
-                        });
-                      }
-                    : undefined
-                }
-              />
-            ))}
+            {shapes.map((s) => {
+              // Hide the Konva text node while its textarea is open so we
+              // don't see the old text underneath the in-place editor.
+              if (s.tool === 'text' && s.id === editingTextId) return null;
+              return (
+                <ShapeRenderer
+                  key={s.id}
+                  shape={s}
+                  draggable={tool === 'select'}
+                  onSelect={() => {
+                    if (tool === 'select') setSelectedId(s.id);
+                  }}
+                  registerNode={registerNode(s.id)}
+                  onStartEditText={
+                    s.tool === 'text' && tool === 'select'
+                      ? () => {
+                          setSelectedId(s.id);
+                          setEditingTextId(s.id);
+                        }
+                      : undefined
+                  }
+                />
+              );
+            })}
             {currentShape && currentShape.tool === 'blur' ? (
               // While the user is dragging out a new blur rect, draw a
               // cheap dashed Rect instead of running Pixelate + cache on
@@ -302,13 +361,19 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
               : cropRegion;
             if (!preview || preview.width <= 0 || preview.height <= 0) return null;
             const confirmed = !drafting && cropConfirmed;
+            const strokeW = confirmed ? 3 : 2;
+            const half = strokeW / 2;
             return (
-              <Layer listening={false}>
+              // Layer must listen so the outline's drag/transform events
+              // fire. Each dim rect is individually marked listening=false
+              // so they don't intercept clicks on the shape layer below.
+              <Layer>
                 {/* Dim everything outside the previewed crop so the user
                     can see what will be kept vs. cropped away. Export uses
                     the same crop bounds, so these dimmed pixels never
                     appear in the output file. */}
                 <Rect
+                  listening={false}
                   x={0}
                   y={0}
                   width={imageWidth}
@@ -316,6 +381,7 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
                   fill="rgba(0, 0, 0, 0.45)"
                 />
                 <Rect
+                  listening={false}
                   x={0}
                   y={preview.y + preview.height}
                   width={imageWidth}
@@ -323,6 +389,7 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
                   fill="rgba(0, 0, 0, 0.45)"
                 />
                 <Rect
+                  listening={false}
                   x={0}
                   y={preview.y}
                   width={preview.x}
@@ -330,31 +397,78 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
                   fill="rgba(0, 0, 0, 0.45)"
                 />
                 <Rect
+                  listening={false}
                   x={preview.x + preview.width}
                   y={preview.y}
                   width={Math.max(0, imageWidth - (preview.x + preview.width))}
                   height={preview.height}
                   fill="rgba(0, 0, 0, 0.45)"
                 />
+                {/* Konva centers stroke on the path; we shift the outline
+                    outward by half-stroke so the stroke sits entirely
+                    outside the kept region (otherwise toDataURL bakes a
+                    thin green border into saved derivations). */}
                 <Rect
-                  x={preview.x}
-                  y={preview.y}
-                  width={preview.width}
-                  height={preview.height}
+                  ref={cropOutlineRef}
+                  x={preview.x - half}
+                  y={preview.y - half}
+                  width={preview.width + strokeW}
+                  height={preview.height + strokeW}
                   stroke={confirmed ? '#22c55e' : '#3b82f6'}
-                  strokeWidth={confirmed ? 3 : 2}
+                  strokeWidth={strokeW}
                   dash={confirmed ? undefined : [6, 3]}
+                  draggable={!drafting}
+                  onDragEnd={(e) => {
+                    // Un-shift the half-stroke offset to recover the
+                    // actual kept-region bounds.
+                    resizeCropRegion({
+                      x: e.target.x() + half,
+                      y: e.target.y() + half,
+                      width: preview.width,
+                      height: preview.height,
+                    });
+                  }}
+                  onTransformEnd={() => {
+                    const node = cropOutlineRef.current;
+                    if (!node) return;
+                    const sx = node.scaleX();
+                    const sy = node.scaleY();
+                    const newOutW = node.width() * sx;
+                    const newOutH = node.height() * sy;
+                    const newOutX = node.x();
+                    const newOutY = node.y();
+                    node.scaleX(1);
+                    node.scaleY(1);
+                    resizeCropRegion({
+                      x: newOutX + half,
+                      y: newOutY + half,
+                      width: Math.max(5, newOutW - strokeW),
+                      height: Math.max(5, newOutH - strokeW),
+                    });
+                  }}
                 />
+                {!drafting && (
+                  <Transformer
+                    ref={cropTransformerRef}
+                    rotateEnabled={false}
+                    boundBoxFunc={(oldBox, newBox) => {
+                      if (newBox.width < 5 + strokeW || newBox.height < 5 + strokeW) {
+                        return oldBox;
+                      }
+                      return newBox;
+                    }}
+                  />
+                )}
               </Layer>
             );
           })()}
         </Stage>
 
-        {editing && editScreenStyle && (
+        {editingShape && editScreenStyle && (
           <textarea
-            autoFocus
-            value={editing.value}
-            onChange={(e) => setEditing({ ...editing, value: e.target.value })}
+            ref={textareaRef}
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
             onBlur={commitEdit}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -363,32 +477,22 @@ export function AnnotateCanvas({ imageSrc, imageWidth, imageHeight, stageRef }: 
               }
               if (e.key === 'Escape') {
                 e.preventDefault();
-                setEditing(null);
+                cancelEdit();
               }
               e.stopPropagation();
             }}
-            className="absolute bg-transparent border border-blue-400 outline-none resize-none p-0 m-0 leading-tight"
+            className="absolute bg-transparent outline-none resize-none p-0 m-0 leading-tight"
             style={{
               ...editScreenStyle,
               fontFamily: 'system-ui, sans-serif',
               minWidth: 40,
+              // Subtle caret-bar marker so the user can see the edit
+              // surface without a heavy box that breaks the in-place feel.
+              boxShadow: 'inset 1px 0 0 currentColor',
             }}
             // Resize the textarea to fit content as the user types.
-            rows={Math.max(1, editing.value.split('\n').length)}
+            rows={Math.max(1, editValue.split('\n').length)}
           />
-        )}
-
-        {selectedShape && tool === 'select' && selectedShape.tool === 'text' && (
-          <button
-            className="absolute text-xs bg-slate-800 text-slate-200 px-2 py-0.5 rounded shadow"
-            style={{
-              left: (selectedShape.x ?? 0) * scale,
-              top: ((selectedShape.y ?? 0) + selectedShape.stroke.width * 6 + 4) * scale,
-            }}
-            onClick={startEditingSelectedText}
-          >
-            edit
-          </button>
         )}
 
         {cropRegion && !cropConfirmed && (

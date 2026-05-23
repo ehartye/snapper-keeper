@@ -62,6 +62,23 @@ export function LibraryWindow() {
     await queryClient.invalidateQueries({ queryKey: ['captures'] });
   }, [queryClient]);
 
+  // Refresh the gallery whenever ANY capture lands — fresh screenshots,
+  // crop derivations (snk-annotate derive_capture), or anything else that
+  // emits capture:saved. The hotkey handlers below also call refreshCaptures
+  // directly, but this listener catches everything they don't (e.g. saves
+  // from the annotate window).
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen('capture:saved', () => {
+      void refreshCaptures();
+    })
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch((e) => console.error('library capture:saved listener failed', e));
+    return () => unlisten?.();
+  }, [refreshCaptures]);
+
   const showToolbar = useCallback(async (captureId: string) => {
     const toolbar = await WebviewWindow.getByLabel('capture-toolbar');
     if (toolbar) {
