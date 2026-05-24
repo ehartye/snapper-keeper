@@ -283,3 +283,140 @@ fn hash_of_event(event: &ClipboardEvent) -> String {
         ClipboardEvent::Image(b) => crate::hasher::hash_image_bytes(b),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sensitivity::FakeProbe;
+    use crate::source_app::{SourceApp, SourceAppKind};
+    use serde_json::json;
+    use snk_library::settings;
+
+    fn fresh_db() -> (tempfile::TempDir, Db) {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sk.db");
+        let db = Db::open(&path).unwrap();
+        (dir, db)
+    }
+
+    #[test]
+    fn sensitive_flag_skips_without_persisting() {
+        let (tmp, db) = fresh_db();
+        let mut state = WatcherState::new();
+        let result = worker_step(
+            ClipboardEvent::Text("secret".into()),
+            &mut state,
+            &db,
+            tmp.path(),
+            &FakeProbe { answer: true },
+            None,
+        );
+        assert_eq!(result, StepResult::Skipped(SkipReason::SensitiveFlag));
+        assert!(state.last_hash.is_some(), "last_hash should be set on skip");
+
+        let items =
+            snk_library::clipboard::list(&db, snk_library::ListClipboardQuery::default()).unwrap();
+        assert_eq!(items.len(), 0, "no row should be inserted on sensitive skip");
+    }
+
+    #[test]
+    fn blocked_app_skips_without_persisting() {
+        let (tmp, db) = fresh_db();
+        settings::set(
+            &db,
+            "clipboard.app_blocklist",
+            &json!([{
+                "identifier": "1password.exe",
+                "display_name": "1Password",
+                "kind": "windows_exe"
+            }]),
+        )
+        .unwrap();
+        let src = SourceApp {
+            identifier: "1password.exe".into(),
+            display_name: "1Password".into(),
+            kind: SourceAppKind::WindowsExe,
+        };
+        let mut state = WatcherState::new();
+        let result = worker_step(
+            ClipboardEvent::Text("password123".into()),
+            &mut state,
+            &db,
+            tmp.path(),
+            &FakeProbe { answer: false },
+            Some(src.clone()),
+        );
+        assert_eq!(result, StepResult::Skipped(SkipReason::AppBlocked(src.identifier)));
+        let items =
+            snk_library::clipboard::list(&db, snk_library::ListClipboardQuery::default()).unwrap();
+        assert_eq!(items.len(), 0);
+    }
+
+    #[test]
+    fn allowed_text_event_is_saved_with_source_app() {
+        let (tmp, db) = fresh_db();
+        let src = SourceApp {
+            identifier: "code.exe".into(),
+            display_name: "Visual Studio Code".into(),
+            kind: SourceAppKind::WindowsExe,
+        };
+        let mut state = WatcherState::new();
+        let result = worker_step(
+            ClipboardEvent::Text("hello".into()),
+            &mut state,
+            &db,
+            tmp.path(),
+            &FakeProbe { answer: false },
+            Some(src.clone()),
+        );
+        match result {
+            StepResult::Saved { item_id } => {
+                let stored = snk_library::clipboard::get(&db, &item_id).unwrap();
+                assert_eq!(stored.source_app, Some(src.identifier));
+            }
+            other => panic!("expected Saved, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn duplicate_hash_skips_without_re_inserting() {
+        let (tmp, db) = fresh_db();
+        let mut state = WatcherState::new();
+        let probe = FakeProbe { answer: false };
+
+        let first = worker_step(
+            ClipboardEvent::Text("dup".into()),
+            &mut state,
+            &db,
+            tmp.path(),
+            &probe,
+            None,
+        );
+        assert!(matches!(first, StepResult::Saved { .. }));
+
+        let second = worker_step(
+            ClipboardEvent::Text("dup".into()),
+            &mut state,
+            &db,
+            tmp.path(),
+            &probe,
+            None,
+        );
+        assert_eq!(second, StepResult::Skipped(SkipReason::DuplicateHash));
+    }
+
+    #[test]
+    fn empty_text_is_skipped() {
+        let (tmp, db) = fresh_db();
+        let mut state = WatcherState::new();
+        let result = worker_step(
+            ClipboardEvent::Text(String::new()),
+            &mut state,
+            &db,
+            tmp.path(),
+            &FakeProbe { answer: false },
+            None,
+        );
+        assert_eq!(result, StepResult::Skipped(SkipReason::EmptyContent));
+    }
+}
