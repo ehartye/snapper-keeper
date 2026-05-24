@@ -1267,6 +1267,8 @@ git commit -m "refactor(clipboard): extract pure worker_step from watcher (#57 f
 
 ## Task 11: Unit-test `worker_step` exhaustively
 
+> **Plan-fix note (2026-05-24):** Original plan called `db.with_conn(...)` directly from the watcher test module. `Db::with_conn` is `pub(crate)` and snk-clipboard can't reach it; promoting it to `pub` would violate architecture rule #2 ("All persistence flows through `snk-library`"). Rewritten to use the public typed API (`snk_library::clipboard::list` for row counts, `snk_library::clipboard::get` for the `source_app` field round-trip). Tests retain equivalent rigor — they verify the same semantics through the public contract the watcher would actually use. See [[reference_team_driven_shared_worktree]] for the broader plan-fix protocol context.
+
 **Files:**
 - Modify: `crates/snk-clipboard/src/watcher.rs` (append a `#[cfg(test)] mod tests`)
 
@@ -1305,10 +1307,9 @@ mod tests {
         assert_eq!(result, StepResult::Skipped(SkipReason::SensitiveFlag));
         assert!(state.last_hash.is_some(), "last_hash should be set on skip");
 
-        let count: i64 = db
-            .with_conn(|c| c.query_row("SELECT COUNT(*) FROM clipboard_items", [], |r| r.get(0)))
-            .unwrap();
-        assert_eq!(count, 0, "no row should be inserted on sensitive skip");
+        let items =
+            snk_library::clipboard::list(&db, snk_library::ListClipboardQuery::default()).unwrap();
+        assert_eq!(items.len(), 0, "no row should be inserted on sensitive skip");
     }
 
     #[test]
@@ -1339,10 +1340,9 @@ mod tests {
             Some(src.clone()),
         );
         assert_eq!(result, StepResult::Skipped(SkipReason::AppBlocked(src.identifier)));
-        let count: i64 = db
-            .with_conn(|c| c.query_row("SELECT COUNT(*) FROM clipboard_items", [], |r| r.get(0)))
-            .unwrap();
-        assert_eq!(count, 0);
+        let items =
+            snk_library::clipboard::list(&db, snk_library::ListClipboardQuery::default()).unwrap();
+        assert_eq!(items.len(), 0);
     }
 
     #[test]
@@ -1364,16 +1364,8 @@ mod tests {
         );
         match result {
             StepResult::Saved { item_id } => {
-                let stored: Option<String> = db
-                    .with_conn(|c| {
-                        c.query_row(
-                            "SELECT source_app FROM clipboard_items WHERE id = ?1",
-                            [&item_id],
-                            |r| r.get(0),
-                        )
-                    })
-                    .unwrap();
-                assert_eq!(stored, Some(src.identifier));
+                let stored = snk_library::clipboard::get(&db, &item_id).unwrap();
+                assert_eq!(stored.source_app, Some(src.identifier));
             }
             other => panic!("expected Saved, got {other:?}"),
         }
