@@ -101,7 +101,7 @@
       "resources/tesseract/**/*": "tesseract/"
     },
     "windows": {
-      "signCommand": "sign code artifact-signing -ase https://eus.codesigning.azure.net -asa HartyeTech -ascp snapper-keeper \"%1\""
+      "signCommand": "sign code artifact-signing -ase https://eus.codesigning.azure.net -asa HartyeTech -ascp snapper-keeper %1"
     }
   },
   "plugins": {
