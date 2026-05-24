@@ -10,5 +10,4 @@ publish.workspace = true
 tauri.workspace = true
 tauri-plugin-global-shortcut.workspace = true
 serde.workspace = true
-thiserror.workspace = true
 tracing.workspace = true

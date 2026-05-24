@@ -59,7 +59,7 @@ A cross-platform (Windows + macOS) desktop utility that combines screen capture 
 - Platform deps from <https://v2.tauri.app/start/prerequisites/>:
   - **Windows:** Microsoft Visual Studio C++ Build Tools, WebView2 (pre-installed on Win 10/11)
   - **macOS:** Xcode Command Line Tools (`xcode-select --install`)
-  - **Linux:** `libwebkit2gtk-4.1-dev`, `libappindicator3-dev`, `librsvg2-dev`, `libxdo-dev`, `libssl-dev`
+  - **Linux:** `libwebkit2gtk-4.1-dev`, `libappindicator3-dev`, `librsvg2-dev`, `libxdo-dev`, `libssl-dev`. Linux is supported as a **dev convenience only** — the project ships signed installers for Windows and macOS only, and CI does not run a Linux release pipeline.
 
 ### Run in dev
 
