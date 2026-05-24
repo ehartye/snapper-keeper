@@ -51,7 +51,7 @@ impl WatcherState {
 
 const MAX_UNPINNED: u32 = 200;
 
-static SKIP_NEXT: AtomicBool = AtomicBool::new(false);
+pub(crate) static SKIP_NEXT: AtomicBool = AtomicBool::new(false);
 
 pub fn mark_skip_next() {
     SKIP_NEXT.store(true, Ordering::SeqCst);
@@ -70,8 +70,7 @@ pub fn start_watcher(db: Arc<Db>, library_root: std::path::PathBuf) {
     }
 }
 
-#[cfg(not(target_os = "windows"))]
-fn start_polling(
+pub(crate) fn start_polling(
     db: Arc<Db>,
     library_root: std::path::PathBuf,
     interval: std::time::Duration,

@@ -1737,7 +1737,12 @@ In `crates/snk-clipboard/src/watcher.rs`:
 
 - Change `static SKIP_NEXT: AtomicBool` → `pub(crate) static SKIP_NEXT: AtomicBool`.
 - Change `fn start_polling` → `pub(crate) fn start_polling`.
+- **Drop the `#[cfg(not(target_os = "windows"))]` attribute on `start_polling`'s definition.** Task 12 originally cfg-gated it for the macOS-only path, but Task 13's Windows event-driven watcher needs to call `start_polling` from its `AddClipboardFormatListener`-failure fallback path. Dropping the cfg makes `start_polling` available on Windows too (pure additive — Windows builds compile the function but only invoke it via the fallback). Also drop the same cfg from `start_polling`'s `use crate::sensitivity::OsProbe; use crate::source_app;` lines if present.
 - Also make `ClipboardEvent`, `WatcherState`, `StepResult`, `worker_step` all `pub(crate)` if they aren't already.
+
+(Plan-fix note 2026-05-24: original Step 2 only mentioned the visibility change; the cfg-drop was implicit but uncaught. win-native surfaced the compile-error during Task 13 pre-flight. See [[reference_team_driven_shared_worktree]].)
+
+> **CTX shape divergence (2026-05-24):** Plan §Task 13 Step 1 code block uses `static mut CTX: Option<WatcherCtx>` with raw `unsafe { CTX = ...; CTX.as_mut() }` access. Shipped impl uses `static CTX: OnceLock<Mutex<WatcherCtx>> = OnceLock::new()` instead. Rationale: stable Rust 1.77+ warns on `static mut` references (`static_mut_refs` lint), and the modernized shape avoids both the warning and the per-access `unsafe` block. `arboard::Clipboard` on Windows is a ZST (`pub(crate) struct Clipboard(())`), so `Mutex<WatcherCtx>` requires no extra Send/Sync impls. The `OsProbe` field is omitted from `WatcherCtx` (it's a ZST, constructed `&OsProbe` at the call site). Mutex contention is zero in practice (single listener thread). See platform_watcher.rs for the as-shipped shape.
 
 **Step 3: Compile on Windows**
 
@@ -2420,7 +2425,7 @@ fn macos_plain_text_is_not_sensitive() {
 #[test]
 #[serial_test::serial(clipboard)]
 fn windows_can_include_in_history_zero_marks_sensitive() {
-    use windows::core::{w, PCWSTR};
+    use windows::core::w;
     use windows::Win32::Foundation::HANDLE;
     use windows::Win32::System::DataExchange::{
         CloseClipboard, EmptyClipboard, OpenClipboard, RegisterClipboardFormatW,
