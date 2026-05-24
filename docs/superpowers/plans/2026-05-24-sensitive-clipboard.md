@@ -126,8 +126,18 @@ fn v004_to_v005_preserves_clipboard_rows() {
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cargo test -p snk-library migrate::tests::v005_drops_sensitive_column_from_clipboard_items migrate::tests::v004_to_v005_preserves_clipboard_rows -- --nocapture`
-Expected: both FAIL — `sensitive` column still present; second test panics on `migrate(&mut conn)` because V005 doesn't exist yet.
+Cargo only accepts one positional test filter per invocation, so run each test separately:
+
+```bash
+cargo test -p snk-library migrate::tests::v005_drops_sensitive_column_from_clipboard_items -- --nocapture
+cargo test -p snk-library migrate::tests::v004_to_v005_preserves_clipboard_rows -- --nocapture
+```
+
+Expected:
+- `v005_drops_sensitive_column_from_clipboard_items` FAILS — `sensitive` column still present in `clipboard_items`.
+- `v004_to_v005_preserves_clipboard_rows` PASSES trivially.
+
+> **Test #2 framing:** This test is a regression guard, not a strict TDD red-green test. Before V005 exists, `migrate()` is a no-op past V004 and the test trivially passes. After V005 lands, the test becomes load-bearing — it catches accidental row destruction if anyone later replaces the `ALTER TABLE ... DROP COLUMN` with a destructive operation like `DELETE FROM`.
 
 **Step 3: Add the migration file**
 
@@ -184,7 +194,7 @@ pub fn migrate(conn: &mut Connection) -> Result<()> {
 **Step 5: Run tests to verify they pass**
 
 Run: `cargo test -p snk-library migrate::`
-Expected: 7/7 pass (5 existing + 2 new). The `migration_count_matches_latest_applied_version` test (from PR #80) should still pass — it counts .sql files in `migrations/` (now 5) and matches the applied schema version.
+Expected: 6/6 pass (4 existing + 2 new). If a `migration_count_matches_latest_applied_version` test lands later (it was mentioned in the original plan draft as coming from PR #80 but is not present in this branch), it would count .sql files in `migrations/` (now 5) and must still match the applied schema version.
 
 **Step 6: Commit**
 
