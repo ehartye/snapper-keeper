@@ -111,10 +111,11 @@ jobs:
           rm certificate.p12
 
       # Build with Tauri CLI — handles signing, bundling, and updater artifacts.
-      # Windows signing uses Azure Artifact Signing: the `sign` CLI reads
-      # AZURE_* env vars through DefaultAzureCredential, and Tauri's NSIS
-      # bundler invokes TAURI_WINDOWS_SIGN_COMMAND once per artifact with %1
-      # substituted to the file path.
+      # Windows signing uses Azure Artifact Signing via the `sign` CLI, which
+      # is wired in through `bundle.windows.signCommand` in tauri.conf.json
+      # (Tauri 2 ignores the old TAURI_WINDOWS_SIGN_COMMAND env var from
+      # Tauri 1). The CLI reads AZURE_TENANT_ID/CLIENT_ID/CLIENT_SECRET from
+      # env via DefaultAzureCredential.
       - name: Build Tauri app
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -125,7 +126,6 @@ jobs:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          TAURI_WINDOWS_SIGN_COMMAND: ${{ runner.os == 'Windows' && format('sign code artifact-signing -ase https://eus.codesigning.azure.net -asa {0} -ascp {1} "%1"', secrets.AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME, secrets.AZURE_ARTIFACT_SIGNING_CERT_PROFILE) || '' }}
         run: |
           pnpm tauri build --target ${{ matrix.target }}
 
