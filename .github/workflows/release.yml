@@ -109,6 +109,38 @@ jobs:
           Write-Host "sign tool located at: $signPath"
           sign --version
 
+      # Smoke-test the sign command directly so any auth / syntax / network
+      # error surfaces here with a real stderr instead of Tauri's opaque
+      # "failed to run sign". Sign a copy of cmd.exe (already Microsoft-
+      # signed; re-signing it as a test is harmless because we never
+      # distribute it). The resulting Authenticode block proves the SP
+      # credentials work end-to-end against Azure Artifact Signing.
+      - name: Smoke-test sign tool against Azure Artifact Signing (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: |
+          Copy-Item -Path "C:\Windows\System32\cmd.exe" -Destination ".\sign-smoke-test.exe"
+          Write-Host "Invoking sign against .\sign-smoke-test.exe ..."
+          sign code artifact-signing `
+            -ase https://eus.codesigning.azure.net `
+            -asa HartyeTech `
+            -ascp snapper-keeper `
+            -v Information `
+            ".\sign-smoke-test.exe"
+          $exit = $LASTEXITCODE
+          Write-Host "sign exit code: $exit"
+          if ($exit -ne 0) {
+            Write-Error "sign tool failed against Azure Artifact Signing (exit $exit)"
+            exit $exit
+          }
+          Write-Host "Sign succeeded. Verifying Authenticode signature on test file:"
+          Get-AuthenticodeSignature ".\sign-smoke-test.exe" | Format-List Status, StatusMessage, SignerCertificate
+          Remove-Item ".\sign-smoke-test.exe"
+
       # macOS: import signing certificate
       - name: Import Apple certificate
         if: runner.os == 'macOS'
