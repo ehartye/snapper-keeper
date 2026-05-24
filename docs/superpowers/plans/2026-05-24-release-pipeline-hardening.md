@@ -75,7 +75,7 @@ fi
 echo "uses: $ORG/$REPO@$SHA # $TAG"
 ```
 
-Repeat for each pair listed in Step 1. The `dtolnay/rust-toolchain@stable` is a branch, not a tag — use `gh api repos/dtolnay/rust-toolchain/git/refs/heads/stable --jq '.object.sha'` for that one.
+Repeat for each pair listed in Step 1. Note: `dtolnay/rust-toolchain@stable` AND `pnpm/action-setup@v3` are both branch aliases, not tags — use `gh api repos/$ORG/$REPO/git/refs/heads/$BRANCH --jq '.object.sha'` for those. (`pnpm/action-setup` only has explicit version tags like `v3.0.0`; `v3` is a maintainer-updated major-version alias branch.) If `gh api ...refs/tags/$TAG` returns an array instead of an object, that's the giveaway — the tag doesn't exist; check `git/refs/heads/$TAG` instead.
 
 **Step 3: Write the resolved SHAs to a scratch file for the next tasks**
 
@@ -189,32 +189,42 @@ Read the surrounding context — the step also appends `$env:USERPROFILE\.dotnet
 
 ---
 
-### Task 1.5: Pin Tesseract chocolatey version + capture expected SHA256
+### Task 1.5: Pin Tesseract chocolatey version + capture expected installer SHA256
 
 **Files:**
 - Modify: `.github/workflows/release.yml` (the "Bundle Tesseract (Windows)" step, currently around line 66–76)
 
+> **Important:** The Tesseract chocolatey package bundles the installer **inside the .nupkg** (file `tools/tesseract-ocr-w64-setup-<VERSION>.exe`). It is **NSIS `.exe`**, not `.msi` — `4D 5A` PE signature, not `D0 CF` OLE compound. An earlier draft of this plan assumed MSI; that was wrong. Also: since the installer ships inside the .nupkg, the SHA256 can be extracted directly from the package — no local `choco install` required. The post-install hash check in the workflow is still useful as a defense-in-depth against a malicious version-pin that swaps the bundled executable.
+
 **Step 1: Identify the current stable Tesseract chocolatey version**
 
-Browse https://community.chocolatey.org/packages/tesseract or run on a Windows machine:
+Query the community feed (works on any OS with curl + a JSON parser; doesn't require choco installed):
 
 ```powershell
-choco search tesseract --exact --all-versions | Select-Object -First 5
+Invoke-RestMethod -Uri "https://community.chocolatey.org/api/v2/Packages()?`$filter=Id eq 'tesseract'&`$orderby=Published desc&`$top=5" |
+  Select-Object @{n='Version';e={$_.properties.Version}}, @{n='IsLatestVersion';e={$_.properties.IsLatestVersion.'#text'}}
 ```
 
-Record the version as `TESSERACT_VERSION` (likely something like `5.3.3` or newer).
+Record the `IsLatestVersion: true` row as `TESSERACT_VERSION`. As of the time this plan was written: `5.5.0.20241111`.
 
-**Step 2: Compute the expected SHA256 of the downloaded MSI**
+**Step 2: Compute the expected SHA256 of the bundled installer (.exe, NOT .msi)**
 
-This must be done once, on a Windows machine, with the pinned version. Run (substituting the version):
+The installer ships inside the .nupkg. Download the package, extract the bundled `.exe`, hash it. This works on any OS — Windows shown:
 
 ```powershell
-choco install tesseract --version=<TESSERACT_VERSION> --no-progress --confirm
-$MsiPath = (Get-ChildItem "$env:ChocolateyInstall\lib\tesseract" -Filter '*.msi' -Recurse | Select-Object -First 1).FullName
-(Get-FileHash -Algorithm SHA256 $MsiPath).Hash
+$VER = '<TESSERACT_VERSION>'
+$tmp = New-Item -ItemType Directory -Force -Path "$env:TEMP\tesseract-nupkg-inspect" | ForEach-Object FullName
+Invoke-WebRequest -Uri "https://community.chocolatey.org/api/v2/package/tesseract/$VER" -OutFile "$tmp\tesseract.nupkg" -UseBasicParsing
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$zip = [System.IO.Compression.ZipFile]::OpenRead("$tmp\tesseract.nupkg")
+$entry = $zip.Entries | Where-Object { $_.FullName -like 'tools/tesseract-ocr-w64-setup-*.exe' } | Select-Object -First 1
+$out = [System.IO.File]::OpenWrite("$tmp\$($entry.Name)")
+$entry.Open().CopyTo($out); $out.Close()
+$zip.Dispose()
+(Get-FileHash -Algorithm SHA256 "$tmp\$($entry.Name)").Hash
 ```
 
-Record the hash as `TESSERACT_SHA256`. Commit both `<TESSERACT_VERSION>` and `<TESSERACT_SHA256>` into the workflow as literals.
+Record the hash as `TESSERACT_SHA256`. Both `<TESSERACT_VERSION>` and `<TESSERACT_SHA256>` go into the workflow as literals (Step 3). For `5.5.0.20241111` the SHA256 is `F3FC4236425B690C8BE756F35793F77394EE004BE0A6460A440C754D892F68BC`.
 
 **Step 3: Replace the Bundle Tesseract step in `release.yml`**
 
@@ -228,19 +238,25 @@ Replace the existing step body with (substituting both literals):
           TESSERACT_VERSION: '<TESSERACT_VERSION>'
           TESSERACT_SHA256: '<TESSERACT_SHA256>'
         run: |
+          # --requirechecksums is a no-op for this package (the installer
+          # ships inside the .nupkg rather than being fetched via
+          # Get-ChocolateyWebFile), but kept as belt-and-suspenders in case
+          # the package model changes upstream.
           choco install tesseract --version=$env:TESSERACT_VERSION --no-progress --confirm --requirechecksums
 
-          $msi = (Get-ChildItem "$env:ChocolateyInstall\lib\tesseract" -Filter '*.msi' -Recurse | Select-Object -First 1).FullName
-          if (-not $msi) {
-            Write-Error "Tesseract MSI not found after install"
+          # Tesseract's chocolatey package bundles an NSIS .exe (not .msi).
+          $installer = (Get-ChildItem "$env:ChocolateyInstall\lib\tesseract" -Filter '*.exe' -Recurse | Select-Object -First 1).FullName
+          if (-not $installer) {
+            Write-Error "Tesseract installer .exe not found after install"
             exit 1
           }
-          $actual = (Get-FileHash -Algorithm SHA256 $msi).Hash
+          $actual = (Get-FileHash -Algorithm SHA256 $installer).Hash
+          # PowerShell -ne is case-insensitive on strings.
           if ($actual -ne $env:TESSERACT_SHA256) {
-            Write-Error "Tesseract MSI SHA256 mismatch. Expected: $env:TESSERACT_SHA256. Got: $actual."
+            Write-Error "Tesseract installer SHA256 mismatch. Expected: $env:TESSERACT_SHA256. Got: $actual."
             exit 1
           }
-          Write-Host "Tesseract MSI SHA256 verified."
+          Write-Host "Tesseract installer SHA256 verified."
 
           $src = 'C:\Program Files\Tesseract-OCR'
           $dest = 'app\src-tauri\resources\tesseract'
@@ -893,11 +909,12 @@ Delete the entire `build-and-release:` job (everything from `build-and-release:`
           TESSERACT_SHA256: '<TESSERACT_SHA256>'    # from PR-1 Task 1.5
         run: |
           choco install tesseract --version=$env:TESSERACT_VERSION --no-progress --confirm --requirechecksums
-          $msi = (Get-ChildItem "$env:ChocolateyInstall\lib\tesseract" -Filter '*.msi' -Recurse | Select-Object -First 1).FullName
-          if (-not $msi) { Write-Error "Tesseract MSI not found"; exit 1 }
-          $actual = (Get-FileHash -Algorithm SHA256 $msi).Hash
+          # Tesseract's chocolatey package bundles an NSIS .exe (not .msi).
+          $installer = (Get-ChildItem "$env:ChocolateyInstall\lib\tesseract" -Filter '*.exe' -Recurse | Select-Object -First 1).FullName
+          if (-not $installer) { Write-Error "Tesseract installer .exe not found"; exit 1 }
+          $actual = (Get-FileHash -Algorithm SHA256 $installer).Hash
           if ($actual -ne $env:TESSERACT_SHA256) {
-            Write-Error "Tesseract MSI SHA256 mismatch. Expected: $env:TESSERACT_SHA256. Got: $actual."
+            Write-Error "Tesseract installer SHA256 mismatch. Expected: $env:TESSERACT_SHA256. Got: $actual."
             exit 1
           }
           $src = 'C:\Program Files\Tesseract-OCR'
