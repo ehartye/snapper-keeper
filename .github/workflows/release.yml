@@ -86,7 +86,28 @@ jobs:
       - name: Install dotnet sign tool (Windows)
         if: runner.os == 'Windows'
         shell: powershell
-        run: dotnet tool install --global --prerelease sign
+        run: |
+          dotnet tool install --global --prerelease sign
+          # `dotnet tool install --global` puts tools in
+          # %USERPROFILE%\.dotnet\tools but doesn't add that dir to PATH
+          # for subsequent workflow steps. Append it to GITHUB_PATH so
+          # Tauri's bundler can find `sign.exe` when it invokes the
+          # `bundle.windows.signCommand` from tauri.conf.json.
+          $toolsPath = "$env:USERPROFILE\.dotnet\tools"
+          $toolsPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          Write-Host "Added to GITHUB_PATH: $toolsPath"
+
+      - name: Verify sign tool is on PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $signPath = (Get-Command sign -ErrorAction SilentlyContinue).Source
+          if (-not $signPath) {
+            Write-Error "sign tool NOT found on PATH"
+            exit 1
+          }
+          Write-Host "sign tool located at: $signPath"
+          sign --version
 
       # macOS: import signing certificate
       - name: Import Apple certificate
