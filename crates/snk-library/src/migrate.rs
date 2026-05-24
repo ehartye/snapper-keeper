@@ -7,9 +7,16 @@ const V001: &str = include_str!("../migrations/V001__initial.sql");
 const V002: &str = include_str!("../migrations/V002__clipboard_items.sql");
 const V003: &str = include_str!("../migrations/V003__ocr_fts.sql");
 const V004: &str = include_str!("../migrations/V004__annotation_state.sql");
+const V005: &str = include_str!("../migrations/V005__drop_clipboard_sensitive.sql");
 
 pub fn migrations() -> Migrations<'static> {
-    Migrations::new(vec![M::up(V001), M::up(V002), M::up(V003), M::up(V004)])
+    Migrations::new(vec![
+        M::up(V001),
+        M::up(V002),
+        M::up(V003),
+        M::up(V004),
+        M::up(V005),
+    ])
 }
 
 pub fn migrate(conn: &mut Connection) -> Result<()> {
@@ -17,7 +24,7 @@ pub fn migrate(conn: &mut Connection) -> Result<()> {
         .to_latest(conn)
         .map_err(|e| crate::LibraryError::Migration {
             from: 0,
-            to: 4,
+            to: 5,
             recoverable: e.to_string().contains("Backup"),
         })?;
     Ok(())
@@ -88,5 +95,57 @@ mod tests {
                 .unwrap();
             assert_eq!(count, 1, "table {table} should exist");
         }
+    }
+
+    #[test]
+    fn v005_drops_sensitive_column_from_clipboard_items() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate(&mut conn).expect("migrations apply");
+
+        let column_names: Vec<String> = conn
+            .prepare("PRAGMA table_info(clipboard_items)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+
+        assert!(
+            !column_names.iter().any(|c| c == "sensitive"),
+            "sensitive column should be dropped by V005; got columns {column_names:?}"
+        );
+    }
+
+    #[test]
+    fn v004_to_v005_preserves_clipboard_rows() {
+        use rusqlite::params;
+
+        let mut conn = Connection::open_in_memory().unwrap();
+        // Apply through V004 only.
+        let v1_to_v4 = Migrations::new(vec![
+            M::up(V001),
+            M::up(V002),
+            M::up(V003),
+            M::up(V004),
+        ]);
+        v1_to_v4.to_latest(&mut conn).unwrap();
+
+        conn.execute(
+            "INSERT INTO clipboard_items
+                (id, kind, text_content, content_hash, created_at, pinned, sensitive)
+             VALUES
+                (?1, 'text', 'hello', 'abc', 1, 0, 0),
+                (?2, 'text', 'secret', 'def', 2, 0, 1)",
+            params!["row-a", "row-b"],
+        )
+        .unwrap();
+
+        // Apply V005 by running the full migration set.
+        migrate(&mut conn).expect("apply V005 on top");
+
+        let surviving: i64 = conn
+            .query_row("SELECT COUNT(*) FROM clipboard_items", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(surviving, 2);
     }
 }
