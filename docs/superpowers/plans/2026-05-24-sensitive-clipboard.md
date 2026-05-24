@@ -1039,7 +1039,10 @@ fn file_description(exe_path: &str) -> Option<String> {
         let mut buf: Vec<u8> = vec![0; size as usize];
         if GetFileVersionInfoW(
             PCWSTR(wide_path.as_ptr()),
-            0,
+            // windows-rs 0.61: dwhandle is Option<u32>, not raw u32.
+            // The Win32 docs say "this parameter is ignored," so None
+            // is the canonical pass-through.
+            None,
             size,
             buf.as_mut_ptr() as *mut c_void,
         )
@@ -1830,20 +1833,16 @@ git commit -m "feat(clipboard): detect_frontmost_app IPC command"
 ## Task 15: TS binding for `detect_frontmost_app` + blocklist types
 
 **Files:**
-- Modify: `packages/snk-clipboard/src/index.ts` (or wherever bindings live — check the file layout first)
+- Modify: `packages/snk-clipboard/src/types.ts` (add new types)
+- Modify: `packages/snk-clipboard/src/index.ts` (add the function + constant)
 
-**Step 1: Locate the existing binding file**
+**Local convention:** `packages/snk-clipboard/src/` splits pure type definitions from command bindings. `types.ts` holds types (`ClipboardItem`, `ListClipboardQuery`, `CaretPosition`); `index.ts` holds the invoke wrappers + re-exports types via `export * from './types'`. New code follows the same split.
 
-Run: `ls packages/snk-clipboard/src/`
-Expected: there's an `index.ts` or `commands.ts` exporting `pasteItem` / `showPopup`. Use the same style for the new export.
+**Step 1: Add the new types to `types.ts`**
 
-**Step 2: Add the SourceApp type and the binding**
-
-Append to the binding file:
+Append to `packages/snk-clipboard/src/types.ts`:
 
 ```typescript
-import { invoke } from '@tauri-apps/api/core';
-
 export type SourceAppKind = 'macos_bundle_id' | 'windows_exe';
 
 export interface SourceApp {
@@ -1857,6 +1856,15 @@ export interface BlocklistEntry {
   display_name: string;
   kind: SourceAppKind;
 }
+```
+
+**Step 2: Add the function + constant to `index.ts`**
+
+Append to `packages/snk-clipboard/src/index.ts` (after the existing command-binding functions):
+
+```typescript
+// SourceApp and BlocklistEntry flow through `export * from './types'`.
+import type { SourceApp } from './types';
 
 export async function detectFrontmostApp(): Promise<SourceApp | null> {
   return invoke<SourceApp | null>('plugin:snk-clipboard|detect_frontmost_app');
@@ -1864,6 +1872,8 @@ export async function detectFrontmostApp(): Promise<SourceApp | null> {
 
 export const APP_BLOCKLIST_SETTING_KEY = 'clipboard.app_blocklist';
 ```
+
+If `invoke` isn't already imported at the top of `index.ts`, add `import { invoke } from '@tauri-apps/api/core';` to the imports block. (The original plan put everything in one file; corrected 2026-05-24 to match the existing types.ts vs index.ts convention.)
 
 **Step 3: Verify TS compiles + lints**
 
@@ -1874,14 +1884,16 @@ pnpm --filter @snk/clipboard typecheck
 pnpm --filter @snk/clipboard lint
 ```
 
-Expected: clean. If `tsconfig` doesn't include the file (new file in an existing package), nothing extra is required — `tsc -b` picks it up.
+Expected: clean. Downstream consumers (`@snk/app`) automatically pick up the new exports via the existing `export * from './types'` re-export.
 
 **Step 4: Commit**
 
 ```bash
-git add packages/snk-clipboard/src/
-git commit -m "feat(clipboard): TS binding for detectFrontmostApp + BlocklistEntry types"
+git commit -m "feat(clipboard): TS binding for detectFrontmostApp + BlocklistEntry types" \
+  -- packages/snk-clipboard/src/types.ts packages/snk-clipboard/src/index.ts
 ```
+
+(Note the `-- path1 path2` form to restrict the commit to your files only — see [[reference_team_driven_shared_worktree]] discipline rule 2.)
 
 ---
 
