@@ -86,7 +86,26 @@
       "assetProtocol": {
         "enable": true,
         "scope": {
-          "allow": ["$APPDATA/**", "$APPLOCALDATA/**"]
+          "allow": [
+            "$APPDATA/captures/**",
+            "$APPDATA/clipboard/**",
+            "$APPDATA/annotations/**",
+            "$APPLOCALDATA/captures/**",
+            "$APPLOCALDATA/clipboard/**",
+            "$APPLOCALDATA/annotations/**"
+          ],
+          "deny": [
+            "$APPDATA/library.db",
+            "$APPDATA/library.db-wal",
+            "$APPDATA/library.db-shm",
+            "$APPDATA/backups/**",
+            "$APPDATA/logs/**",
+            "$APPLOCALDATA/library.db",
+            "$APPLOCALDATA/library.db-wal",
+            "$APPLOCALDATA/library.db-shm",
+            "$APPLOCALDATA/backups/**",
+            "$APPLOCALDATA/logs/**"
+          ]
         }
       }
     },
