@@ -168,12 +168,7 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    fn fresh_db() -> Db {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("sk.db");
-        std::mem::forget(dir);
-        Db::open(&path).unwrap()
-    }
+    use crate::test_support::fresh_db;
 
     fn insert_capture(db: &Db, app: &str, title: &str) -> String {
         crate::captures::insert(
@@ -193,7 +188,7 @@ mod tests {
 
     #[test]
     fn index_and_search_capture_by_ocr_text() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let id = insert_capture(&db, "Firefox", "GitHub");
         index_capture(
             &db,
@@ -215,7 +210,7 @@ mod tests {
 
     #[test]
     fn index_and_search_clipboard_by_text_content() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let item = crate::clipboard::insert(
             &db,
             crate::NewClipboardItem {
@@ -247,14 +242,14 @@ mod tests {
 
     #[test]
     fn search_returns_empty_for_no_match() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let results = search(&db, "nonexistent", 10).unwrap();
         assert!(results.is_empty());
     }
 
     #[test]
     fn search_returns_mixed_results_ranked() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let cap_id = insert_capture(&db, "VS Code", "main.rs");
         index_capture(
             &db,
@@ -293,7 +288,7 @@ mod tests {
 
     #[test]
     fn update_capture_index_replaces_old_entry() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let id = insert_capture(&db, "App", "Win");
         index_capture(&db, &id, Some("App"), Some("Win"), Some("old text"), None).unwrap();
         index_capture(&db, &id, Some("App"), Some("Win"), Some("new text"), None).unwrap();

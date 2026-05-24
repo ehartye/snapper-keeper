@@ -13,6 +13,9 @@ pub mod search;
 pub mod settings;
 pub mod tags;
 
+#[cfg(test)]
+mod test_support;
+
 pub use captures::{Capture, ListCapturesQuery, NewCapture};
 pub use clipboard::{ClipboardItem, ClipboardItemKind, ListClipboardQuery, NewClipboardItem};
 pub use db::Db;
