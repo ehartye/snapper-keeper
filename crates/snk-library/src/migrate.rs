@@ -87,18 +87,11 @@ mod tests {
             .current_version(&conn)
             .expect("query schema version");
 
-        let migration_files = std::fs::read_dir(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/migrations"
-        ))
-        .expect("read migrations dir")
-        .filter_map(std::result::Result::ok)
-        .filter(|e| {
-            e.path()
-                .extension()
-                .is_some_and(|ext| ext == "sql")
-        })
-        .count();
+        let migration_files = std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/migrations"))
+            .expect("read migrations dir")
+            .filter_map(std::result::Result::ok)
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "sql"))
+            .count();
 
         assert_eq!(
             format!("{v:?}"),

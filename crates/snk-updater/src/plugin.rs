@@ -153,11 +153,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
                 // `Delay` (vs default `Burst`) means a stretch of suspend
                 // / sleep / sluggish runtime won't replay multiple missed
                 // ticks in rapid succession when the runtime resumes.
-                let mut interval =
-                    tokio::time::interval(Duration::from_secs(24 * 60 * 60));
-                interval.set_missed_tick_behavior(
-                    tokio::time::MissedTickBehavior::Delay,
-                );
+                let mut interval = tokio::time::interval(Duration::from_secs(24 * 60 * 60));
+                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
                 // First tick fires immediately; the startup check above
                 // already covered it, so consume it and skip.
                 interval.tick().await;
