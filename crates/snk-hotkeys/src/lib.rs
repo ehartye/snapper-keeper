@@ -1,7 +1,8 @@
 //! snk-hotkeys — register global hotkeys and emit events when triggered.
 //!
-//! Phase 1 wires a fixed set of action ids → default chords. A later phase
-//! reads bindings from `snk-library` (settings) and supports remapping.
+//! Bindings are currently a fixed `HotkeyAction` → default-chord map.
+//! User-configurable bindings (reading from `snk-library` settings) are
+//! tracked separately; see open issues if you need to wire that in.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 

@@ -109,11 +109,14 @@ mod tests {
     use super::*;
     use crate::foreground::ForegroundInfo;
 
-    fn fresh_db() -> Arc<Db> {
+    /// Returns the `TempDir` along with the `Arc<Db>` so the caller can
+    /// bind both — `Drop` then runs at end of test instead of relying on
+    /// the older `std::mem::forget(dir)` leak.
+    fn fresh_db() -> (tempfile::TempDir, Arc<Db>) {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("sk.db");
-        std::mem::forget(dir);
-        Arc::new(Db::open(&path).unwrap())
+        let db = Arc::new(Db::open(&path).unwrap());
+        (dir, db)
     }
 
     fn small_png() -> Vec<u8> {
@@ -125,7 +128,7 @@ mod tests {
     #[test]
     fn persist_writes_file_and_db_row() {
         let tmp = tempfile::tempdir().unwrap();
-        let db = fresh_db();
+        let (_tmp_dir, db) = fresh_db();
         let row = persist(
             &db,
             tmp.path(),
@@ -150,7 +153,7 @@ mod tests {
     #[test]
     fn persist_handles_missing_foreground_info() {
         let tmp = tempfile::tempdir().unwrap();
-        let db = fresh_db();
+        let (_tmp_dir, db) = fresh_db();
         let row = persist(&db, tmp.path(), &small_png(), 2, 1, None, None).unwrap();
         assert!(row.source_app.is_none());
         assert!(row.source_window_title.is_none());
