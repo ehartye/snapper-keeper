@@ -2,7 +2,7 @@
 //! inspection, NSWorkspace for the frontmost-app source.
 
 use objc2::rc::Retained;
-use objc2_app_kit::NSPasteboard;
+use objc2_app_kit::{NSPasteboard, NSRunningApplication, NSWorkspace};
 use objc2_foundation::NSString;
 
 use crate::source_app::SourceApp;
@@ -38,6 +38,20 @@ pub(crate) fn is_sensitive() -> bool {
 }
 
 pub(crate) fn current_source_app() -> Option<SourceApp> {
-    // Placeholder for now — implemented in the next task.
-    None
+    // SAFETY: NSWorkspace::sharedWorkspace and frontmostApplication are
+    // thread-safe Cocoa singletons. The returned NSRunningApplication may
+    // be nil (returned as Option) during fast app switches.
+    let workspace: Retained<NSWorkspace> = unsafe { NSWorkspace::sharedWorkspace() };
+    let app: Retained<NSRunningApplication> = unsafe { workspace.frontmostApplication() }?;
+
+    let bundle_id: String = unsafe { app.bundleIdentifier() }?.to_string();
+    let display_name: String = unsafe { app.localizedName() }
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| bundle_id.clone());
+
+    Some(SourceApp {
+        identifier: bundle_id,
+        display_name,
+        kind: crate::source_app::SourceAppKind::MacosBundleId,
+    })
 }
