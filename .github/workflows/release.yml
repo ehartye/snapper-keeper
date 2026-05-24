@@ -33,22 +33,22 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: pnpm/action-setup@v3
+      - uses: pnpm/action-setup@a3252b78c470c02df07e9d59298aecedc3ccdd6d # v3
         with:
           version: 9
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: pnpm
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           targets: ${{ matrix.target }}
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           key: ${{ matrix.target }}
 
@@ -66,8 +66,29 @@ jobs:
       - name: Bundle Tesseract (Windows)
         if: runner.os == 'Windows'
         shell: powershell
+        env:
+          TESSERACT_VERSION: '5.5.0.20241111'
+          TESSERACT_SHA256: 'F3FC4236425B690C8BE756F35793F77394EE004BE0A6460A440C754D892F68BC'
         run: |
-          choco install tesseract -y --no-progress
+          # --requirechecksums is a no-op for this package (the installer
+          # ships inside the .nupkg rather than being fetched via
+          # Get-ChocolateyWebFile), but kept as belt-and-suspenders in case
+          # the package model changes upstream.
+          choco install tesseract --version=$env:TESSERACT_VERSION --no-progress --confirm --requirechecksums
+
+          # Tesseract's chocolatey package bundles an NSIS .exe (not .msi).
+          $installer = (Get-ChildItem "$env:ChocolateyInstall\lib\tesseract" -Filter '*.exe' -Recurse | Select-Object -First 1).FullName
+          if (-not $installer) {
+            Write-Error "Tesseract installer .exe not found after install"
+            exit 1
+          }
+          $actual = (Get-FileHash -Algorithm SHA256 $installer).Hash
+          if ($actual -ne $env:TESSERACT_SHA256) {
+            Write-Error "Tesseract installer SHA256 mismatch. Expected: $env:TESSERACT_SHA256. Got: $actual."
+            exit 1
+          }
+          Write-Host "Tesseract installer SHA256 verified."
+
           $src = 'C:\Program Files\Tesseract-OCR'
           $dest = 'app\src-tauri\resources\tesseract'
           New-Item -ItemType Directory -Force -Path $dest | Out-Null
@@ -79,7 +100,7 @@ jobs:
       # Tauri's bundler can invoke it via TAURI_WINDOWS_SIGN_COMMAND below.
       - name: Setup .NET (Windows signing)
         if: runner.os == 'Windows'
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           dotnet-version: '9.x'
 
@@ -87,7 +108,14 @@ jobs:
         if: runner.os == 'Windows'
         shell: powershell
         run: |
-          dotnet tool install --global --prerelease sign
+          # Microsoft's sign tool only ships as 0.9.1-beta.* prereleases on
+          # NuGet under the "sign" id, which collides with an unrelated
+          # library "Sign 1.x" by Rafal Jasica (NOT a .NET tool). We resolve
+          # the collision by version-pinning explicitly: the beta version
+          # only exists in Microsoft's package. Do NOT add --prerelease;
+          # dotnet rejects it alongside --version with
+          # "The --prerelease and --version options are not supported in the same command".
+          dotnet tool install --global sign --version 0.9.1-beta.26227.3
           # `dotnet tool install --global` puts tools in
           # %USERPROFILE%\.dotnet\tools but doesn't add that dir to PATH
           # for subsequent workflow steps. Append it to GITHUB_PATH so
@@ -221,7 +249,7 @@ jobs:
       # Tauri 2 attaches Windows updater signatures directly to the installer
       # as `*-setup.exe.sig` (no separate .nsis.zip like Tauri 1 used).
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: artifacts-${{ matrix.label }}
           path: |
@@ -245,10 +273,10 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: artifacts
           merge-multiple: true
@@ -306,15 +334,15 @@ jobs:
           cat latest.json
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-          files: |
-            artifacts/**/*.dmg
-            artifacts/**/*.app.tar.gz
-            artifacts/**/*.app.tar.gz.sig
-            artifacts/**/*-setup.exe
-            artifacts/**/*-setup.exe.sig
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            artifacts/**/*.dmg \
+            artifacts/**/*.app.tar.gz \
+            artifacts/**/*.app.tar.gz.sig \
+            artifacts/**/*-setup.exe \
+            artifacts/**/*-setup.exe.sig \
             latest.json
