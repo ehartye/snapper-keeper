@@ -44,3 +44,4 @@ objc2-foundation = { version = "0.3", features = ["NSString", "NSArray", "NSURL"
 [dev-dependencies]
 serde_json = { workspace = true }
 tempfile = "3"
+serial_test = "3"
