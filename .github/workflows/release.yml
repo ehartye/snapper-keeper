@@ -18,10 +18,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
+          - os: macos-latest          # Apple Silicon, native arm64 build
             target: aarch64-apple-darwin
             label: macOS-arm64
-          - os: macos-latest
+          - os: macos-15-intel        # native Intel runner — no cross-compile, no Rosetta
             target: x86_64-apple-darwin
             label: macOS-x64
           - os: windows-latest
