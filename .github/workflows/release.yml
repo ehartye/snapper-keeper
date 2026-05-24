@@ -108,7 +108,11 @@ jobs:
         if: runner.os == 'Windows'
         shell: powershell
         run: |
-          dotnet tool install --global sign --version 1.1.5
+          # --prerelease is required: Microsoft's sign tool only ships as
+          # 0.9.1-beta.*. Without --prerelease, NuGet resolves to "Sign 1.x"
+          # by Rafal Jasica (unrelated assembly-signing library, not a .NET
+          # tool) and fails with "Package sign is not a .NET tool."
+          dotnet tool install --global --prerelease sign --version 0.9.1-beta.26227.3
           # `dotnet tool install --global` puts tools in
           # %USERPROFILE%\.dotnet\tools but doesn't add that dir to PATH
           # for subsequent workflow steps. Append it to GITHUB_PATH so

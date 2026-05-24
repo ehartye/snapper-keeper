@@ -152,22 +152,30 @@ Expected: no output, exit 0.
 
 ---
 
-### Task 1.4: Drop `--prerelease` from `dotnet tool install sign` and pin a version
+### Task 1.4: Pin `dotnet sign` tool to a specific prerelease (`--prerelease` must stay)
 
 **Files:**
 - Modify: `.github/workflows/release.yml` (the "Install dotnet sign tool" step, currently around line 86–98)
 
-**Step 1: Look up the current stable version of `sign`**
+> **Important:** An earlier draft of this plan said "drop `--prerelease`". That was wrong. The Microsoft `sign` tool (https://github.com/dotnet/sign) has **never had a stable release** — it only ships as `0.9.1-beta.*` prereleases. Even worse: the NuGet ID `sign` is *shared* with an unrelated library by Rafał Jasica (`Sign 1.0+`, an assembly-signing library, NOT a .NET tool). A `dotnet tool install` without `--prerelease` resolves to Jasica's package and fails with `Package sign is not a .NET tool.` — exactly what happened on v0.0.0-sha-pin-test-1. So `--prerelease` is **load-bearing**, not redundant.
+>
+> The right fix preserves `--prerelease` AND adds an explicit `--version` pin, which still achieves the goal (no implicit floating prerelease).
+
+**Step 1: Find the latest Microsoft `sign` prerelease (must be a `DotnetTool` package by Microsoft)**
 
 Run:
 
 ```bash
-dotnet tool search sign --detail 2>/dev/null | grep -E '^(Name|Version):' | head -10
-# Or via NuGet API:
-curl -s https://api.nuget.org/v3-flatcontainer/sign/index.json | jq -r '.versions[]' | grep -v -E '(alpha|beta|preview|rc)' | tail -5
+# All versions including prereleases
+curl -s https://api.nuget.org/v3-flatcontainer/sign/index.json | jq -r '.versions[]' | tail -20
+
+# For each candidate, confirm it's Microsoft + DotnetTool by inspecting the nuspec:
+VER=0.9.1-beta.26227.3  # or whichever is newest from the list above
+curl -s https://api.nuget.org/v3-flatcontainer/sign/$VER/sign.nuspec | grep -E '<authors>|packageType '
+# Expect: <authors>Microsoft</authors>  and  <packageType name="DotnetTool" />
 ```
 
-Pick the latest stable version (record it as `SIGN_VERSION`).
+Record the latest Microsoft+DotnetTool version as `SIGN_VERSION`. Skip any stable-looking `1.x` entry — those are Jasica's package.
 
 **Step 2: Replace the install command in `release.yml`**
 
@@ -180,7 +188,12 @@ dotnet tool install --global --prerelease sign
 Replace with (substituting `<SIGN_VERSION>` from Step 1):
 
 ```powershell
-dotnet tool install --global sign --version <SIGN_VERSION>
+# --prerelease is required: Microsoft's sign tool ships only as 0.9.1-beta.*.
+# Without --prerelease, NuGet resolves to Sign 1.x by Rafał Jasica (an
+# unrelated assembly-signing library, not a .NET tool) and fails with
+# "Package sign is not a .NET tool." See plan-fix commit on the
+# ci/sha-pin-actions branch for the post-mortem.
+dotnet tool install --global --prerelease sign --version <SIGN_VERSION>
 ```
 
 **Step 3: Verify the rest of the install step still emits the correct PATH config**
@@ -400,8 +413,8 @@ Run:
 gh pr create --title "ci: pin actions by SHA + pin Tesseract chocolatey + replace softprops (#30)" --body "$(cat <<'EOF'
 ## Summary
 - Pins every `uses:` in `ci.yml` and `release.yml` to a commit SHA, preserving the floating tag as a `# vX` comment.
-- Drops `--prerelease` from `dotnet tool install sign` and pins to a specific stable version.
-- Pins Tesseract chocolatey package version + SHA256-verifies the downloaded MSI.
+- Pins `dotnet sign` tool to a specific Microsoft prerelease (`--prerelease` is required: the Microsoft tool only ships as `0.9.1-beta.*`; dropping the flag resolves to an unrelated library by Rafał Jasica and fails with "Package sign is not a .NET tool.").
+- Pins Tesseract chocolatey package version + SHA256-verifies the bundled installer (NSIS `.exe`, not MSI as an earlier plan draft assumed).
 - Replaces `softprops/action-gh-release@v2` with inline `gh release create`, so `contents:write` is held only by our own step.
 
 Implements #30. Part of the [release-pipeline hardening cluster](../blob/main/docs/superpowers/specs/2026-05-24-release-pipeline-hardening-design.md).
@@ -1198,7 +1211,7 @@ Same shape with these changes:
       - name: Install dotnet sign tool
         shell: powershell
         run: |
-          dotnet tool install --global sign --version <SIGN_VERSION>   # from PR-1 Task 1.4
+          dotnet tool install --global --prerelease sign --version <SIGN_VERSION>   # from PR-1 Task 1.4
           $toolsPath = "$env:USERPROFILE\.dotnet\tools"
           $toolsPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
