@@ -37,8 +37,11 @@ export interface ScreenPreview {
   token: string;
 }
 
-export function grabScreenPreview(): Promise<ScreenPreview> {
-  return invoke<ScreenPreview>('plugin:snk-capture|grab_screen_preview');
+export function grabScreenPreview(monitorId?: number): Promise<ScreenPreview> {
+  if (monitorId === undefined) {
+    return invoke<ScreenPreview>('plugin:snk-capture|grab_screen_preview');
+  }
+  return invoke<ScreenPreview>('plugin:snk-capture|grab_screen_preview', { monitorId });
 }
 
 export type { WindowInfo } from './types';

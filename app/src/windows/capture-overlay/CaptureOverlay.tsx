@@ -15,6 +15,8 @@ export function CaptureOverlay() {
   const [rect, setRect] = useState<Rect | null>(null);
   const [dragging, setDragging] = useState(false);
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+  const [monitorId, setMonitorId] = useState(0);
+  const [monitorScaleFactor, setMonitorScaleFactor] = useState<number | null>(null);
 
   const cancel = useCallback(async () => {
     setPreviewSrc(null);
@@ -55,9 +57,9 @@ export function CaptureOverlay() {
     await new Promise((r) => setTimeout(r, 150));
 
     try {
-      const scaleFactor = window.devicePixelRatio || 1;
+      const scaleFactor = monitorScaleFactor ?? (window.devicePixelRatio || 1);
       const capture = await captureRegion(
-        0,
+        monitorId,
         Math.round(x * scaleFactor),
         Math.round(y * scaleFactor),
         Math.round(w * scaleFactor),
@@ -73,7 +75,7 @@ export function CaptureOverlay() {
     } catch (e) {
       console.error('region capture failed', e);
     }
-  }, [rect]);
+  }, [rect, monitorId, monitorScaleFactor]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -85,15 +87,20 @@ export function CaptureOverlay() {
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
-    listen<{ path: string; token: string }>('overlay:preview', (event) => {
+    listen<{ path: string; token: string; monitorId: number; scaleFactor: number }>(
+      'overlay:preview',
+      (event) => {
       // Cache-bust: the WebView caches by URL and the preview path is
       // stable across grabs, so ?v=<token> forces a fresh fetch. The
       // intermediate null clears the background between region snaps
       // so a slow refetch can't briefly show the previous frame.
       const url = `${convertFileSrc(event.payload.path)}?v=${event.payload.token}`;
+      setMonitorId(event.payload.monitorId);
+      setMonitorScaleFactor(event.payload.scaleFactor);
       setPreviewSrc(null);
       setPreviewSrc(url);
-    }).then((fn) => {
+      },
+    ).then((fn) => {
       unlisten = fn;
     });
     return () => unlisten?.();

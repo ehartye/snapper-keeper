@@ -61,8 +61,15 @@ pub struct ScreenPreview {
 }
 
 #[tauri::command]
-pub fn grab_screen_preview<R: Runtime>(app: tauri::AppHandle<R>) -> Result<ScreenPreview> {
-    let result = crate::grab::grab_primary_monitor()?;
+pub fn grab_screen_preview<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    monitor_id: Option<u32>,
+) -> Result<ScreenPreview> {
+    let result = if let Some(monitor_id) = monitor_id {
+        crate::grab::grab_monitor(monitor_id)?
+    } else {
+        crate::grab::grab_primary_monitor()?
+    };
     let dir = app
         .path()
         .app_data_dir()

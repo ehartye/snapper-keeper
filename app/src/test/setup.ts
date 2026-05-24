@@ -31,6 +31,7 @@ vi.mock('@tauri-apps/api/window', () => {
   };
   return {
     getCurrentWindow: () => fakeWindow,
+    cursorPosition: vi.fn().mockResolvedValue({ x: 100, y: 100 }),
     availableMonitors: vi.fn().mockResolvedValue([
       {
         name: 'Mock Monitor',
@@ -64,6 +65,12 @@ vi.mock('@tauri-apps/api/dpi', () => ({
     constructor(public x: number, public y: number) {}
   },
   LogicalSize: class {
+    constructor(public width: number, public height: number) {}
+  },
+  PhysicalPosition: class {
+    constructor(public x: number, public y: number) {}
+  },
+  PhysicalSize: class {
     constructor(public width: number, public height: number) {}
   },
 }));
