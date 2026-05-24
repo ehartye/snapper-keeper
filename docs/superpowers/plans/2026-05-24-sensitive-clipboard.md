@@ -10,6 +10,8 @@
 
 **Approved design:** [`docs/superpowers/specs/2026-05-24-sensitive-clipboard-design.md`](../specs/2026-05-24-sensitive-clipboard-design.md)
 
+**Verification norm:** Per-task verification commands should be the **broadest scope that proves correctness**, not the narrowest that proves the task. A schema change should be verified with the full test suite for the affected crate, not just the migration tests — otherwise downstream consumers of the changed schema fail silently. This norm was added 2026-05-24 after a narrow filter (`cargo test -p snk-library migrate::`) hid 8 broken `clipboard::tests` in Task 2.
+
 ---
 
 ## Task 1: Add native-OS crate dependencies
@@ -61,9 +63,17 @@ git commit -m "build(snk-clipboard): add Win32_System_DataExchange + objc2-app-k
 
 ## Task 2: V005 migration — drop the dead `sensitive` column
 
+**Scope:** Drop the column AND its now-dead Rust/TS consumers. The two are one conceptual unit — column-drop without consumer-cleanup leaves main red on every `clipboard_items` read.
+
 **Files:**
 - Create: `crates/snk-library/migrations/V005__drop_clipboard_sensitive.sql`
 - Modify: `crates/snk-library/src/migrate.rs`
+- Modify: `crates/snk-library/src/clipboard.rs` (drop `sensitive` field from struct, `row_to_item`, `insert`)
+- Modify: `packages/snk-clipboard/src/types.ts` (drop `sensitive: boolean` from type)
+- Modify: `app/src/windows/library/ClipboardList.test.tsx` (4 mock occurrences)
+- Modify: `app/src/windows/clipboard-popup/ClipboardPopup.test.tsx` (1 mock occurrence)
+- Modify: `app/src/windows/clipboard-popup/ClipboardPopupItem.test.tsx` (1 mock occurrence)
+- Modify: `app/src/windows/clipboard-popup/store.test.ts` (1 mock occurrence)
 - Test: `crates/snk-library/src/migrate.rs` (existing tests module)
 
 **Step 1: Write the failing test**
@@ -191,17 +201,62 @@ pub fn migrate(conn: &mut Connection) -> Result<()> {
 }
 ```
 
-**Step 5: Run tests to verify they pass**
+**Step 4b: Remove the now-dead `sensitive` field from `clipboard.rs`**
 
-Run: `cargo test -p snk-library migrate::`
-Expected: 6/6 pass (4 existing + 2 new). If a `migration_count_matches_latest_applied_version` test lands later (it was mentioned in the original plan draft as coming from PR #80 but is not present in this branch), it would count .sql files in `migrations/` (now 5) and must still match the applied schema version.
+Modify `crates/snk-library/src/clipboard.rs`:
+
+- **Drop the struct field** (around L61):
+  ```rust
+  pub struct ClipboardItem {
+      // … existing fields …
+      // pub sensitive: bool,   ← REMOVE this line
+  }
+  ```
+- **Drop the `row_to_item` read** (around L91): remove the `sensitive: row.get::<_, i64>("sensitive")? != 0,` line entirely. `SELECT * FROM clipboard_items` no longer returns the column.
+- **Drop the `insert` return-path initializer** (around L141): remove the `sensitive: false,` line where `insert()` constructs the `ClipboardItem` to return.
+
+**Step 4c: Remove the now-dead `sensitive` field from the TS type + test mocks**
+
+Latent IPC-deserialize break if not done: Rust struct without the field while TS expects it will fail serde on the frontend.
+
+- **`packages/snk-clipboard/src/types.ts`** (around L11): remove `sensitive: boolean;` from the type definition.
+- **`app/src/windows/library/ClipboardList.test.tsx`**: remove `sensitive: false,` from all 4 mock objects (around lines 25, 52, 78, 101).
+- **`app/src/windows/clipboard-popup/ClipboardPopup.test.tsx`** (around L18): remove `sensitive: false,` from the mock object.
+- **`app/src/windows/clipboard-popup/ClipboardPopupItem.test.tsx`** (around L15): remove `sensitive: false,` from the mock object.
+- **`app/src/windows/clipboard-popup/store.test.ts`** (around L11): remove `sensitive: false,` from the mock object.
+
+No production TS code references `item.sensitive` — only test mocks set it. After removal the TS type and the Rust struct match again.
+
+**Step 5: Run tests to verify they pass — full scope**
+
+Per the plan preamble's verification norm, run the **full crate suite**, not a narrow filter:
+
+```bash
+cargo test -p snk-library
+pnpm --filter @snk/app test
+```
+
+Expected:
+- `cargo test -p snk-library`: all tests pass. Includes the 6 migration tests (4 existing + 2 new V005 tests) **AND** the previously-failing `clipboard::tests` (8 tests that broke when V005 dropped the column without the consumer cleanup).
+- `pnpm --filter @snk/app test`: all vitest suites green, including the four files that had `sensitive: false` mocks.
+
+If a `migration_count_matches_latest_applied_version` test lands later (it was mentioned in the original plan draft as coming from PR #80 but is not present in this branch), it would count .sql files in `migrations/` (now 5) and must still match the applied schema version.
 
 **Step 6: Commit**
 
 ```bash
-git add crates/snk-library/migrations/V005__drop_clipboard_sensitive.sql crates/snk-library/src/migrate.rs
-git commit -m "feat(library): V005 drops dead clipboard_items.sensitive column"
+git add crates/snk-library/migrations/V005__drop_clipboard_sensitive.sql \
+        crates/snk-library/src/migrate.rs \
+        crates/snk-library/src/clipboard.rs \
+        packages/snk-clipboard/src/types.ts \
+        app/src/windows/library/ClipboardList.test.tsx \
+        app/src/windows/clipboard-popup/ClipboardPopup.test.tsx \
+        app/src/windows/clipboard-popup/ClipboardPopupItem.test.tsx \
+        app/src/windows/clipboard-popup/store.test.ts
+git commit -m "feat(library): V005 drops dead clipboard_items.sensitive column + its consumers"
 ```
+
+> **Note for the team currently executing this plan:** The original Task 2 execution (commit `01686e0`) shipped only Steps 1–4 + Step 6 with the narrow verification — see [[reference_objc2_workspace_dedupe]]-style plan-fix protocol. The plan was revised mid-execution (this Steps 4b/4c addition + broader Step 5 verification) after `quality-sentinel` ran the full suite and surfaced 8 broken `clipboard::tests`. The corrective work goes in a **follow-up commit** on the same branch with message `fix(library): drop sensitive field consumers stranded by V005`, which completes the conceptual unit. Future fresh implementations of this plan should land Steps 1–6 as one commit using the message above.
 
 ---
 

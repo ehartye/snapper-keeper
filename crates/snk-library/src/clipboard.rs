@@ -58,7 +58,6 @@ pub struct ClipboardItem {
     pub source_window_title: Option<String>,
     pub created_at: i64,
     pub pinned: bool,
-    pub sensitive: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,7 +87,6 @@ fn row_to_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<ClipboardItem> {
         source_window_title: row.get("source_window_title")?,
         created_at: row.get("created_at")?,
         pinned: row.get::<_, i64>("pinned")? != 0,
-        sensitive: row.get::<_, i64>("sensitive")? != 0,
     })
 }
 
@@ -138,7 +136,6 @@ pub fn insert(db: &Db, new: NewClipboardItem) -> Result<ClipboardItem> {
         source_window_title: new.source_window_title,
         created_at,
         pinned: false,
-        sensitive: false,
     })
 }
 

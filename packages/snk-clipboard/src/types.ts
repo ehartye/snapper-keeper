@@ -8,7 +8,6 @@ export interface ClipboardItem {
   source_window_title: string | null;
   created_at: number;
   pinned: boolean;
-  sensitive: boolean;
 }
 
 export interface ListClipboardQuery {

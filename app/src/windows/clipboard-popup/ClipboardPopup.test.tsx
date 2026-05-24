@@ -15,7 +15,6 @@ function seedItems(n: number) {
     text_content: `item ${i + 1}`,
     file_path: null,
     source_window_title: null,
-    sensitive: false,
     content_hash: `${i}`,
     source_app: 'Test',
     pinned: false,

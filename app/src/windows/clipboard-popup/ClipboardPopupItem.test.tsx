@@ -12,7 +12,6 @@ const baseItem: ClipboardItem = {
   file_path: null,
   source_app: 'Firefox',
   source_window_title: null,
-  sensitive: false,
   pinned: false,
   created_at: Date.now(),
 };
