@@ -59,11 +59,7 @@ fn sidecar_extracts_hello_world_from_fixture() {
         .join("tests")
         .join("fixtures")
         .join("hello-world.png");
-    assert!(
-        fixture.is_file(),
-        "missing fixture: {}",
-        fixture.display()
-    );
+    assert!(fixture.is_file(), "missing fixture: {}", fixture.display());
 
     let output = snk_ocr::sidecar::run_tesseract(&fixture, "eng")
         .expect("hello-world fixture should OCR cleanly");
