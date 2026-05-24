@@ -40,12 +40,14 @@ windows = { version = "0.61", features = [
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = "0.24"
 core-foundation = "0.10"
-objc2 = "0.5"
-objc2-app-kit = { version = "0.2", features = ["NSPasteboard", "NSWorkspace", "NSRunningApplication"] }
-objc2-foundation = { version = "0.2", features = ["NSString", "NSArray", "NSURL"] }
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSPasteboard", "NSPasteboardItem", "NSWorkspace", "NSRunningApplication"] }
+objc2-foundation = { version = "0.3", features = ["NSString", "NSArray", "NSURL"] }
 ```
 
 The `_DataExchange` features get us `IsClipboardFormatAvailable`, `OpenClipboard`, `GetClipboardData`, `RegisterClipboardFormatW`, `AddClipboardFormatListener`. `_Memory` covers `GlobalLock`/`GlobalUnlock` for reading the 4-byte values out of the registered formats. `_LibraryLoader` is for `GetModuleHandle`. `_Storage_FileSystem` is for `GetFileVersionInfoW`.
+
+**Why these versions, not lower:** the workspace already pulls in `objc2 0.6.x` + `objc2-app-kit/foundation 0.3.x` transitively via `arboard`, `tao`, and `muda`. Pinning the explicit deps to the same major versions avoids shipping two parallel objc2 runtime trains in the macOS binary (~500KB–1MB savings) and keeps `NSPasteboard`/`NSWorkspace` handle types interop-compatible across crates. The plan was originally drafted against 0.5/0.2 and revised here based on a [[reference_objc2_workspace_dedupe]] quality-review flag (2026-05-24).
 
 **Step 2: Verify it compiles**
 
@@ -715,6 +717,13 @@ git commit -m "feat(clipboard): SensitivityProbe trait + FakeProbe for tests"
 **Files:**
 - Modify: `crates/snk-clipboard/src/platform/macos.rs`
 
+> **objc2-app-kit 0.3 API notes** (relevant for both Task 6 and Task 7):
+> - `NSPasteboard::types()` returns `Option<Retained<NSArray<NSPasteboardType>>>` (Option-wrapped — `None` is a real state, not just an empty array).
+> - `NSPasteboardType` is a typed newtype around `NSString`. `.to_string()` works the same way once you dereference / cast to `&NSString`.
+> - `NSRunningApplication::bundleIdentifier()` and `localizedName()` both return `Option<Retained<NSString>>` — already Option in the snippet below.
+> - All Cocoa-bridge calls are `unsafe` in objc2 0.6 (this is consistent with 0.5).
+> - If you hit an API name or signature that differs from what's written here, **stop and ping team-lead** — don't improvise silently. The dep version was bumped from 0.2 to 0.3 mid-plan and minor signature drift is possible.
+
 **Step 1: Replace the stub with a real impl**
 
 Replace the entire contents of `crates/snk-clipboard/src/platform/macos.rs`:
@@ -725,7 +734,7 @@ Replace the entire contents of `crates/snk-clipboard/src/platform/macos.rs`:
 
 use objc2::rc::Retained;
 use objc2_app_kit::NSPasteboard;
-use objc2_foundation::{NSArray, NSString};
+use objc2_foundation::NSString;
 
 use crate::source_app::SourceApp;
 
@@ -740,11 +749,18 @@ pub(crate) fn is_sensitive() -> bool {
     // accessor; objc2-app-kit's binding is `unsafe` because it crosses
     // the Objective-C boundary but the call itself has no preconditions.
     let pasteboard: Retained<NSPasteboard> = unsafe { NSPasteboard::generalPasteboard() };
-    let types: Retained<NSArray<NSString>> = unsafe { pasteboard.types() };
-    let len = types.len();
-    for i in 0..len {
-        let t: Retained<NSString> = types.objectAtIndex(i);
-        let s = t.to_string();
+    // types() returns Option<Retained<NSArray<NSPasteboardType>>> in
+    // objc2-app-kit 0.3 — None == nothing on the pasteboard right now,
+    // which we treat as "not sensitive" (nothing to leak).
+    let Some(types) = (unsafe { pasteboard.types() }) else {
+        return false;
+    };
+    for i in 0..types.len() {
+        // NSPasteboardType is a typed newtype around NSString; the
+        // Deref/AsRef impls let us treat it as &NSString for to_string().
+        let t = types.objectAtIndex(i);
+        let s: &NSString = &t;
+        let s = s.to_string();
         if CONCEALED_TYPES.iter().any(|c| *c == s.as_str()) {
             return true;
         }
