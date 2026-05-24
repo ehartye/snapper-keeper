@@ -170,16 +170,11 @@ fn reindex_capture_tags(db: &Db, capture_id: &str) -> Result<()> {
 mod tests {
     use super::*;
 
-    fn fresh_db() -> Db {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("sk.db");
-        std::mem::forget(dir);
-        Db::open(&path).unwrap()
-    }
+    use crate::test_support::fresh_db;
 
     #[test]
     fn create_and_list_tags() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let t1 = create(&db, "bug", "#ff0000").unwrap();
         let t2 = create(&db, "feature", "#00ff00").unwrap();
         assert_eq!(t1.name, "bug");
@@ -194,7 +189,7 @@ mod tests {
 
     #[test]
     fn create_duplicate_name_fails() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         create(&db, "dup", "#111111").unwrap();
         let err = create(&db, "dup", "#222222");
         assert!(err.is_err());
@@ -202,7 +197,7 @@ mod tests {
 
     #[test]
     fn get_returns_tag() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let created = create(&db, "design", "#0000ff").unwrap();
         let fetched = get(&db, &created.id).unwrap();
         assert_eq!(fetched, created);
@@ -210,7 +205,7 @@ mod tests {
 
     #[test]
     fn get_missing_returns_not_found() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         match get(&db, "no-such-id") {
             Err(crate::LibraryError::NotFound { .. }) => {}
             other => panic!("expected NotFound, got {other:?}"),
@@ -219,7 +214,7 @@ mod tests {
 
     #[test]
     fn update_changes_name_and_color() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let t = create(&db, "old", "#aaa").unwrap();
         let updated = update(&db, &t.id, "new", "#bbb").unwrap();
         assert_eq!(updated.name, "new");
@@ -229,7 +224,7 @@ mod tests {
 
     #[test]
     fn delete_removes_tag() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let t = create(&db, "temp", "#ccc").unwrap();
         delete(&db, &t.id).unwrap();
         let tags = list(&db).unwrap();
@@ -238,7 +233,7 @@ mod tests {
 
     #[test]
     fn delete_missing_returns_not_found() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         match delete(&db, "no-such-id") {
             Err(crate::LibraryError::NotFound { .. }) => {}
             other => panic!("expected NotFound, got {other:?}"),
@@ -262,7 +257,7 @@ mod tests {
 
     #[test]
     fn assign_and_list_for_capture() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let cap = insert_test_capture(&db);
         let t1 = create(&db, "red", "#ff0000").unwrap();
         let t2 = create(&db, "blue", "#0000ff").unwrap();
@@ -278,7 +273,7 @@ mod tests {
 
     #[test]
     fn assign_duplicate_is_idempotent() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let cap = insert_test_capture(&db);
         let tag = create(&db, "dup", "#aaa").unwrap();
         assign(&db, &cap.id, &tag.id).unwrap();
@@ -289,7 +284,7 @@ mod tests {
 
     #[test]
     fn remove_unassigns_tag() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let cap = insert_test_capture(&db);
         let tag = create(&db, "gone", "#bbb").unwrap();
         assign(&db, &cap.id, &tag.id).unwrap();
@@ -300,7 +295,7 @@ mod tests {
 
     #[test]
     fn assign_updates_fts_index() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let cap = insert_test_capture(&db);
         let tag = create(&db, "searchable-tag", "#ccc").unwrap();
         assign(&db, &cap.id, &tag.id).unwrap();

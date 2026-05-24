@@ -63,12 +63,7 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    fn fresh_db() -> Db {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("sk.db");
-        std::mem::forget(dir);
-        Db::open(&path).unwrap()
-    }
+    use crate::test_support::fresh_db;
 
     fn insert_capture(db: &Db) -> String {
         crate::captures::insert(
@@ -88,7 +83,7 @@ mod tests {
 
     #[test]
     fn upsert_inserts_new_ocr_text() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let cap_id = insert_capture(&db);
         upsert(&db, &cap_id, "hello world", "eng", 0.95).unwrap();
         let row = get(&db, &cap_id).unwrap().unwrap();
@@ -99,7 +94,7 @@ mod tests {
 
     #[test]
     fn upsert_replaces_existing_ocr_text() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let cap_id = insert_capture(&db);
         upsert(&db, &cap_id, "first", "eng", 0.8).unwrap();
         upsert(&db, &cap_id, "second", "eng", 0.9).unwrap();
@@ -110,7 +105,7 @@ mod tests {
 
     #[test]
     fn get_returns_none_for_missing() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let result = get(&db, "no-such-id").unwrap();
         assert!(result.is_none());
     }

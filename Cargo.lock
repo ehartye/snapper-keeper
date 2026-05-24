@@ -4305,7 +4305,6 @@ dependencies = [
  "serde",
  "tauri",
  "tauri-plugin-global-shortcut",
- "thiserror 1.0.69",
  "tracing",
 ]
 
