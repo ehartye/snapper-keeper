@@ -10,6 +10,7 @@ use snk_library::plugin::LibraryState;
 
 use crate::caret;
 use crate::paste;
+use crate::source_app::{self, SourceApp};
 use crate::watcher;
 use crate::{ClipboardError, Result};
 
@@ -50,4 +51,9 @@ pub fn paste_item<R: Runtime>(
 #[tauri::command]
 pub fn show_popup<R: Runtime>(_app: tauri::AppHandle<R>) -> Result<crate::caret::CaretPosition> {
     Ok(caret::resolve_popup_position())
+}
+
+#[tauri::command]
+pub fn detect_frontmost_app<R: Runtime>(_app: tauri::AppHandle<R>) -> Option<SourceApp> {
+    source_app::current()
 }

@@ -588,7 +588,7 @@ mod tests {
 }
 ```
 
-**Step 2: Declare the module**
+**Step 2: Declare the module + add deps**
 
 Append to `crates/snk-clipboard/src/lib.rs`:
 
@@ -596,13 +596,17 @@ Append to `crates/snk-clipboard/src/lib.rs`:
 pub mod blocklist;
 ```
 
-Also add `tempfile` and `serde_json` to `crates/snk-clipboard/Cargo.toml`'s `[dev-dependencies]` if not already present:
+Add deps to `crates/snk-clipboard/Cargo.toml`. **Note the split** — `serde_json` is used in runtime code (`matches()` calls `serde_json::from_value`), so it belongs in `[dependencies]`, not `[dev-dependencies]`. `tempfile` is test-only.
 
 ```toml
-[dev-dependencies]
+[dependencies]
 serde_json = { workspace = true }
+
+[dev-dependencies]
 tempfile = "3"
 ```
+
+(Original plan placed `serde_json` in `[dev-dependencies]` only — corrected 2026-05-24 after a build failure during Task 4 execution. See [[feedback_broad_verification_scope]] — this is the same family of plan-gap as Task 2's stranded consumers: write code that uses a crate, miss the dependency declaration.)
 
 **Step 3: Run tests to verify they pass**
 
@@ -856,12 +860,14 @@ Replace the entire contents of `crates/snk-clipboard/src/platform/windows.rs`:
 use std::ffi::c_void;
 
 use windows::core::PCWSTR;
-use windows::Win32::Foundation::{HANDLE, HWND};
+use windows::Win32::Foundation::{HANDLE, HGLOBAL};
 use windows::Win32::System::DataExchange::{
-    CloseClipboard, GetClipboardData, IsClipboardFormatAvailable, OpenClipboard,
-    RegisterClipboardFormatW,
+    GetClipboardData, IsClipboardFormatAvailable, RegisterClipboardFormatW,
 };
 use windows::Win32::System::Memory::{GlobalLock, GlobalUnlock};
+// HWND is added back in Task 9 when source-app detection uses it.
+// OpenClipboard/CloseClipboard are not needed — WM_CLIPBOARDUPDATE
+// handler runs with the clipboard already open by the OS.
 
 use crate::source_app::SourceApp;
 
@@ -887,20 +893,25 @@ fn register_format(name: &str) -> u32 {
 /// the expected size.
 fn read_u32_format(fmt: u32) -> Option<u32> {
     unsafe {
-        if !IsClipboardFormatAvailable(fmt).as_bool() {
+        // windows-rs 0.61: IsClipboardFormatAvailable returns Result<()>,
+        // not BOOL. Ok == "format present"; Err == "not present" (or error).
+        if IsClipboardFormatAvailable(fmt).is_err() {
             return None;
         }
         // The watcher already holds the clipboard open when this is
-        // called from the WM_CLIPBOARDUPDATE handler. For belt-and-
-        // suspenders, OpenClipboard(HWND(0)) is a no-op if we already
-        // own it; we don't call CloseClipboard here.
+        // called from the WM_CLIPBOARDUPDATE handler; no explicit
+        // OpenClipboard / CloseClipboard needed.
         let handle: HANDLE = GetClipboardData(fmt).ok()?;
-        let ptr: *mut c_void = GlobalLock(handle.0 as _);
+        // HANDLE and HGLOBAL are both #[repr(transparent)] newtypes around
+        // *mut c_void, but the GlobalLock signature takes HGLOBAL — bridge
+        // explicitly via the public ctor rather than a raw cast.
+        let hglobal = HGLOBAL(handle.0);
+        let ptr: *mut c_void = GlobalLock(hglobal);
         if ptr.is_null() {
             return None;
         }
         let value = *(ptr as *const u32);
-        let _ = GlobalUnlock(handle.0 as _);
+        let _ = GlobalUnlock(hglobal);
         Some(value)
     }
 }
@@ -911,9 +922,10 @@ pub(crate) fn is_sensitive() -> bool {
     let can_upload = register_format(FMT_CAN_UPLOAD_TO_CLOUD);
 
     // CFSTR_EXCLUDECLIPBOARDCONTENTFROMMONITORING is presence-only — its
-    // existence flags the content as excluded.
+    // existence flags the content as excluded. (windows-rs 0.61:
+    // Result<()> — Ok == present, Err == not present.)
     unsafe {
-        if IsClipboardFormatAvailable(exclude).as_bool() {
+        if IsClipboardFormatAvailable(exclude).is_ok() {
             return true;
         }
     }
