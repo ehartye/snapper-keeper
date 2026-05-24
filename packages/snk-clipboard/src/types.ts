@@ -19,3 +19,17 @@ export interface CaretPosition {
   x: number;
   y: number;
 }
+
+export type SourceAppKind = 'macos_bundle_id' | 'windows_exe';
+
+export interface SourceApp {
+  identifier: string;
+  display_name: string;
+  kind: SourceAppKind;
+}
+
+export interface BlocklistEntry {
+  identifier: string;
+  display_name: string;
+  kind: SourceAppKind;
+}
