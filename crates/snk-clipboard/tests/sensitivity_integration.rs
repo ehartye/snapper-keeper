@@ -82,11 +82,16 @@ fn windows_can_include_in_history_zero_marks_sensitive() {
         *(p as *mut u32) = 0;
         let _ = GlobalUnlock(h);
         let _ = SetClipboardData(fmt, Some(HANDLE(h.0)));
-
-        let _ = CloseClipboard();
     }
 
+    // `is_sensitive` requires the caller to own the clipboard (the production
+    // call site is the WM_CLIPBOARDUPDATE handler, where the OS hands you
+    // ownership). Assert before closing, then close.
     assert!(snk_clipboard::sensitivity::is_sensitive());
+
+    unsafe {
+        let _ = CloseClipboard();
+    }
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
