@@ -4254,6 +4254,7 @@ dependencies = [
  "snk-library",
  "tauri",
  "tauri-plugin",
+ "tempfile",
  "thiserror 1.0.69",
  "tracing",
  "uuid",

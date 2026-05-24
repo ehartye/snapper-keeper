@@ -14,6 +14,7 @@ tauri-plugin = { workspace = true }
 snk-library = { path = "../snk-library" }
 tauri.workspace = true
 serde.workspace = true
+serde_json = { workspace = true }
 thiserror.workspace = true
 tracing.workspace = true
 arboard.workspace = true
@@ -42,3 +43,4 @@ objc2-foundation = { version = "0.3", features = ["NSString", "NSArray", "NSURL"
 
 [dev-dependencies]
 serde_json = { workspace = true }
+tempfile = "3"

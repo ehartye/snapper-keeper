@@ -1,5 +1,6 @@
 //! snk-clipboard — clipboard watcher, dedup, paste synthesis, caret resolution.
 
+pub mod blocklist;
 pub mod caret;
 pub mod commands;
 pub mod error;
