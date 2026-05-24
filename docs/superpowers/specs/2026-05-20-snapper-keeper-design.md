@@ -222,7 +222,6 @@ erDiagram
         text source_window_title
         int created_at
         int pinned
-        int sensitive "1 if app flagged"
     }
     SETTINGS {
         text key PK
@@ -580,6 +579,8 @@ Capability files scope which windows can invoke which plugins. The clipboard pop
 - Format `"CanUploadToCloudClipboard"` = 0 (advisory)
 
 Filtering happens at the watcher — sensitive content is never persisted.
+
+**Implementation status (post-2026-05-24):** wired in [`docs/superpowers/specs/2026-05-24-sensitive-clipboard-design.md`](2026-05-24-sensitive-clipboard-design.md). The schema column originally proposed (`sensitive INTEGER`) was dropped in V005 because content is filtered at the watcher and the column never becomes load-bearing.
 
 ### 8.5 Signing & notarization
 
