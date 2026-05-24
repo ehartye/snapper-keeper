@@ -63,7 +63,7 @@ jobs:
 
       # Cross-plugin internals are off-limits — consumers must use the
       # public re-exports from `snk_library::*`, not `snk_library::plugin::*`.
-      - name: Forbid snk_library::plugin:: reach-ins
+      - name: "Forbid snk_library::plugin:: reach-ins"
         run: |
           if grep -rn 'snk_library::plugin::' crates/; then
             echo "::error::Use the snk_library:: re-export instead of reaching into the plugin module."
