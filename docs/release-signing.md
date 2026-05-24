@@ -71,3 +71,27 @@ At runtime, `snk-ocr/sidecar.rs` resolves tesseract in this order:
 4. Common install locations per OS
 
 macOS bundles are not yet self-contained for OCR — users currently need `brew install tesseract`. This is because Homebrew's tesseract binary references absolute `/opt/homebrew/lib/...` dylib paths, and bundling requires running `install_name_tool` to rewrite each path to `@executable_path/../Frameworks/...`. To be added later.
+
+## Updater endpoint and the first-tag-must-be-plain-SemVer rule
+
+The Tauri updater's endpoint in `tauri.conf.json` is:
+
+```
+https://github.com/ehartye/snapper-keeper/releases/latest/download/latest.json
+```
+
+GitHub's `releases/latest/` redirect resolves to **the most recent non-prerelease release**. Releases marked as `prerelease: true` are excluded from this resolution.
+
+**Operational consequences:**
+
+- The **first user-facing tag must be a plain SemVer** (`v0.1.0`, NOT `v0.1.0-beta.1`). If the very first release is a prerelease, `releases/latest/` returns 404 and the updater fails silently for every installed client.
+- Subsequent prerelease tags (e.g. `v0.2.0-rc.1`) are fine — they don't disturb the `/latest/` pointer; existing clients on `v0.1.0` simply don't see them as available updates.
+- Once a non-prerelease tag exists, the updater path is self-healing — any future non-prerelease tag becomes the new `/latest/` target.
+
+**Failure modes to know:**
+
+1. **Endpoint 404** — typically means no non-prerelease release exists yet, OR GitHub Releases is temporarily down. The updater logs the network error and retries on the next 24h cycle. No auto-rollback; users stay on their current version.
+2. **`latest.json` parses but `platforms{}` is empty** — usually a workflow bug where `createUpdaterArtifacts: true` is off in `tauri.conf.json` or the publish-release job's `find` doesn't match the produced filenames. See [`reference_tauri2_updater_artifacts`](../.research/) for the historical iteration on this.
+3. **Signature verification failure** — Ed25519 mismatch between the embedded `pubkey` in `tauri.conf.json` and the `TAURI_SIGNING_PRIVATE_KEY` used to sign. Updater rejects the manifest and ceases auto-checks for this process. Surface via Settings → About (planned).
+
+A redundant fallback endpoint (e.g. a GitHub Pages mirror of `latest.json`) is a future improvement tracked in issue #43; the single-endpoint approach is acceptable for v0.1.0 while we observe operational behavior.
