@@ -1,18 +1,16 @@
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 
 use arboard::Clipboard;
-use tracing::{debug, error, warn};
+use tracing::{debug, error};
 
-use snk_library::clipboard::{self, ClipboardItemKind, NewClipboardItem};
+use snk_library::clipboard::{ClipboardItemKind, NewClipboardItem};
 use snk_library::{files, Db};
 
 use crate::blocklist;
-use crate::hasher;
-use crate::sensitivity::{self, SensitivityProbe};
-use crate::source_app::{self, SourceApp};
+use crate::sensitivity::SensitivityProbe;
+use crate::source_app::SourceApp;
 
 /// A single observed clipboard change that the watcher must decide
 /// what to do with.
@@ -51,7 +49,6 @@ impl WatcherState {
     }
 }
 
-const POLL_INTERVAL: Duration = Duration::from_millis(500);
 const MAX_UNPINNED: u32 = 200;
 
 static SKIP_NEXT: AtomicBool = AtomicBool::new(false);
@@ -61,6 +58,27 @@ pub fn mark_skip_next() {
 }
 
 pub fn start_watcher(db: Arc<Db>, library_root: std::path::PathBuf) {
+    #[cfg(target_os = "windows")]
+    {
+        crate::platform_watcher::windows::start(db, library_root);
+        return;
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        start_polling(db, library_root, std::time::Duration::from_millis(100));
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn start_polling(
+    db: Arc<Db>,
+    library_root: std::path::PathBuf,
+    interval: std::time::Duration,
+) {
+    use crate::sensitivity::OsProbe;
+    use crate::source_app;
+
     std::thread::spawn(move || {
         let mut clip = match Clipboard::new() {
             Ok(c) => c,
@@ -69,11 +87,11 @@ pub fn start_watcher(db: Arc<Db>, library_root: std::path::PathBuf) {
                 return;
             }
         };
-        let mut last_hash: Option<String> = None;
+        let mut state = WatcherState::new();
+        let probe = OsProbe;
 
         loop {
-            std::thread::sleep(POLL_INTERVAL);
-
+            std::thread::sleep(interval);
             if SKIP_NEXT
                 .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
                 .is_ok()
@@ -82,98 +100,25 @@ pub fn start_watcher(db: Arc<Db>, library_root: std::path::PathBuf) {
                 continue;
             }
 
-            if poll_text(&mut clip, &db, &mut last_hash) {
+            // Try text first; image only if text is absent.
+            let event = if let Ok(t) = clip.get_text() {
+                if t.is_empty() {
+                    continue;
+                }
+                ClipboardEvent::Text(t)
+            } else if let Ok(img) = clip.get_image() {
+                if img.bytes.is_empty() {
+                    continue;
+                }
+                ClipboardEvent::Image(img.bytes.into_owned())
+            } else {
                 continue;
-            }
-            poll_image(&mut clip, &db, &library_root, &mut last_hash);
+            };
+
+            let source = source_app::current();
+            let _ = worker_step(event, &mut state, &db, &library_root, &probe, source);
         }
     });
-}
-
-/// Returns true if text was processed (so the caller should skip the image
-/// branch). Text content always wins over an image on the clipboard.
-fn poll_text(clip: &mut Clipboard, db: &Db, last_hash: &mut Option<String>) -> bool {
-    let Ok(text) = clip.get_text() else {
-        return false;
-    };
-    if text.is_empty() {
-        return false;
-    }
-    let hash = hasher::hash_text(&text);
-    if last_hash.as_deref() == Some(&hash) {
-        return true;
-    }
-    *last_hash = Some(hash.clone());
-
-    match clipboard::find_by_hash(db, &hash) {
-        Ok(Some(existing)) => {
-            let _ = clipboard::bump_timestamp(db, &existing.id);
-        }
-        Ok(None) => {
-            let new_item = NewClipboardItem {
-                kind: ClipboardItemKind::Text,
-                text_content: Some(text),
-                file_path: None,
-                content_hash: hash,
-                source_app: None,
-                source_window_title: None,
-            };
-            match clipboard::insert(db, new_item) {
-                Ok(_) => {
-                    let _ = clipboard::evict_unpinned(db, MAX_UNPINNED);
-                }
-                Err(e) => warn!(error = ?e, "clipboard text insert failed"),
-            }
-        }
-        Err(e) => warn!(error = ?e, "clipboard text hash lookup failed"),
-    }
-    true
-}
-
-fn poll_image(
-    clip: &mut Clipboard,
-    db: &Db,
-    library_root: &std::path::Path,
-    last_hash: &mut Option<String>,
-) {
-    let Ok(img) = clip.get_image() else { return };
-    if img.bytes.is_empty() {
-        return;
-    }
-    let hash = hasher::hash_image_bytes(&img.bytes);
-    if last_hash.as_deref() == Some(&hash) {
-        return;
-    }
-    *last_hash = Some(hash.clone());
-
-    match clipboard::find_by_hash(db, &hash) {
-        Ok(Some(existing)) => {
-            let _ = clipboard::bump_timestamp(db, &existing.id);
-        }
-        Ok(None) => {
-            let id = uuid::Uuid::now_v7();
-            let relative = files::clipboard_image_relative_path(&id);
-            if let Err(e) = files::write_atomic(library_root, &relative, &img.bytes) {
-                warn!(error = ?e, path = %relative.display(), "clipboard image write failed");
-                return;
-            }
-            let new_item = NewClipboardItem {
-                kind: ClipboardItemKind::Image,
-                text_content: None,
-                file_path: Some(relative),
-                content_hash: hash,
-                source_app: None,
-                source_window_title: None,
-            };
-            match clipboard::insert(db, new_item) {
-                Ok(_) => {
-                    let _ = clipboard::evict_unpinned(db, MAX_UNPINNED);
-                }
-                Err(e) => warn!(error = ?e, "clipboard image insert failed"),
-            }
-        }
-        Err(e) => warn!(error = ?e, "clipboard image hash lookup failed"),
-    }
 }
 
 /// Pure decision cycle. The probe + source-app lookup are injected so

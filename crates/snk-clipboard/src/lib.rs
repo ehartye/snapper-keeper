@@ -7,6 +7,7 @@ pub mod error;
 pub mod hasher;
 pub mod paste;
 mod platform;
+pub mod platform_watcher;
 pub mod plugin;
 pub mod sensitivity;
 pub mod source_app;
