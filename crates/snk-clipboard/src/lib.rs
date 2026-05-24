@@ -8,6 +8,7 @@ pub mod hasher;
 pub mod paste;
 mod platform;
 pub mod plugin;
+pub mod sensitivity;
 pub mod source_app;
 pub mod watcher;
 
