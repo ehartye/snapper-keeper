@@ -99,6 +99,13 @@ jobs:
           security create-keychain -p actions build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p actions build.keychain
+          # Extend the keychain idle-lock timeout to 2 hours so it doesn't
+          # auto-lock during long Rust compiles. Default macOS timeout is
+          # 300s, which leaves codesign hanging forever waiting for an
+          # interactive password prompt when the build exceeds 5 min — the
+          # exact failure mode of v0.0.0-test5 macOS-x64 (10min compile,
+          # codesign hung 49min then cancelled).
+          security set-keychain-settings -t 7200 build.keychain
           security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions build.keychain
           rm certificate.p12
