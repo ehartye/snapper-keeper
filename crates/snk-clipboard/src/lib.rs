@@ -5,7 +5,9 @@ pub mod commands;
 pub mod error;
 pub mod hasher;
 pub mod paste;
+mod platform;
 pub mod plugin;
+pub mod source_app;
 pub mod watcher;
 
 pub use error::{ClipboardError, Result};
