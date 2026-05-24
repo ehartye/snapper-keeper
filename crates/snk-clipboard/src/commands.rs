@@ -6,7 +6,7 @@ use tauri::{Runtime, State};
 use tracing::info;
 
 use snk_library::clipboard;
-use snk_library::plugin::LibraryState;
+use snk_library::LibraryState;
 
 use crate::caret;
 use crate::paste;
