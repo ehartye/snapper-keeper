@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tauri::plugin::{Builder, TauriPlugin};
 use tauri::{Listener, Manager, Runtime};
 
-use snk_library::plugin::LibraryState;
+use snk_library::LibraryState;
 
 use crate::queue::OcrQueue;
 

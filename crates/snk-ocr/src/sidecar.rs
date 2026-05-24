@@ -242,6 +242,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial(env_path)]
     fn which_finds_an_executable_we_just_created() {
         let dir = tempfile::tempdir().unwrap();
         // On Windows `which` checks PATHEXT (.EXE etc); on Unix it checks bare names.
@@ -258,14 +259,14 @@ mod tests {
             std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o755)).unwrap();
         }
 
-        // Prepend our temp dir to PATH and look up.
+        // Prepend our temp dir to PATH and look up. `serial_test::serial`
+        // on this test (and any others that mutate PATH) serializes them
+        // under the `env_path` key so two threads don't race on
+        // `std::env::set_var`.
         let old_path = std::env::var_os("PATH").unwrap_or_default();
         let mut paths: Vec<std::path::PathBuf> = vec![dir.path().to_path_buf()];
         paths.extend(std::env::split_paths(&old_path));
         let new_path = std::env::join_paths(paths).unwrap();
-        // SAFETY: tests are single-threaded for env mutation here.
-        // (cargo runs each test on its own thread; if this becomes flaky,
-        // gate behind a Mutex.)
         std::env::set_var("PATH", &new_path);
 
         let found = which("fake_tess");

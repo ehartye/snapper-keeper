@@ -10,7 +10,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             crate::commands::show_popup,
         ])
         .setup(|app, _api| {
-            let state: tauri::State<'_, snk_library::plugin::LibraryState> = app.state();
+            let state: tauri::State<'_, snk_library::LibraryState> = app.state();
             let db = Arc::clone(&state.db);
             let root = state.root.clone();
             crate::watcher::start_watcher(db, root);
