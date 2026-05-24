@@ -152,14 +152,17 @@ Expected: no output, exit 0.
 
 ---
 
-### Task 1.4: Pin `dotnet sign` tool to a specific prerelease (`--prerelease` must stay)
+### Task 1.4: Pin `dotnet sign` tool to a specific Microsoft prerelease version (no `--prerelease` flag, just an explicit `--version`)
 
 **Files:**
 - Modify: `.github/workflows/release.yml` (the "Install dotnet sign tool" step, currently around line 86–98)
 
-> **Important:** An earlier draft of this plan said "drop `--prerelease`". That was wrong. The Microsoft `sign` tool (https://github.com/dotnet/sign) has **never had a stable release** — it only ships as `0.9.1-beta.*` prereleases. Even worse: the NuGet ID `sign` is *shared* with an unrelated library by Rafał Jasica (`Sign 1.0+`, an assembly-signing library, NOT a .NET tool). A `dotnet tool install` without `--prerelease` resolves to Jasica's package and fails with `Package sign is not a .NET tool.` — exactly what happened on v0.0.0-sha-pin-test-1. So `--prerelease` is **load-bearing**, not redundant.
+> **Important — two-strike lesson from PR-1 throwaway runs:**
 >
-> The right fix preserves `--prerelease` AND adds an explicit `--version` pin, which still achieves the goal (no implicit floating prerelease).
+> 1. The Microsoft `sign` tool (https://github.com/dotnet/sign) has **never had a stable release** — it only ships as `0.9.1-beta.*` prereleases. The NuGet ID `sign` is *shared* with an unrelated library `Sign 1.x` by Rafał Jasica (assembly-signing library, NOT a .NET tool). So `dotnet tool install --global sign --version 1.x` fails with `Package sign is not a .NET tool.` because it picks Jasica's package — exactly what happened on v0.0.0-sha-pin-test-1.
+> 2. `dotnet tool install` **rejects** the combination `--prerelease --version <X>` with `The --prerelease and --version options are not supported in the same command` — exactly what happened on v0.0.0-sha-pin-test-2.
+>
+> The working pattern is: **specify the prerelease version explicitly via `--version 0.9.1-beta.NNNNN.N` and omit `--prerelease`.** NuGet looks up that exact version (which only exists in Microsoft's package — Jasica's only has stable `1.x`), so the package-identity disambiguation happens naturally.
 
 **Step 1: Find the latest Microsoft `sign` prerelease (must be a `DotnetTool` package by Microsoft)**
 
@@ -188,12 +191,12 @@ dotnet tool install --global --prerelease sign
 Replace with (substituting `<SIGN_VERSION>` from Step 1):
 
 ```powershell
-# --prerelease is required: Microsoft's sign tool ships only as 0.9.1-beta.*.
-# Without --prerelease, NuGet resolves to Sign 1.x by Rafał Jasica (an
-# unrelated assembly-signing library, not a .NET tool) and fails with
-# "Package sign is not a .NET tool." See plan-fix commit on the
-# ci/sha-pin-actions branch for the post-mortem.
-dotnet tool install --global --prerelease sign --version <SIGN_VERSION>
+# Microsoft's sign tool only ships as 0.9.1-beta.* prereleases. We resolve
+# the package-identity collision with Sign 1.x by Rafal Jasica (an
+# unrelated library, NOT a .NET tool) by version-pinning explicitly: the
+# beta version only exists in Microsoft's package. We can NOT use
+# --prerelease alongside --version (dotnet rejects the combination).
+dotnet tool install --global sign --version <SIGN_VERSION>
 ```
 
 **Step 3: Verify the rest of the install step still emits the correct PATH config**
@@ -413,7 +416,7 @@ Run:
 gh pr create --title "ci: pin actions by SHA + pin Tesseract chocolatey + replace softprops (#30)" --body "$(cat <<'EOF'
 ## Summary
 - Pins every `uses:` in `ci.yml` and `release.yml` to a commit SHA, preserving the floating tag as a `# vX` comment.
-- Pins `dotnet sign` tool to a specific Microsoft prerelease (`--prerelease` is required: the Microsoft tool only ships as `0.9.1-beta.*`; dropping the flag resolves to an unrelated library by Rafał Jasica and fails with "Package sign is not a .NET tool.").
+- Pins `dotnet sign` tool to a specific Microsoft prerelease version (`0.9.1-beta.*` — Microsoft's tool only ships as prereleases under the `sign` NuGet ID; pinning explicitly disambiguates from `Sign 1.x` by Rafał Jasica, an unrelated library that is NOT a .NET tool).
 - Pins Tesseract chocolatey package version + SHA256-verifies the bundled installer (NSIS `.exe`, not MSI as an earlier plan draft assumed).
 - Replaces `softprops/action-gh-release@v2` with inline `gh release create`, so `contents:write` is held only by our own step.
 
@@ -1211,7 +1214,7 @@ Same shape with these changes:
       - name: Install dotnet sign tool
         shell: powershell
         run: |
-          dotnet tool install --global --prerelease sign --version <SIGN_VERSION>   # from PR-1 Task 1.4
+          dotnet tool install --global sign --version <SIGN_VERSION>   # from PR-1 Task 1.4 (do NOT add --prerelease; dotnet rejects it alongside --version)
           $toolsPath = "$env:USERPROFILE\.dotnet\tools"
           $toolsPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
