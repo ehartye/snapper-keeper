@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -8,7 +9,47 @@ use tracing::{debug, error, warn};
 use snk_library::clipboard::{self, ClipboardItemKind, NewClipboardItem};
 use snk_library::{files, Db};
 
+use crate::blocklist;
 use crate::hasher;
+use crate::sensitivity::{self, SensitivityProbe};
+use crate::source_app::{self, SourceApp};
+
+/// A single observed clipboard change that the watcher must decide
+/// what to do with.
+pub(crate) enum ClipboardEvent {
+    /// Text content was on the clipboard at the time of observation.
+    Text(String),
+    /// Image bytes were on the clipboard (already PNG-encoded by arboard).
+    Image(Vec<u8>),
+}
+
+/// Why the watcher did not record a particular event.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum SkipReason {
+    SensitiveFlag,
+    AppBlocked(String), // identifier
+    DuplicateHash,
+    EmptyContent,
+}
+
+/// Outcome of a single decision cycle.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum StepResult {
+    Saved { item_id: String },
+    DedupedTo { existing_id: String },
+    Skipped(SkipReason),
+}
+
+/// Shared per-thread state the watcher carries across cycles.
+pub(crate) struct WatcherState {
+    pub last_hash: Option<String>,
+}
+
+impl WatcherState {
+    pub fn new() -> Self {
+        Self { last_hash: None }
+    }
+}
 
 const POLL_INTERVAL: Duration = Duration::from_millis(500);
 const MAX_UNPINNED: u32 = 200;
@@ -132,5 +173,113 @@ fn poll_image(
             }
         }
         Err(e) => warn!(error = ?e, "clipboard image hash lookup failed"),
+    }
+}
+
+/// Pure decision cycle. The probe + source-app lookup are injected so
+/// unit tests can run this without touching the real OS clipboard.
+pub(crate) fn worker_step(
+    event: ClipboardEvent,
+    state: &mut WatcherState,
+    db: &Db,
+    library_root: &Path,
+    probe: &dyn SensitivityProbe,
+    source: Option<SourceApp>,
+) -> StepResult {
+    if probe.is_sensitive() {
+        // Record the hash so a follow-up identical observation doesn't
+        // re-run the whole pipeline. We compute it cheaply from the event.
+        state.last_hash = Some(hash_of_event(&event));
+        return StepResult::Skipped(SkipReason::SensitiveFlag);
+    }
+
+    if let Some(ref src) = source {
+        if blocklist::matches(db, src) {
+            state.last_hash = Some(hash_of_event(&event));
+            return StepResult::Skipped(SkipReason::AppBlocked(src.identifier.clone()));
+        }
+    }
+
+    match event {
+        ClipboardEvent::Text(text) => {
+            if text.is_empty() {
+                return StepResult::Skipped(SkipReason::EmptyContent);
+            }
+            let hash = crate::hasher::hash_text(&text);
+            if state.last_hash.as_deref() == Some(&hash) {
+                return StepResult::Skipped(SkipReason::DuplicateHash);
+            }
+            state.last_hash = Some(hash.clone());
+
+            match snk_library::clipboard::find_by_hash(db, &hash) {
+                Ok(Some(existing)) => {
+                    let _ = snk_library::clipboard::bump_timestamp(db, &existing.id);
+                    StepResult::DedupedTo { existing_id: existing.id }
+                }
+                _ => {
+                    let new_item = NewClipboardItem {
+                        kind: ClipboardItemKind::Text,
+                        text_content: Some(text),
+                        file_path: None,
+                        content_hash: hash,
+                        source_app: source.as_ref().map(|s| s.identifier.clone()),
+                        source_window_title: None,
+                    };
+                    match snk_library::clipboard::insert(db, new_item) {
+                        Ok(item) => {
+                            let _ = snk_library::clipboard::evict_unpinned(db, MAX_UNPINNED);
+                            StepResult::Saved { item_id: item.id }
+                        }
+                        Err(_) => StepResult::Skipped(SkipReason::EmptyContent),
+                    }
+                }
+            }
+        }
+        ClipboardEvent::Image(bytes) => {
+            if bytes.is_empty() {
+                return StepResult::Skipped(SkipReason::EmptyContent);
+            }
+            let hash = crate::hasher::hash_image_bytes(&bytes);
+            if state.last_hash.as_deref() == Some(&hash) {
+                return StepResult::Skipped(SkipReason::DuplicateHash);
+            }
+            state.last_hash = Some(hash.clone());
+
+            match snk_library::clipboard::find_by_hash(db, &hash) {
+                Ok(Some(existing)) => {
+                    let _ = snk_library::clipboard::bump_timestamp(db, &existing.id);
+                    StepResult::DedupedTo { existing_id: existing.id }
+                }
+                _ => {
+                    let id = uuid::Uuid::now_v7();
+                    let relative = files::clipboard_image_relative_path(&id);
+                    if files::write_atomic(library_root, &relative, &bytes).is_err() {
+                        return StepResult::Skipped(SkipReason::EmptyContent);
+                    }
+                    let new_item = NewClipboardItem {
+                        kind: ClipboardItemKind::Image,
+                        text_content: None,
+                        file_path: Some(relative),
+                        content_hash: hash,
+                        source_app: source.as_ref().map(|s| s.identifier.clone()),
+                        source_window_title: None,
+                    };
+                    match snk_library::clipboard::insert(db, new_item) {
+                        Ok(item) => {
+                            let _ = snk_library::clipboard::evict_unpinned(db, MAX_UNPINNED);
+                            StepResult::Saved { item_id: item.id }
+                        }
+                        Err(_) => StepResult::Skipped(SkipReason::EmptyContent),
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn hash_of_event(event: &ClipboardEvent) -> String {
+    match event {
+        ClipboardEvent::Text(t) => crate::hasher::hash_text(t),
+        ClipboardEvent::Image(b) => crate::hasher::hash_image_bytes(b),
     }
 }
