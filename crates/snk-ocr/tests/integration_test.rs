@@ -13,14 +13,14 @@ fn tesseract_available() -> bool {
 }
 
 #[test]
-fn sidecar_extracts_text_from_image() {
+fn sidecar_extracts_blank_image_without_error() {
     if !tesseract_available() {
         eprintln!("SKIP: tesseract not installed");
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let img_path = dir.path().join("test.png");
+    let img_path = dir.path().join("blank.png");
 
     // Blank white image — tesseract should process without error,
     // producing little or no text.
@@ -42,6 +42,34 @@ fn sidecar_extracts_text_from_image() {
             );
         }
     }
+}
+
+#[test]
+fn sidecar_extracts_hello_world_from_fixture() {
+    if !tesseract_available() {
+        eprintln!("SKIP: tesseract not installed");
+        return;
+    }
+
+    // 256x64 PNG with the literal text "hello world" rendered in Arial 32pt
+    // bold — committed alongside the test rather than generated at runtime
+    // so the test doesn't depend on which font-rendering crates are
+    // available on the build machine.
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("hello-world.png");
+    assert!(fixture.is_file(), "missing fixture: {}", fixture.display());
+
+    let output = snk_ocr::sidecar::run_tesseract(&fixture, "eng")
+        .expect("hello-world fixture should OCR cleanly");
+
+    let normalized = output.text.to_lowercase();
+    assert!(
+        normalized.contains("hello") && normalized.contains("world"),
+        "expected extracted text to contain both 'hello' and 'world'; got: {:?}",
+        output.text
+    );
 }
 
 #[test]
