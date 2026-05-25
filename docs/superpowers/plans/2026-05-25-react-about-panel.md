@@ -1059,9 +1059,9 @@ pnpm --filter @snk/app test -- --run src/windows/settings/SettingsWindow.test.ts
 
 Expected: all 5 tests passing. (The existing tests don't assert on AboutSection internals — they just verify the headers render.)
 
-**Step 3: Wrap all `renderWithQuery` calls with `<ModalProvider>` and add modal-root setup**
+**Step 3: Wrap all `renderWithQuery` calls with `<ModalProvider>`, add modal-root setup, and extend the IPC mock for AboutSection's calls**
 
-`<AboutSection />` calls `useModal()`, which throws if not inside a `<ModalProvider>`. The runtime app wraps everything in `main.tsx`, but the tests render `<SettingsWindow />` directly. Add the wrapper inline at all 5 callsites.
+`<AboutSection />` calls `useModal()` (throws without provider) and on mount issues IPC calls to `plugin:snk-updater|get_update_status` + `get_last_check_at`. The runtime app wraps everything in `main.tsx`, but the tests render `<SettingsWindow />` directly with a default `mockResolvedValue(null)`. Without overrides, AboutSection receives `null` for status, `formatStatus(null)` throws on `null.kind`, and the error boundary breaks the rest of the render.
 
 Top-of-file imports — add:
 
@@ -1069,12 +1069,19 @@ Top-of-file imports — add:
 import { ModalProvider } from '../../components/Modal';
 ```
 
-Add a modal-root setup in the existing `beforeEach` (or create one if absent):
+Replace the existing `beforeEach` with this expanded form (handles modal-root + the AboutSection IPC commands; individual tests still extend with their own overrides):
 
 ```tsx
 beforeEach(() => {
   mockedInvoke.mockReset();
-  mockedInvoke.mockResolvedValue(null);
+  mockedInvoke.mockImplementation((cmd: string) => {
+    if (cmd === 'plugin:snk-updater|get_update_status')
+      return Promise.resolve({ kind: 'idle' });
+    if (cmd === 'plugin:snk-updater|get_last_check_at')
+      return Promise.resolve(null);
+    return Promise.resolve(null);
+  });
+
   const existing = document.getElementById('modal-root');
   if (existing) existing.remove();
   const root = document.createElement('div');
@@ -1088,6 +1095,25 @@ Then replace each `renderWithQuery(<SettingsWindow />)` (5 occurrences) with:
 ```tsx
 renderWithQuery(<ModalProvider><SettingsWindow /></ModalProvider>);
 ```
+
+For the existing `toggling Auto-copy persists the new boolean` test, which already has a `mockImplementation`, extend its function to also handle the updater commands:
+
+```tsx
+mockedInvoke.mockImplementation((cmd: string, args: unknown) => {
+  if (cmd === 'plugin:snk-library|get_setting') {
+    const key = (args as { key: string }).key;
+    if (key === 'capture.auto_copy') return Promise.resolve(true);
+    return Promise.resolve(null);
+  }
+  if (cmd === 'plugin:snk-updater|get_update_status')
+    return Promise.resolve({ kind: 'idle' });
+  if (cmd === 'plugin:snk-updater|get_last_check_at')
+    return Promise.resolve(null);
+  return Promise.resolve(undefined);
+});
+```
+
+(The override above is per-test and replaces the `beforeEach` impl for that single test, so include the updater branches explicitly.)
 
 **Step 4: Update the section-header test to include About**
 
