@@ -1,0 +1,4 @@
+// RC.EXE doesn't accept side-by-side manifests directly; it expects a
+// resource script. This file just declares resource id 1 of type
+// RT_MANIFEST (24) pointing at the actual manifest XML.
+1 24 "smoke-target.exe.manifest"

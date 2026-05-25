@@ -4350,6 +4350,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "snk-smoke-target"
+version = "0.0.0"
+dependencies = [
+ "embed-resource",
+]
+
+[[package]]
 name = "snk-updater"
 version = "0.0.1"
 dependencies = [
