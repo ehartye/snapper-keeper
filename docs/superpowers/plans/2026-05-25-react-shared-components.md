@@ -800,7 +800,7 @@ describe('<Modal />', () => {
   });
 
   it('custom modals render the provided ReactNode and Enter does NOT auto-submit', async () => {
-    const onFormSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    const onFormSubmit = vi.fn((e) => e.preventDefault());
     render(
       <ModalProvider>
         <SetModalOnMount
@@ -963,29 +963,32 @@ export function Modal() {
   }, [modal]);
 
   // Global key handling — Esc and (for confirm/alert) Enter.
+  // Local `close` inside the effect avoids referencing the outer `close`
+  // (whose identity changes each render) in the deps list.
   useEffect(() => {
     if (!modal) return;
+    const closeNow = () => setModal(null);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        close();
+        closeNow();
       } else if (e.key === 'Enter') {
         if (modal.kind === 'confirm') {
           e.preventDefault();
           // Synchronous so test assertions about post-Enter DOM state
           // observe the closed modal in the same tick.
           modal.onConfirm();
-          close();
+          closeNow();
         } else if (modal.kind === 'alert') {
           e.preventDefault();
-          close();
+          closeNow();
         }
         // .custom: ignore Enter — caller's form owns it.
       }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [modal]);
+  }, [modal, setModal]);
 
   if (!modal) return null;
 
