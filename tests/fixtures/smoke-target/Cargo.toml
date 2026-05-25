@@ -1,0 +1,19 @@
+[package]
+name = "snk-smoke-target"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "Throwaway binary used by the release-pipeline smoke roundtrip — proves signing tools work before touching real artifacts."
+
+[[bin]]
+name = "snk-smoke-target"
+path = "src/main.rs"
+
+# Empty deps — keep this crate hermetic and zero-cost.
+[dependencies]
+
+# Windows-only manifest embedding via embed-resource. The build script
+# feeds smoke-target.rc (a thin resource script) to RC.EXE, which
+# embeds smoke-target.exe.manifest as RT_MANIFEST resource id 1.
+[target.'cfg(windows)'.build-dependencies]
+embed-resource = "3"

@@ -9,6 +9,7 @@ members = [
     "crates/snk-ocr",
     "crates/snk-updater",
     "app/src-tauri",
+    "tests/fixtures/smoke-target",
 ]
 
 [workspace.package]
