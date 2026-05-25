@@ -7,6 +7,22 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[lib]
+# Lib name intentionally diverges from package name. Windows UAC's
+# installer-detection heuristic flags any binary with the substrings
+# "update", "setup", or "install" in its filename — Cargo's test
+# binary for this crate would be named `snk_updater-<hash>.exe` which
+# triggers UAC prompts and blocks unattended `cargo test`. Renaming
+# the lib only (not the package) changes the test binary's name
+# without disturbing the package-name-based dep declarations.
+#
+# We picked `snk_releaser` because the more obvious "snk_update_checker"
+# ALSO contains "update" and would still trigger UAC. Anything
+# containing "update" / "setup" / "install" is off-limits.
+#
+# See #94 for full context.
+name = "snk_releaser"
+
 [build-dependencies]
 tauri-plugin = { workspace = true }
 
