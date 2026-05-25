@@ -509,7 +509,18 @@ jobs:
             -ascp snapper-keeper `
             -v Information `
             $signed
-          signtool verify /pa /v $signed
+          # Use PowerShell's native Get-AuthenticodeSignature instead of
+          # signtool.exe. signtool ships with the Windows SDK but is not
+          # on PATH for default PowerShell sessions on windows-latest
+          # runners (it lives at C:\Program Files (x86)\Windows Kits\10
+          # \bin\<ver>\x64\signtool.exe). Get-AuthenticodeSignature is
+          # built into PowerShell and gives equivalent verification.
+          $sig = Get-AuthenticodeSignature $signed
+          if ($sig.Status -ne 'Valid') {
+            Write-Error "Authenticode verify failed: $($sig.Status) - $($sig.StatusMessage)"
+            exit 1
+          }
+          Write-Host "Authenticode verify: $($sig.Status) (signer: $($sig.SignerCertificate.Subject))"
 
       - name: Minisign the installer
         shell: bash
