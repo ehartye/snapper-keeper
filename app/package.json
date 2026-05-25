@@ -32,6 +32,7 @@
     "@snk/capture": "workspace:*",
     "@snk/clipboard": "workspace:*",
     "@snk/library": "workspace:*",
+    "@snk/updater": "workspace:*",
     "@tanstack/react-query": "^5.40.0",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-autostart": "^2.5.1",

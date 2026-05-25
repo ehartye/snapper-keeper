@@ -98,6 +98,9 @@ importers:
       '@snk/library':
         specifier: workspace:*
         version: link:../packages/snk-library
+      '@snk/updater':
+        specifier: workspace:*
+        version: link:../packages/snk-updater
       '@tanstack/react-query':
         specifier: ^5.40.0
         version: 5.100.11(react@18.3.1)

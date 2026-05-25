@@ -1,6 +1,10 @@
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  define: {
+    __GIT_SHA__: JSON.stringify('test'),
+    __UPDATER_FINGERPRINT__: JSON.stringify('testfingerprint'),
+  },
   test: {
     environment: 'happy-dom',
     globals: true,
