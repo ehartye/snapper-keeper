@@ -96,23 +96,38 @@ jobs:
           New-Item -ItemType Directory -Force -Path $dest | Out-Null
           Copy-Item -Path "$src\*" -Destination $dest -Recurse -Force
 
+      # Windows: delete bundle.windows.signCommand from tauri.conf.json
+      # before building. The build job is secrets-free, so it cannot
+      # invoke `dotnet sign` (no Azure creds). Attempts to disable the
+      # signCommand via --config overlay don't work:
+      #   - `signCommand: ""` -> Tauri tries to exec the empty command
+      #     and fails with "program path has no file name".
+      #   - `signCommand: null` -> unverified at time of writing; jq -d
+      #     is the robust fix that just removes the field entirely.
+      # The sign-win-x64 job runs `dotnet sign` against the unsigned
+      # installer instead.
+      - name: Strip signCommand from tauri.conf.json (Windows build)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          jq 'del(.bundle.windows.signCommand)' app/src-tauri/tauri.conf.json > /tmp/conf.json
+          mv /tmp/conf.json app/src-tauri/tauri.conf.json
+          echo "windows.signCommand after patch:"
+          jq '.bundle.windows.signCommand // "(absent)"' app/src-tauri/tauri.conf.json
+
       # Build with NO signing secrets in env.
       #
-      # `createUpdaterArtifacts: false` is critical here. The plan's first
-      # attempt overrode `plugins.updater.pubkey` to "" hoping Tauri would
-      # interpret that as "no pubkey, skip updater minisign". It does not:
-      # Tauri sees ANY pubkey value (including "") as "pubkey configured",
-      # then errors with "A public key has been found, but no private key.
-      # Make sure to set TAURI_SIGNING_PRIVATE_KEY environment variable."
-      # — exactly because we INTENTIONALLY haven't set that env var. Setting
+      # `createUpdaterArtifacts: false` is critical here. An earlier attempt
+      # overrode `plugins.updater.pubkey` to "" hoping Tauri would interpret
+      # that as "no pubkey, skip updater minisign". It does not: Tauri sees
+      # ANY pubkey value (including "") as "pubkey configured", then errors
+      # with "A public key has been found, but no private key. Make sure to
+      # set TAURI_SIGNING_PRIVATE_KEY environment variable." — exactly
+      # because we INTENTIONALLY haven't set that env var. Setting
       # createUpdaterArtifacts: false skips the updater bundler entirely,
       # which is what we want: the sign jobs recreate the updater payload
       # (tar of signed .app + minisign on macOS; minisign on signed installer
       # on Windows) from the platform-signed artifacts.
-      #
-      # `signCommand: ""` disables the Windows Authenticode hook so the
-      # NSIS bundler doesn't try to invoke the dotnet sign tool against the
-      # installer — that happens in sign-win-x64 instead.
       #
       # `shell: bash` is required: on windows-latest the default shell is
       # PowerShell, which tokenizes the inline JSON --config argument
@@ -122,7 +137,7 @@ jobs:
         shell: bash
         run: |
           pnpm tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} \
-            --config '{"bundle":{"createUpdaterArtifacts":false,"windows":{"signCommand":""}}}'
+            --config '{"bundle":{"createUpdaterArtifacts":false}}'
 
       # macOS: upload the .app directory. The sign job will codesign the .app,
       # then rebuild .dmg from the signed .app, tar the signed .app to make

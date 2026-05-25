@@ -953,6 +953,23 @@ Delete the entire `build-and-release:` job (everything from `build-and-release:`
           New-Item -ItemType Directory -Force -Path $dest | Out-Null
           Copy-Item -Path "$src\*" -Destination $dest -Recurse -Force
 
+      # Windows: delete bundle.windows.signCommand from tauri.conf.json
+      # before building. The build job is secrets-free and cannot invoke
+      # `dotnet sign`. Attempts to disable the signCommand via --config
+      # overlay don't work cleanly:
+      #   - `signCommand: ""` -> Tauri tries to exec the empty command and
+      #     fails with "program path has no file name".
+      #   - `signCommand: null` -> unverified at time of writing; jq -d is
+      #     the robust fix that just removes the field entirely.
+      # The sign-win-x64 job runs `dotnet sign` against the unsigned
+      # installer instead.
+      - name: Strip signCommand from tauri.conf.json (Windows build)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          jq 'del(.bundle.windows.signCommand)' app/src-tauri/tauri.conf.json > /tmp/conf.json
+          mv /tmp/conf.json app/src-tauri/tauri.conf.json
+
       # Build with NO signing secrets in env.
       #
       # `createUpdaterArtifacts: false` is critical here. An earlier draft of
@@ -967,10 +984,6 @@ Delete the entire `build-and-release:` job (everything from `build-and-release:`
       # (tar of signed .app + minisign on macOS; minisign on signed installer
       # on Windows) from the platform-signed artifacts.
       #
-      # `signCommand: ""` disables the Windows Authenticode hook so the
-      # NSIS bundler doesn't try to invoke the dotnet sign tool against the
-      # installer — that happens in sign-win-x64 instead.
-      #
       # `shell: bash` is required: on windows-latest the default shell is
       # PowerShell, which tokenizes the inline JSON --config argument
       # differently and breaks the bundler. Git Bash is preinstalled on
@@ -979,7 +992,7 @@ Delete the entire `build-and-release:` job (everything from `build-and-release:`
         shell: bash
         run: |
           pnpm tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} \
-            --config '{"bundle":{"createUpdaterArtifacts":false,"windows":{"signCommand":""}}}'
+            --config '{"bundle":{"createUpdaterArtifacts":false}}'
 
       # macOS: upload the .app directory. The sign job will codesign the .app,
       # then rebuild .dmg from the signed .app, tar the signed .app to make
