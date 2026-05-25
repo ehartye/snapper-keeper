@@ -544,6 +544,7 @@ git commit -m "chore: delete unused @snk/ocr TS package (closes #62)"
 **Files:**
 - Create: `app/src/windows/settings/AboutSection.tsx`
 - Create: `app/src/windows/settings/AboutSection.test.tsx`
+- Modify: `app/vitest.config.ts` — mirror the Vite `define` block so vitest substitutes `__GIT_SHA__` / `__UPDATER_FINGERPRINT__` in test runs (the production `vite.config.ts` define doesn't apply to vitest)
 
 **Context:** New React component. Uses shared primitives from PR A (`SettingsSection`, `SettingRow`, `Button`, `useModal`). Renders 8 rows in this order:
 
@@ -662,12 +663,11 @@ describe('<AboutSection />', () => {
   it('renders the updater fingerprint', async () => {
     setStatusResponses();
     renderAbout();
-    // __UPDATER_FINGERPRINT__ is injected by Vite; check for any
-    // non-"unknown" value, or for "unknown" if the build couldn't parse.
+    // vitest.config.ts defines __UPDATER_FINGERPRINT__ = "testfingerprint"
+    // for test runs (production define is in vite.config.ts).
     await waitFor(() => {
       const row = screen.getByText(/Fingerprint/i).closest('div.flex')!;
-      const val = row.textContent ?? '';
-      expect(val.length).toBeGreaterThan('Fingerprint'.length);
+      expect(row.textContent).toMatch(/testfingerprint/i);
     });
   });
 
@@ -760,16 +760,27 @@ describe('<AboutSection />', () => {
 });
 ```
 
-**Step 2: Run test, verify fail**
+**Step 2: Mirror the Vite `define` block in vitest config**
+
+In `app/vitest.config.ts`, add a `define` block inside the existing `defineConfig({...})` call, alongside `test:` and `resolve:`. This makes the `__GIT_SHA__` and `__UPDATER_FINGERPRINT__` globals available during vitest runs (the production `define` in `vite.config.ts` does NOT apply to vitest):
+
+```ts
+  define: {
+    __GIT_SHA__: JSON.stringify('test'),
+    __UPDATER_FINGERPRINT__: JSON.stringify('testfingerprint'),
+  },
+```
+
+**Step 3: Run test, verify fail**
 
 ```bash
 cd C:/Users/ehart/repos/snapper-keeper-worktrees/feat-react-about-panel
 pnpm --filter @snk/app test -- --run src/windows/settings/AboutSection.test.tsx
 ```
 
-Expected: FAIL with `Cannot find module './AboutSection'`.
+Expected: FAIL with `Cannot find module './AboutSection'` (component file doesn't exist yet).
 
-**Step 3: Implement `AboutSection.tsx`**
+**Step 4: Implement `AboutSection.tsx`**
 
 Create `app/src/windows/settings/AboutSection.tsx`:
 
@@ -945,7 +956,7 @@ export function AboutSection() {
 }
 ```
 
-**Step 4: Run test, verify pass**
+**Step 5: Run test, verify pass**
 
 ```bash
 cd C:/Users/ehart/repos/snapper-keeper-worktrees/feat-react-about-panel
@@ -954,7 +965,7 @@ pnpm --filter @snk/app test -- --run src/windows/settings/AboutSection.test.tsx
 
 Expected: all 13 tests passing.
 
-**Step 5: Run lint + typecheck**
+**Step 6: Run lint + typecheck**
 
 ```bash
 cd C:/Users/ehart/repos/snapper-keeper-worktrees/feat-react-about-panel
@@ -964,10 +975,10 @@ pnpm --filter @snk/app typecheck
 
 Expected: both clean.
 
-**Step 6: Commit**
+**Step 7: Commit**
 
 ```bash
-git add app/src/windows/settings/AboutSection.tsx app/src/windows/settings/AboutSection.test.tsx
+git add app/src/windows/settings/AboutSection.tsx app/src/windows/settings/AboutSection.test.tsx app/vitest.config.ts
 git commit -m "feat(ui): add About section with version, paths, updater status (closes #36)"
 ```
 
