@@ -41,6 +41,18 @@ impl OcrQueue {
         Self { queue, notify }
     }
 
+    /// Construct an OcrQueue WITHOUT spawning the background worker.
+    /// For tests of the queue's enqueue/drop logic where worker drain
+    /// would race with the test. Production callers should always use
+    /// `start()`.
+    #[cfg(test)]
+    fn new_for_test() -> Self {
+        Self {
+            queue: Arc::new(Mutex::new(VecDeque::with_capacity(MAX_QUEUE_SIZE))),
+            notify: Arc::new(Notify::new()),
+        }
+    }
+
     /// Enqueue a new OCR job. If the queue is at capacity, the OLDEST
     /// queued job is dropped to make room. Returns the dropped
     /// `capture_id` if a drop occurred (caller should emit
@@ -172,15 +184,11 @@ mod tests {
     use std::path::PathBuf;
 
     fn make_queue() -> OcrQueue {
-        // snk-library's test_support::fresh_db is crate-private;
-        // open a real DB via the public API into a tempdir instead.
-        let dir = tempfile::tempdir().expect("tempdir");
-        let path = dir.path().join("sk.db");
-        // Leak the tempdir so it outlives the queue (the worker spawns
-        // an async task that holds the Db; test process exit will clean up).
-        std::mem::forget(dir);
-        let db = snk_library::Db::open(&path).expect("open db");
-        OcrQueue::start(Arc::new(db), PathBuf::from("."))
+        // Use the test-only constructor so the worker doesn't drain
+        // between our enqueues. CI's tokio runtime is more eager than
+        // some local OS-runtime configs; without no-worker the
+        // at-capacity test races with worker drain.
+        OcrQueue::new_for_test()
     }
 
     #[test]
