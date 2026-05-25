@@ -82,11 +82,30 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: asset: https://asset.localhost; font-src 'self' data:; connect-src 'self' ipc: https://ipc.localhost; object-src 'none'; frame-src 'none'; base-uri 'self'",
       "assetProtocol": {
         "enable": true,
         "scope": {
-          "allow": ["$APPDATA/**", "$APPLOCALDATA/**"]
+          "allow": [
+            "$APPDATA/captures/**",
+            "$APPDATA/clipboard/**",
+            "$APPDATA/annotations/**",
+            "$APPLOCALDATA/captures/**",
+            "$APPLOCALDATA/clipboard/**",
+            "$APPLOCALDATA/annotations/**"
+          ],
+          "deny": [
+            "$APPDATA/library.db",
+            "$APPDATA/library.db-wal",
+            "$APPDATA/library.db-shm",
+            "$APPDATA/backups/**",
+            "$APPDATA/logs/**",
+            "$APPLOCALDATA/library.db",
+            "$APPLOCALDATA/library.db-wal",
+            "$APPLOCALDATA/library.db-shm",
+            "$APPLOCALDATA/backups/**",
+            "$APPLOCALDATA/logs/**"
+          ]
         }
       }
     },

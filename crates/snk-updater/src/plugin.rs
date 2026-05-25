@@ -144,12 +144,19 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
 
             let handle = app.app_handle().clone();
             tauri::async_runtime::spawn(async move {
+                // Initial check ~5s after launch, then once every 24h.
                 tokio::time::sleep(Duration::from_secs(5)).await;
                 if let Err(e) = do_update_check(handle.clone()).await {
                     warn!(error = %e, "startup update check failed");
                 }
 
+                // `Delay` (vs default `Burst`) means a stretch of suspend
+                // / sleep / sluggish runtime won't replay multiple missed
+                // ticks in rapid succession when the runtime resumes.
                 let mut interval = tokio::time::interval(Duration::from_secs(24 * 60 * 60));
+                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+                // First tick fires immediately; the startup check above
+                // already covered it, so consume it and skip.
                 interval.tick().await;
                 loop {
                     interval.tick().await;

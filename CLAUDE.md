@@ -2,6 +2,8 @@
 
 This file gives Claude project-specific context. Read it before you start anything substantive. The user-level `~/.claude/CLAUDE.md` already covers Eric's general working preferences; this file covers what's true *here*.
 
+**Dev environment setup (toolchain versions, Tesseract install, per-OS prerequisites, `pnpm tauri dev`):** [`README.md`](README.md) is canonical. This file documents *project conventions and gotchas* — not setup steps.
+
 ## What this repo is
 
 Cross-platform (Windows + macOS) desktop utility — screen capture with annotation + OCR-indexed search, plus clipboard history with a caret-anchored popup. Tauri 2 (Rust + React/TS), local-first, no servers, no telemetry. Audience is "share-friendly side project" — signed installers + auto-update via GitHub Releases, no store distribution.

@@ -49,22 +49,17 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn fresh_db() -> Db {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("sk.db");
-        std::mem::forget(dir);
-        Db::open(&path).unwrap()
-    }
+    use crate::test_support::fresh_db;
 
     #[test]
     fn get_returns_none_for_missing_key() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         assert_eq!(get(&db, "no.such.key").unwrap(), None);
     }
 
     #[test]
     fn set_and_get_round_trips() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         set(&db, "capture.format", &json!("png")).unwrap();
         let val = get(&db, "capture.format").unwrap();
         assert_eq!(val, Some(json!("png")));
@@ -72,7 +67,7 @@ mod tests {
 
     #[test]
     fn set_overwrites_existing() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         set(&db, "clipboard.history_size", &json!(200)).unwrap();
         set(&db, "clipboard.history_size", &json!(500)).unwrap();
         let val = get(&db, "clipboard.history_size").unwrap();
@@ -81,7 +76,7 @@ mod tests {
 
     #[test]
     fn set_handles_complex_json() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let blocklist = json!(["1Password", "KeePass"]);
         set(&db, "clipboard.app_blocklist", &blocklist).unwrap();
         let val = get(&db, "clipboard.app_blocklist").unwrap();
@@ -90,7 +85,7 @@ mod tests {
 
     #[test]
     fn delete_removes_key() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         set(&db, "temp.key", &json!(true)).unwrap();
         delete(&db, "temp.key").unwrap();
         assert_eq!(get(&db, "temp.key").unwrap(), None);
@@ -98,20 +93,20 @@ mod tests {
 
     #[test]
     fn delete_unknown_key_is_a_noop() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         // Should not error even when the row doesn't exist.
         delete(&db, "never.set").unwrap();
     }
 
     #[test]
     fn get_returns_none_for_unset_key() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         assert_eq!(get(&db, "no.such").unwrap(), None);
     }
 
     #[test]
     fn get_corrupt_json_returns_database_error() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         // Bypass set() to plant a literal that isn't valid JSON.
         db.with_conn(|conn| {
             conn.execute(
@@ -131,7 +126,7 @@ mod tests {
 
     #[test]
     fn set_round_trips_complex_values() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let v = json!({"a": 1, "b": [2, 3], "c": {"d": true}});
         set(&db, "nested", &v).unwrap();
         assert_eq!(get(&db, "nested").unwrap(), Some(v));

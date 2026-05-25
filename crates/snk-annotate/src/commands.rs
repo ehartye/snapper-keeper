@@ -1,7 +1,6 @@
 use tauri::{Emitter, Runtime, State};
 
-use snk_library::plugin::LibraryState;
-use snk_library::{captures, files, Capture, NewCapture};
+use snk_library::{captures, files, Capture, LibraryState, NewCapture};
 
 use crate::Result;
 

@@ -81,6 +81,35 @@ mod tests {
     }
 
     #[test]
+    fn migration_count_matches_latest_applied_version() {
+        // Catches the failure mode where someone adds a new `Vxxx__*.sql`
+        // file without also adding a matching `M::up` entry in
+        // `migrations()` (or vice versa). The count of .sql files in the
+        // migrations/ directory should equal the schema version reported
+        // after `to_latest()`.
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate(&mut conn).expect("migrations apply");
+
+        let v = migrations()
+            .current_version(&conn)
+            .expect("query schema version");
+
+        let migration_files = std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/migrations"))
+            .expect("read migrations dir")
+            .filter_map(std::result::Result::ok)
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "sql"))
+            .count();
+
+        assert_eq!(
+            format!("{v:?}"),
+            format!("Inside({migration_files})"),
+            "applied schema version doesn't match the count of .sql files in migrations/. \
+             If you added a file, add a matching `M::up` entry in migrations(); \
+             if you removed one, drop the corresponding entry."
+        );
+    }
+
+    #[test]
     fn v003_creates_ocr_and_fts_tables() {
         let mut conn = Connection::open_in_memory().unwrap();
         migrate(&mut conn).expect("apply migrations");

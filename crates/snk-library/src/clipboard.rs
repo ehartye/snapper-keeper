@@ -246,12 +246,7 @@ pub fn evict_unpinned(db: &Db, max_unpinned: u32) -> Result<u64> {
 mod tests {
     use super::*;
 
-    fn fresh_db() -> Db {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("sk.db");
-        std::mem::forget(dir);
-        Db::open(&path).unwrap()
-    }
+    use crate::test_support::fresh_db;
 
     fn sample_item(hash: &str) -> NewClipboardItem {
         NewClipboardItem {
@@ -266,7 +261,7 @@ mod tests {
 
     #[test]
     fn insert_and_get() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let item = insert(&db, sample_item("abc123")).unwrap();
         assert_eq!(item.kind, ClipboardItemKind::Text);
         assert_eq!(item.content_hash, "abc123");
@@ -278,7 +273,7 @@ mod tests {
 
     #[test]
     fn kind_round_trips_through_sqlite() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let mut img = sample_item("img-hash");
         img.kind = ClipboardItemKind::Image;
         let inserted = insert(&db, img).unwrap();
@@ -297,7 +292,7 @@ mod tests {
 
     #[test]
     fn find_by_hash_returns_existing() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let item = insert(&db, sample_item("hash1")).unwrap();
         let found = find_by_hash(&db, "hash1").unwrap();
         assert_eq!(found.unwrap().id, item.id);
@@ -305,14 +300,14 @@ mod tests {
 
     #[test]
     fn find_by_hash_returns_none_for_missing() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let found = find_by_hash(&db, "no-such-hash").unwrap();
         assert!(found.is_none());
     }
 
     #[test]
     fn bump_timestamp_updates_created_at() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let item = insert(&db, sample_item("bump1")).unwrap();
         let old_ts = item.created_at;
         std::thread::sleep(std::time::Duration::from_millis(2));
@@ -323,7 +318,7 @@ mod tests {
 
     #[test]
     fn list_returns_newest_first() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let a = insert(&db, sample_item("a")).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(2));
         let b = insert(&db, sample_item("b")).unwrap();
@@ -335,7 +330,7 @@ mod tests {
 
     #[test]
     fn list_filters_by_text_content() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let mut item1 = sample_item("f1");
         item1.text_content = Some("rust programming".into());
         insert(&db, item1).unwrap();
@@ -358,7 +353,7 @@ mod tests {
 
     #[test]
     fn toggle_pin() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let item = insert(&db, sample_item("pin1")).unwrap();
         assert!(!item.pinned);
 
@@ -373,7 +368,7 @@ mod tests {
 
     #[test]
     fn insert_populates_clipboard_fts_index() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let mut item = sample_item("fts-hash");
         item.text_content = Some("important search term".into());
         item.source_app = Some("Terminal".into());
@@ -388,7 +383,7 @@ mod tests {
 
     #[test]
     fn evict_unpinned_removes_oldest_beyond_limit() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let a = insert(&db, sample_item("ev1")).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(2));
         let b = insert(&db, sample_item("ev2")).unwrap();

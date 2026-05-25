@@ -329,16 +329,11 @@ pub fn set_annotation_state(db: &Db, id: &str, state_json: &str) -> Result<()> {
 mod tests {
     use super::*;
 
-    fn fresh_db() -> Db {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("sk.db");
-        std::mem::forget(dir);
-        Db::open(&path).unwrap()
-    }
+    use crate::test_support::fresh_db;
 
     #[test]
     fn insert_returns_capture_with_uuid_v7() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let new = NewCapture {
             file_path: PathBuf::from("captures/2026/05/x.png"),
             width: 1920,
@@ -359,7 +354,7 @@ mod tests {
 
     #[test]
     fn insert_creates_a_persisted_row() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let new = NewCapture {
             file_path: PathBuf::from("x.png"),
             width: 1,
@@ -385,7 +380,7 @@ mod tests {
 
     #[test]
     fn get_returns_inserted() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let new = NewCapture {
             file_path: PathBuf::from("a.png"),
             width: 10,
@@ -401,7 +396,7 @@ mod tests {
 
     #[test]
     fn get_returns_not_found_for_missing_id() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         match get(&db, "no-such-id") {
             Err(crate::LibraryError::NotFound { .. }) => {}
             other => panic!("expected NotFound, got {other:?}"),
@@ -410,7 +405,7 @@ mod tests {
 
     #[test]
     fn list_returns_newest_first_and_excludes_deleted() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let mk = |i: u32| NewCapture {
             file_path: PathBuf::from(format!("{i}.png")),
             width: i,
@@ -442,7 +437,7 @@ mod tests {
 
     #[test]
     fn soft_delete_sets_deleted_at() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let new = NewCapture {
             file_path: PathBuf::from("del.png"),
             width: 1,
@@ -470,7 +465,7 @@ mod tests {
 
     #[test]
     fn soft_delete_nonexistent_returns_not_found() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         match soft_delete(&db, "no-such-id") {
             Err(crate::LibraryError::NotFound { .. }) => {}
             other => panic!("expected NotFound, got {other:?}"),
@@ -497,7 +492,7 @@ mod tests {
 
     #[test]
     fn set_annotated_path_updates_column() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let new = NewCapture {
             file_path: PathBuf::from("a.png"),
             width: 10,
@@ -517,7 +512,7 @@ mod tests {
 
     #[test]
     fn set_annotated_path_nonexistent_returns_not_found() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         match set_annotated_path(&db, "no-such-id", "x.annotated.png") {
             Err(crate::LibraryError::NotFound { .. }) => {}
             other => panic!("expected NotFound, got {other:?}"),
@@ -526,7 +521,7 @@ mod tests {
 
     #[test]
     fn set_annotation_state_updates_column() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let c = insert(&db, mk(1)).unwrap();
         let json = r#"{"version":1,"shapes":[],"crop_region":null,"crop_confirmed":false}"#;
         set_annotation_state(&db, &c.id, json).unwrap();
@@ -536,7 +531,7 @@ mod tests {
 
     #[test]
     fn set_annotation_state_overwrites_previous_value() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let c = insert(&db, mk(2)).unwrap();
         set_annotation_state(&db, &c.id, r#"{"version":1,"first":true}"#).unwrap();
         set_annotation_state(&db, &c.id, r#"{"version":1,"second":true}"#).unwrap();
@@ -546,7 +541,7 @@ mod tests {
 
     #[test]
     fn set_annotation_state_returns_not_found_for_missing_id() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let result = set_annotation_state(&db, "no-such-id", "{}");
         match result {
             Err(crate::LibraryError::NotFound { .. }) => {}
@@ -556,7 +551,7 @@ mod tests {
 
     #[test]
     fn insert_populates_fts_index() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let new = NewCapture {
             file_path: PathBuf::from("fts.png"),
             width: 800,
@@ -576,7 +571,7 @@ mod tests {
 
     #[test]
     fn list_since_filters_by_date() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let mk = |i: u32| NewCapture {
             file_path: PathBuf::from(format!("{i}.png")),
             width: i,
@@ -605,7 +600,7 @@ mod tests {
 
     #[test]
     fn list_pinned_only_filters() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let mk = |i: u32| NewCapture {
             file_path: PathBuf::from(format!("{i}.png")),
             width: i,
@@ -637,7 +632,7 @@ mod tests {
 
     #[test]
     fn list_by_tag_id_filters() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let mk = |i: u32| NewCapture {
             file_path: PathBuf::from(format!("{i}.png")),
             width: i,
@@ -666,7 +661,7 @@ mod tests {
 
     #[test]
     fn list_deleted_only_shows_trashed() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let mk = |i: u32| NewCapture {
             file_path: PathBuf::from(format!("{i}.png")),
             width: i,
@@ -728,7 +723,7 @@ mod tests {
 
     #[test]
     fn set_pinned_toggles_pinned_flag() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let c = insert(&db, mk(1)).unwrap();
         assert!(!c.pinned);
 
@@ -743,7 +738,7 @@ mod tests {
 
     #[test]
     fn set_pinned_on_unknown_id_returns_not_found() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         match set_pinned(&db, "no-such-id", true) {
             Err(crate::LibraryError::NotFound { .. }) => {}
             other => panic!("expected NotFound, got {other:?}"),
@@ -752,7 +747,7 @@ mod tests {
 
     #[test]
     fn set_pinned_on_soft_deleted_returns_not_found() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let c = insert(&db, mk(1)).unwrap();
         soft_delete(&db, &c.id).unwrap();
         match set_pinned(&db, &c.id, true) {
@@ -879,7 +874,7 @@ mod tests {
 
     #[test]
     fn list_before_cursor_returns_older_rows() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let a = insert(&db, mk(1)).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(2));
         let b = insert(&db, mk(2)).unwrap();
@@ -901,7 +896,7 @@ mod tests {
 
     #[test]
     fn list_respects_limit_clamping() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         for i in 0..5 {
             insert(&db, mk(i)).unwrap();
         }
@@ -941,7 +936,7 @@ mod tests {
 
     #[test]
     fn get_returns_not_found_for_unknown_id() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         match get(&db, "no-such-id") {
             Err(crate::LibraryError::NotFound { .. }) => {}
             other => panic!("expected NotFound, got {other:?}"),
@@ -950,7 +945,7 @@ mod tests {
 
     #[test]
     fn new_capture_has_null_annotation_state() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let c = insert(&db, mk(1)).unwrap();
         let fetched = get(&db, &c.id).unwrap();
         assert!(fetched.annotation_state.is_none());
@@ -958,7 +953,7 @@ mod tests {
 
     #[test]
     fn insert_with_id_uses_the_provided_uuid() {
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let chosen = uuid::Uuid::now_v7();
         let new_cap = NewCapture {
             file_path: std::path::PathBuf::from("captures/2026/05/explicit.png"),
@@ -977,7 +972,7 @@ mod tests {
     #[test]
     fn insert_with_id_round_trips_distinct_ids() {
         // Two consecutive insert_with_id calls with different ids must not collide.
-        let db = fresh_db();
+        let (_tmp, db) = fresh_db();
         let id1 = uuid::Uuid::now_v7();
         let id2 = uuid::Uuid::now_v7();
         assert_ne!(id1, id2);

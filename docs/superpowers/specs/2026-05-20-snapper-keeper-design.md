@@ -647,6 +647,10 @@ Every Tauri command returns `Result<T, AppError>`. Frontend pattern-matches on `
 
 ```mermaid
 graph TB
+    subgraph SupplyChain["Supply-chain — dependency provenance"]
+        SCAudit[cargo-audit + pnpm-audit · nightly]
+        SCSBOM[cyclonedx SBOM per release · uploaded as release asset]
+    end
     subgraph E2E["E2E — WebDriver via tauri-driver"]
         E2EWin[Win runner · full app · capture + paste + library]
         E2EMac[Mac runner · same suite]
@@ -664,6 +668,7 @@ graph TB
 
     Unit -.fast feedback.-> Integration
     Integration -.expensive.-> E2E
+    SupplyChain -.orthogonal.-> Unit
 ```
 
 ### 10.2 What each layer covers
@@ -671,6 +676,7 @@ graph TB
 - **Unit (~70%):** pure logic. Dedup hashing, undo/redo state, filter parser, settings serialization, path canonicalization. Runs in <5 s; runs on every save.
 - **Integration (~25%):** each plugin in isolation with real DB + temp filesystem + mocked OS surface trait. Migrations tested forward (and rollback where possible). FTS5 search against fixture data. OCR runs the real tesseract sidecar against a small image fixture set.
 - **E2E (~5%):** `tauri-driver` + WebDriver against a real built binary on each OS. Smoke tests: hotkey → capture → save → library shows it; clipboard popup → pick → pasted into target window. Runs on PRs + nightly. Gates releases.
+- **Supply-chain (orthogonal, nightly + per-release):** `cargo audit` and `pnpm audit` run nightly; new advisories open an issue. Every release uploads a CycloneDX SBOM as a release asset (`sbom.cdx.json`). This layer is orthogonal to the test pyramid — it doesn't exercise our code, it audits the third-party code we depend on.
 
 ### 10.3 Explicit non-goals (testing)
 

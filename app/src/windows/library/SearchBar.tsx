@@ -1,4 +1,11 @@
-import { useState, useCallback, useEffect, useRef, type KeyboardEvent } from 'react';
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { searchLibrary, type SearchResult } from '@snk/library';
@@ -168,11 +175,42 @@ function SearchResultRow({ result, active, onClick, onMouseEnter, elementRef }: 
         >
           {icon}
         </span>
-        <span
-          className="text-xs text-fg truncate flex-1"
-          dangerouslySetInnerHTML={{ __html: result.snippet }}
-        />
+        <span className="text-xs text-fg truncate flex-1">
+          {renderSnippet(result.snippet)}
+        </span>
       </div>
     </button>
   );
+}
+
+/**
+ * Render a SQLite FTS5 `snippet()` string as React nodes.
+ *
+ * FTS5 always emits literal ASCII `<mark>...</mark>` markers around match
+ * terms — those are the ONLY tags we render as real HTML. Every other
+ * substring is passed as a text child, which React safely escapes. This
+ * eliminates the stored-XSS vector where a captured string with embedded
+ * `<img onerror>` / `<script>` payloads would execute inside the webview
+ * when rendered via `dangerouslySetInnerHTML`.
+ *
+ * The corresponding adversarial test lives in
+ * `app/src/windows/library/SearchBar.xss.test.tsx`.
+ */
+export function renderSnippet(snippet: string): ReactNode[] {
+  const parts: ReactNode[] = [];
+  const regex = /<mark>([\s\S]*?)<\/mark>/g;
+  let lastIdx = 0;
+  let key = 0;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(snippet)) !== null) {
+    if (match.index > lastIdx) {
+      parts.push(snippet.slice(lastIdx, match.index));
+    }
+    parts.push(<mark key={`m${key++}`}>{match[1]}</mark>);
+    lastIdx = match.index + match[0].length;
+  }
+  if (lastIdx < snippet.length) {
+    parts.push(snippet.slice(lastIdx));
+  }
+  return parts;
 }
