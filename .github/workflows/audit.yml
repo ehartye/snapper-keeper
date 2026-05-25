@@ -12,7 +12,7 @@ jobs:
   cargo-audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked --version 0.22.1
@@ -24,7 +24,7 @@ jobs:
         run: |
           cargo audit --json > /tmp/audit.json || true
         continue-on-error: true
-      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           ECOSYSTEM: cargo
           REPORT_PATH: /tmp/audit.json
@@ -36,11 +36,11 @@ jobs:
   pnpm-audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: pnpm/action-setup@a3252b78c470c02df07e9d59298aecedc3ccdd6d # v3
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: pnpm/action-setup@ac6db6d3c1f721f886538a378a2d73e85697340a # v6
         with:
           version: 9
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 20
           cache: pnpm
@@ -49,7 +49,7 @@ jobs:
         run: |
           pnpm audit --json > /tmp/audit.json || true
         continue-on-error: true
-      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           ECOSYSTEM: pnpm
           REPORT_PATH: /tmp/audit.json
