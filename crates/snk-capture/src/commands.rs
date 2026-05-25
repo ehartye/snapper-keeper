@@ -63,12 +63,19 @@ pub struct ScreenPreview {
 #[tauri::command]
 pub fn grab_screen_preview<R: Runtime>(app: tauri::AppHandle<R>) -> Result<ScreenPreview> {
     let result = crate::grab::grab_primary_monitor()?;
+    // Preview file lives under `captures/` so it falls inside the
+    // assetProtocol allow scope (`$APPDATA/captures/**`). Tightening the
+    // scope in #84 broke the previous root-of-app-data location: the
+    // overlay backdrop's `convertFileSrc(.preview.png)` URL failed CSP/
+    // scope checks and fell through to a solid black background, which
+    // visually presented as "overlay blocks the images" / blank capture.
     let dir = app
         .path()
         .app_data_dir()
         .map_err(|e| crate::CaptureError::Os {
             message: format!("app data dir: {e}"),
-        })?;
+        })?
+        .join("captures");
     let preview_path = dir.join(".preview.png");
     std::fs::create_dir_all(&dir).map_err(|e| crate::CaptureError::Os {
         message: format!("create dir: {e}"),
