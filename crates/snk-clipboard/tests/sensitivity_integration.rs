@@ -77,14 +77,20 @@ fn windows_can_include_in_history_zero_marks_sensitive() {
         let _ = SetClipboardData(fmt, Some(HANDLE(h.0)));
     }
 
-    // `is_sensitive` requires the caller to own the clipboard (the production
-    // call site is the WM_CLIPBOARDUPDATE handler, where the OS hands you
-    // ownership). Assert before closing, then close.
-    assert!(snk_clipboard::sensitivity::is_sensitive());
-
+    // Close the clipboard BEFORE asserting. This mirrors the real
+    // production state: by the time `is_sensitive` runs in the
+    // WM_CLIPBOARDUPDATE handler, arboard's earlier `get_text()` has
+    // already opened AND closed the clipboard. The previous version of
+    // this test kept the clipboard open through the assertion, which
+    // masked the production bug where `is_sensitive` silently failed
+    // because `GetClipboardData` returns NULL without an OpenClipboard
+    // call. `is_sensitive` now owns its own OpenClipboard/CloseClipboard
+    // lifecycle and must work from this caller-doesn't-own state.
     unsafe {
         let _ = CloseClipboard();
     }
+
+    assert!(snk_clipboard::sensitivity::is_sensitive());
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
