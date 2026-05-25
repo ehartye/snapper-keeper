@@ -10,6 +10,7 @@ mod platform;
 pub mod platform_watcher;
 pub mod plugin;
 pub mod sensitivity;
+pub mod skip_set;
 pub mod source_app;
 pub mod watcher;
 
