@@ -38,7 +38,6 @@ export default defineConfig({
       '@snk/capture': new URL('../packages/snk-capture/src/index.ts', import.meta.url).pathname,
       '@snk/clipboard': new URL('../packages/snk-clipboard/src/index.ts', import.meta.url).pathname,
       '@snk/annotate': new URL('../packages/snk-annotate/src/index.ts', import.meta.url).pathname,
-      '@snk/ocr': new URL('../packages/snk-ocr/src/index.ts', import.meta.url).pathname,
       '@snk/updater': new URL('../packages/snk-updater/src/index.ts', import.meta.url).pathname,
     },
   },

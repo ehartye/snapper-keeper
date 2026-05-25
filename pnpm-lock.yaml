@@ -245,22 +245,6 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@20.19.41)(happy-dom@20.9.0)(jiti@1.21.7)
 
-  packages/snk-ocr:
-    dependencies:
-      '@tauri-apps/api':
-        specifier: ^2.0.0
-        version: 2.11.0
-    devDependencies:
-      '@vitest/coverage-v8':
-        specifier: ^3.2.4
-        version: 3.2.4(vitest@3.2.4(@types/node@20.19.41)(happy-dom@20.9.0)(jiti@1.21.7))
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.41)(happy-dom@20.9.0)(jiti@1.21.7)
-
   packages/snk-updater:
     dependencies:
       '@tauri-apps/api':
