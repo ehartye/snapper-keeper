@@ -11,7 +11,7 @@ import {
 
 import { queryKeys } from '../../lib/queryKeys';
 
-function readEntries(value: unknown): BlocklistEntry[] {
+export function readEntries(value: unknown): BlocklistEntry[] {
   if (!Array.isArray(value)) return [];
   return value.filter(
     (e: unknown): e is BlocklistEntry =>
