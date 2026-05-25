@@ -620,6 +620,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # GitHub Actions runs scripts in non-interactive bash where ** is
+          # treated as * (single segment) by default. shopt -s globstar
+          # enables recursive ** so the patterns below match whether the
+          # artifacts are flat (merge-multiple: true puts them at
+          # artifacts/X.dmg) or nested under a subdirectory.
+          shopt -s globstar nullglob
           gh release create "$GITHUB_REF_NAME" \
             --title "$GITHUB_REF_NAME" \
             --generate-notes \
