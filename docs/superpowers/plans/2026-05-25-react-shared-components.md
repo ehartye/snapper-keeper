@@ -972,7 +972,10 @@ export function Modal() {
       } else if (e.key === 'Enter') {
         if (modal.kind === 'confirm') {
           e.preventDefault();
-          void Promise.resolve(modal.onConfirm()).finally(close);
+          // Synchronous so test assertions about post-Enter DOM state
+          // observe the closed modal in the same tick.
+          modal.onConfirm();
+          close();
         } else if (modal.kind === 'alert') {
           e.preventDefault();
           close();
@@ -1011,7 +1014,10 @@ export function Modal() {
           </Button>
           <Button
             variant={m.danger ? 'danger' : 'primary'}
-            onClick={() => void Promise.resolve(m.onConfirm()).finally(close)}
+            onClick={() => {
+              m.onConfirm();
+              close();
+            }}
           >
             {m.confirmLabel ?? 'Confirm'}
           </Button>
