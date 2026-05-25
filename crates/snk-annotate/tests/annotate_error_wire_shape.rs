@@ -1,8 +1,9 @@
 //! Wire-shape snapshot for `AnnotateError`. CI fails on drift.
 //!
-//! See `crates/snk-library/tests/library_error_wire_shape.rs` for the
-//! contract background and `crates/snk-capture/tests/capture_error_wire_shape.rs`
-//! for the critical-comment about the nested-tag flattening behavior.
+//! Wrapping pattern is adjacent-tagged
+//! (`#[serde(tag = "kind", content = "data")]`) per #104.
+//! See `crates/snk-capture/tests/capture_error_wire_shape.rs` for the
+//! full pattern explanation.
 
 use serde_json::json;
 use snk_annotate::AnnotateError;
@@ -18,7 +19,7 @@ fn image_variant_wire_shape() {
         actual,
         json!({
             "kind": "image",
-            "message": "PNG decoder failed at offset 42",
+            "data": { "message": "PNG decoder failed at offset 42" },
         })
     );
 }
@@ -33,15 +34,13 @@ fn invalid_input_variant_wire_shape() {
         actual,
         json!({
             "kind": "invalid-input",
-            "reason": "state_json missing required field 'shapes'",
+            "data": { "reason": "state_json missing required field 'shapes'" },
         })
     );
 }
 
 #[test]
 fn library_wrapping_not_found_wire_shape() {
-    // Inner-wins flattening (see capture_error_wire_shape.rs for full
-    // explanation). The outer "library" discriminator is LOST.
     let e = AnnotateError::Library(LibraryError::NotFound {
         what: "capture for annotation".into(),
     });
@@ -49,8 +48,11 @@ fn library_wrapping_not_found_wire_shape() {
     assert_eq!(
         actual,
         json!({
-            "kind": "not-found",
-            "what": "capture for annotation",
+            "kind": "library",
+            "data": {
+                "kind": "not-found",
+                "what": "capture for annotation",
+            },
         })
     );
 }
@@ -65,9 +67,12 @@ fn library_wrapping_io_wire_shape() {
     assert_eq!(
         actual,
         json!({
-            "kind": "io",
-            "path": "/data/annotations/x.json",
-            "reason": "permission denied",
+            "kind": "library",
+            "data": {
+                "kind": "io",
+                "path": "/data/annotations/x.json",
+                "reason": "permission denied",
+            },
         })
     );
 }
