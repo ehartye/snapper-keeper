@@ -652,56 +652,44 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-
-      - name: Install cargo-cyclonedx
-        run: cargo install cargo-cyclonedx --locked --version 0.5.9
-
       - name: Install cyclonedx-cli
         env:
           CDX_CLI_VERSION: '0.32.0'
         run: |
           # cyclonedx-cli is a .NET binary distributed on GitHub releases
-          # (NOT npm — earlier plan drafts assumed @cyclonedx/cyclonedx-cli
-          # but no such package exists). Download the Linux x64 binary.
+          # (NOT npm). Used for merge + validate.
           curl -fsSL "https://github.com/CycloneDX/cyclonedx-cli/releases/download/v${CDX_CLI_VERSION}/cyclonedx-linux-x64" -o /tmp/cyclonedx
           chmod +x /tmp/cyclonedx
           sudo mv /tmp/cyclonedx /usr/local/bin/cyclonedx
           cyclonedx --version
 
-      - name: Generate Rust SBOM (workspace)
+      - name: Generate Rust SBOM (from Cargo.lock)
         run: |
-          # cargo-cyclonedx 0.5.x: --all processes all workspace members.
-          # Default per-crate output name is `<crate>.cdx.json` (in each
-          # crate's manifest directory) — not `bom.json`. Force a
-          # predictable name with --override-filename so the merge step's
-          # `find` can collect them deterministically.
-          cargo cyclonedx --format json --all --override-filename rust-sbom
-          echo "Per-crate Rust SBOMs produced:"
-          find . -name 'rust-sbom.cdx.json' -type f -not -path './node_modules/*'
+          # cdxgen -t cargo reads Cargo.lock directly — works for any
+          # workspace layout, no cargo install required. Earlier attempts
+          # used cargo-cyclonedx but `--all --override-filename` produced
+          # no findable output (probably because the workspace root has
+          # no [package] section). cdxgen sidesteps that.
+          pnpm dlx @cyclonedx/cdxgen@12.4.3 -t cargo -o ./bom-rust.cdx.json .
+          echo "Rust SBOM:"
+          ls -la ./bom-rust.cdx.json
 
       - name: Generate npm SBOM
         run: |
-          # @cyclonedx/cyclonedx-npm runs `npm ls` internally and assumes
-          # an npm-managed install. Our workspace uses pnpm, which means
-          # `npm ls` returns exit 1 (different node_modules layout +
-          # workspace symlinks). Use @cyclonedx/cdxgen instead — supports
-          # pnpm via `-t pnpm` and reads pnpm-lock.yaml directly.
+          # cdxgen -t pnpm reads pnpm-lock.yaml directly. cyclonedx-npm
+          # runs `npm ls` internally and fails on pnpm's symlinked
+          # node_modules layout.
           pnpm dlx @cyclonedx/cdxgen@12.4.3 -t pnpm -o ./bom-npm.cdx.json .
+          echo "npm SBOM:"
+          ls -la ./bom-npm.cdx.json
 
       - name: Merge SBOMs
         run: |
-          # Per-crate `rust-sbom.cdx.json` files (one per workspace member)
-          # + the single npm `bom-npm.cdx.json`. Merge into one sbom.cdx.json.
-          mapfile -t rust_boms < <(find . -name 'rust-sbom.cdx.json' -type f -not -path './node_modules/*')
-          echo "Merging ${#rust_boms[@]} Rust BOMs + 1 npm BOM"
-          if [ "${#rust_boms[@]}" -eq 0 ]; then
-            echo "::error::No Rust SBOMs found — cargo cyclonedx didn't emit expected files"
-            exit 1
-          fi
           cyclonedx merge \
-            --input-files "${rust_boms[@]}" ./bom-npm.cdx.json \
+            --input-files ./bom-rust.cdx.json ./bom-npm.cdx.json \
             --output-file ./sbom.cdx.json
+          echo "Merged SBOM:"
+          ls -la ./sbom.cdx.json
 
       - name: Validate SBOM
         run: cyclonedx validate --input-file ./sbom.cdx.json
