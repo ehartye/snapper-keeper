@@ -900,11 +900,11 @@ Delete the entire `build-and-release:` job (everything from `build-and-release:`
           - os: macos-latest
             target: aarch64-apple-darwin
             label: macOS-arm64
-            bundles: 'app,updater'
+            bundles: 'app'
           - os: macos-15-intel
             target: x86_64-apple-darwin
             label: macOS-x64
-            bundles: 'app,updater'
+            bundles: 'app'
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             label: Windows-x64
@@ -953,10 +953,23 @@ Delete the entire `build-and-release:` job (everything from `build-and-release:`
           New-Item -ItemType Directory -Force -Path $dest | Out-Null
           Copy-Item -Path "$src\*" -Destination $dest -Recurse -Force
 
-      # Build with NO signing secrets in env. The --config overlay disables
-      # bundler signing; absent APPLE_SIGNING_IDENTITY env causes the macOS
-      # bundler to skip codesign; absent TAURI_SIGNING_PRIVATE_KEY env causes
-      # the updater bundler to skip minisign.
+      # Build with NO signing secrets in env.
+      #
+      # `createUpdaterArtifacts: false` is critical here. An earlier draft of
+      # this plan overrode `plugins.updater.pubkey` to "" hoping Tauri would
+      # interpret that as "no pubkey, skip updater minisign". It does not:
+      # Tauri sees ANY pubkey value (including "") as "pubkey configured",
+      # then errors with "A public key has been found, but no private key.
+      # Make sure to set TAURI_SIGNING_PRIVATE_KEY environment variable."
+      # — exactly because we INTENTIONALLY haven't set that env var. Setting
+      # createUpdaterArtifacts: false skips the updater bundler entirely,
+      # which is what we want: the sign jobs recreate the updater payload
+      # (tar of signed .app + minisign on macOS; minisign on signed installer
+      # on Windows) from the platform-signed artifacts.
+      #
+      # `signCommand: ""` disables the Windows Authenticode hook so the
+      # NSIS bundler doesn't try to invoke the dotnet sign tool against the
+      # installer — that happens in sign-win-x64 instead.
       #
       # `shell: bash` is required: on windows-latest the default shell is
       # PowerShell, which tokenizes the inline JSON --config argument
@@ -966,7 +979,7 @@ Delete the entire `build-and-release:` job (everything from `build-and-release:`
         shell: bash
         run: |
           pnpm tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} \
-            --config '{"bundle":{"windows":{"signCommand":""}},"plugins":{"updater":{"pubkey":""}}}'
+            --config '{"bundle":{"createUpdaterArtifacts":false,"windows":{"signCommand":""}}}'
 
       # macOS: upload the .app directory. The sign job will codesign the .app,
       # then rebuild .dmg from the signed .app, tar the signed .app to make
