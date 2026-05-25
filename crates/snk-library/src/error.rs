@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use serde::Serialize;
 use thiserror::Error;
 
@@ -21,6 +23,20 @@ pub enum LibraryError {
     NotFound { what: String },
 }
 
+impl LibraryError {
+    /// Constructor for `LibraryError::Io` that preserves both the path
+    /// and the full OS-level error message. Prefer this over relying on
+    /// the blanket `From<io::Error>` impl at sites where the path is
+    /// known: the blanket conversion can't capture path context and
+    /// produces "io error at : <reason>" which is much harder to debug.
+    pub fn io(path: impl AsRef<Path>, e: std::io::Error) -> Self {
+        LibraryError::Io {
+            path: path.as_ref().display().to_string(),
+            reason: e.to_string(),
+        }
+    }
+}
+
 impl From<rusqlite::Error> for LibraryError {
     fn from(e: rusqlite::Error) -> Self {
         let retryable = matches!(
@@ -36,11 +52,16 @@ impl From<rusqlite::Error> for LibraryError {
     }
 }
 
+/// Blanket conversion for ergonomic `?` chains. Loses path context (no
+/// way to recover it from a bare `io::Error`), but preserves the full
+/// OS-level error message via `Display` rather than just the `ErrorKind`
+/// name. Sites that have path context should use `LibraryError::io` for
+/// strictly better diagnostics.
 impl From<std::io::Error> for LibraryError {
     fn from(e: std::io::Error) -> Self {
         LibraryError::Io {
             path: String::new(),
-            reason: e.kind().to_string(),
+            reason: e.to_string(),
         }
     }
 }
@@ -120,13 +141,32 @@ mod tests {
     }
 
     #[test]
-    fn std_io_error_maps_to_io_variant() {
+    fn std_io_error_maps_to_io_variant_preserving_os_detail() {
         let io = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied");
         let conv: LibraryError = io.into();
         match conv {
-            LibraryError::Io { reason, .. } => {
-                // PermissionDenied formats as "permission denied" via Display
-                assert!(reason.contains("permission denied"));
+            LibraryError::Io { path, reason } => {
+                // Display preserves both the kind ("permission denied") AND
+                // the inner error string ("denied"), not just the kind name.
+                // Previously the impl used e.kind().to_string() which dropped
+                // the "denied" detail.
+                assert!(reason.contains("denied"));
+                assert!(path.is_empty(), "blanket From cannot recover path");
+            }
+            other => panic!("expected Io, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn library_error_io_constructor_preserves_path_and_message() {
+        let path = std::path::Path::new("/data/captures/x.png");
+        let io = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied by acl");
+        let conv = LibraryError::io(path, io);
+        match conv {
+            LibraryError::Io { path, reason } => {
+                assert_eq!(path, "/data/captures/x.png");
+                // Both the OS-level kind AND the inner detail land in reason.
+                assert!(reason.contains("denied by acl"));
             }
             other => panic!("expected Io, got {other:?}"),
         }

@@ -13,7 +13,7 @@ pub struct Db {
 impl Db {
     pub fn open(path: &Path) -> Result<Self> {
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
+            std::fs::create_dir_all(parent).map_err(|e| crate::LibraryError::io(parent, e))?;
         }
         let mut conn = Connection::open(path)?;
         // WAL gives us concurrent readers + a writer without DB-level locks fighting us.
