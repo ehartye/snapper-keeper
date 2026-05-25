@@ -104,7 +104,7 @@ async fn worker(
     }
 }
 
-async fn process_job(job: OcrJob, db: &Arc<Db>, library_root: &std::path::PathBuf) {
+async fn process_job(job: OcrJob, db: &Arc<Db>, library_root: &std::path::Path) {
     let OcrJob {
         capture_id,
         image_path,

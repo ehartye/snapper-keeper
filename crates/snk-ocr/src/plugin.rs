@@ -83,9 +83,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
 
 /// Re-enqueue any non-deleted captures that lack an OCR row. Runs once
 /// at plugin setup. Bounded by the queue capacity — if the sweep finds
-/// >100 missing, the first 100 are queued and the rest get dropped via
-/// the queue's overflow eviction (and will be picked up by the NEXT
-/// startup sweep, etc).
+/// more than 100 missing captures, the first 100 are queued and the rest
+/// get dropped via the queue's overflow eviction (and will be picked up
+/// by the NEXT startup sweep, etc).
 fn startup_sweep<R: Runtime>(app: &tauri::AppHandle<R>, db: &snk_library::Db) {
     match snk_library::ocr::captures_missing_text(db) {
         Ok(missing) => {
