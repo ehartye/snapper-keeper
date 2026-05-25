@@ -11,6 +11,7 @@ import { getSetting, setSetting } from '@snk/library';
 
 import { queryKeys } from '../../lib/queryKeys';
 import { THEMES, THEME_FAMILIES, familyOf, useTheme, type ThemeId } from '../../lib/theme';
+import { ClipboardSettings } from './ClipboardSettings';
 
 interface SettingRowProps {
   label: string;
@@ -315,6 +316,10 @@ export function SettingsWindow() {
               <Toggle value={trackFiles as boolean} onChange={setTrackFiles} />
             </SettingRow>
           </div>
+        </section>
+
+        <section>
+          <ClipboardSettings />
         </section>
 
         <section>

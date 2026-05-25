@@ -10,6 +10,8 @@
 
 **Approved design:** [`docs/superpowers/specs/2026-05-24-sensitive-clipboard-design.md`](../specs/2026-05-24-sensitive-clipboard-design.md)
 
+**Verification norm:** Per-task verification commands should be the **broadest scope that proves correctness**, not the narrowest that proves the task. A schema change should be verified with the full test suite for the affected crate, not just the migration tests — otherwise downstream consumers of the changed schema fail silently. This norm was added 2026-05-24 after a narrow filter (`cargo test -p snk-library migrate::`) hid 8 broken `clipboard::tests` in Task 2.
+
 ---
 
 ## Task 1: Add native-OS crate dependencies
@@ -38,12 +40,14 @@ windows = { version = "0.61", features = [
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = "0.24"
 core-foundation = "0.10"
-objc2 = "0.5"
-objc2-app-kit = { version = "0.2", features = ["NSPasteboard", "NSWorkspace", "NSRunningApplication"] }
-objc2-foundation = { version = "0.2", features = ["NSString", "NSArray", "NSURL"] }
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSPasteboard", "NSPasteboardItem", "NSWorkspace", "NSRunningApplication"] }
+objc2-foundation = { version = "0.3", features = ["NSString", "NSArray", "NSURL"] }
 ```
 
 The `_DataExchange` features get us `IsClipboardFormatAvailable`, `OpenClipboard`, `GetClipboardData`, `RegisterClipboardFormatW`, `AddClipboardFormatListener`. `_Memory` covers `GlobalLock`/`GlobalUnlock` for reading the 4-byte values out of the registered formats. `_LibraryLoader` is for `GetModuleHandle`. `_Storage_FileSystem` is for `GetFileVersionInfoW`.
+
+**Why these versions, not lower:** the workspace already pulls in `objc2 0.6.x` + `objc2-app-kit/foundation 0.3.x` transitively via `arboard`, `tao`, and `muda`. Pinning the explicit deps to the same major versions avoids shipping two parallel objc2 runtime trains in the macOS binary (~500KB–1MB savings) and keeps `NSPasteboard`/`NSWorkspace` handle types interop-compatible across crates. The plan was originally drafted against 0.5/0.2 and revised here based on a [[reference_objc2_workspace_dedupe]] quality-review flag (2026-05-24).
 
 **Step 2: Verify it compiles**
 
@@ -61,9 +65,17 @@ git commit -m "build(snk-clipboard): add Win32_System_DataExchange + objc2-app-k
 
 ## Task 2: V005 migration — drop the dead `sensitive` column
 
+**Scope:** Drop the column AND its now-dead Rust/TS consumers. The two are one conceptual unit — column-drop without consumer-cleanup leaves main red on every `clipboard_items` read.
+
 **Files:**
 - Create: `crates/snk-library/migrations/V005__drop_clipboard_sensitive.sql`
 - Modify: `crates/snk-library/src/migrate.rs`
+- Modify: `crates/snk-library/src/clipboard.rs` (drop `sensitive` field from struct, `row_to_item`, `insert`)
+- Modify: `packages/snk-clipboard/src/types.ts` (drop `sensitive: boolean` from type)
+- Modify: `app/src/windows/library/ClipboardList.test.tsx` (4 mock occurrences)
+- Modify: `app/src/windows/clipboard-popup/ClipboardPopup.test.tsx` (1 mock occurrence)
+- Modify: `app/src/windows/clipboard-popup/ClipboardPopupItem.test.tsx` (1 mock occurrence)
+- Modify: `app/src/windows/clipboard-popup/store.test.ts` (1 mock occurrence)
 - Test: `crates/snk-library/src/migrate.rs` (existing tests module)
 
 **Step 1: Write the failing test**
@@ -126,8 +138,18 @@ fn v004_to_v005_preserves_clipboard_rows() {
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cargo test -p snk-library migrate::tests::v005_drops_sensitive_column_from_clipboard_items migrate::tests::v004_to_v005_preserves_clipboard_rows -- --nocapture`
-Expected: both FAIL — `sensitive` column still present; second test panics on `migrate(&mut conn)` because V005 doesn't exist yet.
+Cargo only accepts one positional test filter per invocation, so run each test separately:
+
+```bash
+cargo test -p snk-library migrate::tests::v005_drops_sensitive_column_from_clipboard_items -- --nocapture
+cargo test -p snk-library migrate::tests::v004_to_v005_preserves_clipboard_rows -- --nocapture
+```
+
+Expected:
+- `v005_drops_sensitive_column_from_clipboard_items` FAILS — `sensitive` column still present in `clipboard_items`.
+- `v004_to_v005_preserves_clipboard_rows` PASSES trivially.
+
+> **Test #2 framing:** This test is a regression guard, not a strict TDD red-green test. Before V005 exists, `migrate()` is a no-op past V004 and the test trivially passes. After V005 lands, the test becomes load-bearing — it catches accidental row destruction if anyone later replaces the `ALTER TABLE ... DROP COLUMN` with a destructive operation like `DELETE FROM`.
 
 **Step 3: Add the migration file**
 
@@ -181,17 +203,62 @@ pub fn migrate(conn: &mut Connection) -> Result<()> {
 }
 ```
 
-**Step 5: Run tests to verify they pass**
+**Step 4b: Remove the now-dead `sensitive` field from `clipboard.rs`**
 
-Run: `cargo test -p snk-library migrate::`
-Expected: 7/7 pass (5 existing + 2 new). The `migration_count_matches_latest_applied_version` test (from PR #80) should still pass — it counts .sql files in `migrations/` (now 5) and matches the applied schema version.
+Modify `crates/snk-library/src/clipboard.rs`:
+
+- **Drop the struct field** (around L61):
+  ```rust
+  pub struct ClipboardItem {
+      // … existing fields …
+      // pub sensitive: bool,   ← REMOVE this line
+  }
+  ```
+- **Drop the `row_to_item` read** (around L91): remove the `sensitive: row.get::<_, i64>("sensitive")? != 0,` line entirely. `SELECT * FROM clipboard_items` no longer returns the column.
+- **Drop the `insert` return-path initializer** (around L141): remove the `sensitive: false,` line where `insert()` constructs the `ClipboardItem` to return.
+
+**Step 4c: Remove the now-dead `sensitive` field from the TS type + test mocks**
+
+Latent IPC-deserialize break if not done: Rust struct without the field while TS expects it will fail serde on the frontend.
+
+- **`packages/snk-clipboard/src/types.ts`** (around L11): remove `sensitive: boolean;` from the type definition.
+- **`app/src/windows/library/ClipboardList.test.tsx`**: remove `sensitive: false,` from all 4 mock objects (around lines 25, 52, 78, 101).
+- **`app/src/windows/clipboard-popup/ClipboardPopup.test.tsx`** (around L18): remove `sensitive: false,` from the mock object.
+- **`app/src/windows/clipboard-popup/ClipboardPopupItem.test.tsx`** (around L15): remove `sensitive: false,` from the mock object.
+- **`app/src/windows/clipboard-popup/store.test.ts`** (around L11): remove `sensitive: false,` from the mock object.
+
+No production TS code references `item.sensitive` — only test mocks set it. After removal the TS type and the Rust struct match again.
+
+**Step 5: Run tests to verify they pass — full scope**
+
+Per the plan preamble's verification norm, run the **full crate suite**, not a narrow filter:
+
+```bash
+cargo test -p snk-library
+pnpm --filter @snk/app test
+```
+
+Expected:
+- `cargo test -p snk-library`: all tests pass. Includes the 6 migration tests (4 existing + 2 new V005 tests) **AND** the previously-failing `clipboard::tests` (8 tests that broke when V005 dropped the column without the consumer cleanup).
+- `pnpm --filter @snk/app test`: all vitest suites green, including the four files that had `sensitive: false` mocks.
+
+If a `migration_count_matches_latest_applied_version` test lands later (it was mentioned in the original plan draft as coming from PR #80 but is not present in this branch), it would count .sql files in `migrations/` (now 5) and must still match the applied schema version.
 
 **Step 6: Commit**
 
 ```bash
-git add crates/snk-library/migrations/V005__drop_clipboard_sensitive.sql crates/snk-library/src/migrate.rs
-git commit -m "feat(library): V005 drops dead clipboard_items.sensitive column"
+git add crates/snk-library/migrations/V005__drop_clipboard_sensitive.sql \
+        crates/snk-library/src/migrate.rs \
+        crates/snk-library/src/clipboard.rs \
+        packages/snk-clipboard/src/types.ts \
+        app/src/windows/library/ClipboardList.test.tsx \
+        app/src/windows/clipboard-popup/ClipboardPopup.test.tsx \
+        app/src/windows/clipboard-popup/ClipboardPopupItem.test.tsx \
+        app/src/windows/clipboard-popup/store.test.ts
+git commit -m "feat(library): V005 drops dead clipboard_items.sensitive column + its consumers"
 ```
+
+> **Note for the team currently executing this plan:** The original Task 2 execution (commit `01686e0`) shipped only Steps 1–4 + Step 6 with the narrow verification — see [[reference_objc2_workspace_dedupe]]-style plan-fix protocol. The plan was revised mid-execution (this Steps 4b/4c addition + broader Step 5 verification) after `quality-sentinel` ran the full suite and surfaced 8 broken `clipboard::tests`. The corrective work goes in a **follow-up commit** on the same branch with message `fix(library): drop sensitive field consumers stranded by V005`, which completes the conceptual unit. Future fresh implementations of this plan should land Steps 1–6 as one commit using the message above.
 
 ---
 
@@ -521,7 +588,7 @@ mod tests {
 }
 ```
 
-**Step 2: Declare the module**
+**Step 2: Declare the module + add deps**
 
 Append to `crates/snk-clipboard/src/lib.rs`:
 
@@ -529,13 +596,17 @@ Append to `crates/snk-clipboard/src/lib.rs`:
 pub mod blocklist;
 ```
 
-Also add `tempfile` and `serde_json` to `crates/snk-clipboard/Cargo.toml`'s `[dev-dependencies]` if not already present:
+Add deps to `crates/snk-clipboard/Cargo.toml`. **Note the split** — `serde_json` is used in runtime code (`matches()` calls `serde_json::from_value`), so it belongs in `[dependencies]`, not `[dev-dependencies]`. `tempfile` is test-only.
 
 ```toml
-[dev-dependencies]
+[dependencies]
 serde_json = { workspace = true }
+
+[dev-dependencies]
 tempfile = "3"
 ```
+
+(Original plan placed `serde_json` in `[dev-dependencies]` only — corrected 2026-05-24 after a build failure during Task 4 execution. See [[feedback_broad_verification_scope]] — this is the same family of plan-gap as Task 2's stranded consumers: write code that uses a crate, miss the dependency declaration.)
 
 **Step 3: Run tests to verify they pass**
 
@@ -650,6 +721,13 @@ git commit -m "feat(clipboard): SensitivityProbe trait + FakeProbe for tests"
 **Files:**
 - Modify: `crates/snk-clipboard/src/platform/macos.rs`
 
+> **objc2-app-kit 0.3 API notes** (relevant for both Task 6 and Task 7):
+> - `NSPasteboard::types()` returns `Option<Retained<NSArray<NSPasteboardType>>>` (Option-wrapped — `None` is a real state, not just an empty array).
+> - `NSPasteboardType` is a typed newtype around `NSString`. `.to_string()` works the same way once you dereference / cast to `&NSString`.
+> - `NSRunningApplication::bundleIdentifier()` and `localizedName()` both return `Option<Retained<NSString>>` — already Option in the snippet below.
+> - All Cocoa-bridge calls are `unsafe` in objc2 0.6 (this is consistent with 0.5).
+> - If you hit an API name or signature that differs from what's written here, **stop and ping team-lead** — don't improvise silently. The dep version was bumped from 0.2 to 0.3 mid-plan and minor signature drift is possible.
+
 **Step 1: Replace the stub with a real impl**
 
 Replace the entire contents of `crates/snk-clipboard/src/platform/macos.rs`:
@@ -660,7 +738,7 @@ Replace the entire contents of `crates/snk-clipboard/src/platform/macos.rs`:
 
 use objc2::rc::Retained;
 use objc2_app_kit::NSPasteboard;
-use objc2_foundation::{NSArray, NSString};
+use objc2_foundation::NSString;
 
 use crate::source_app::SourceApp;
 
@@ -675,11 +753,18 @@ pub(crate) fn is_sensitive() -> bool {
     // accessor; objc2-app-kit's binding is `unsafe` because it crosses
     // the Objective-C boundary but the call itself has no preconditions.
     let pasteboard: Retained<NSPasteboard> = unsafe { NSPasteboard::generalPasteboard() };
-    let types: Retained<NSArray<NSString>> = unsafe { pasteboard.types() };
-    let len = types.len();
-    for i in 0..len {
-        let t: Retained<NSString> = types.objectAtIndex(i);
-        let s = t.to_string();
+    // types() returns Option<Retained<NSArray<NSPasteboardType>>> in
+    // objc2-app-kit 0.3 — None == nothing on the pasteboard right now,
+    // which we treat as "not sensitive" (nothing to leak).
+    let Some(types) = (unsafe { pasteboard.types() }) else {
+        return false;
+    };
+    for i in 0..types.len() {
+        // NSPasteboardType is a typed newtype around NSString; the
+        // Deref/AsRef impls let us treat it as &NSString for to_string().
+        let t = types.objectAtIndex(i);
+        let s: &NSString = &t;
+        let s = s.to_string();
         if CONCEALED_TYPES.iter().any(|c| *c == s.as_str()) {
             return true;
         }
@@ -775,12 +860,14 @@ Replace the entire contents of `crates/snk-clipboard/src/platform/windows.rs`:
 use std::ffi::c_void;
 
 use windows::core::PCWSTR;
-use windows::Win32::Foundation::{HANDLE, HWND};
+use windows::Win32::Foundation::{HANDLE, HGLOBAL};
 use windows::Win32::System::DataExchange::{
-    CloseClipboard, GetClipboardData, IsClipboardFormatAvailable, OpenClipboard,
-    RegisterClipboardFormatW,
+    GetClipboardData, IsClipboardFormatAvailable, RegisterClipboardFormatW,
 };
 use windows::Win32::System::Memory::{GlobalLock, GlobalUnlock};
+// HWND is added back in Task 9 when source-app detection uses it.
+// OpenClipboard/CloseClipboard are not needed — WM_CLIPBOARDUPDATE
+// handler runs with the clipboard already open by the OS.
 
 use crate::source_app::SourceApp;
 
@@ -806,20 +893,25 @@ fn register_format(name: &str) -> u32 {
 /// the expected size.
 fn read_u32_format(fmt: u32) -> Option<u32> {
     unsafe {
-        if !IsClipboardFormatAvailable(fmt).as_bool() {
+        // windows-rs 0.61: IsClipboardFormatAvailable returns Result<()>,
+        // not BOOL. Ok == "format present"; Err == "not present" (or error).
+        if IsClipboardFormatAvailable(fmt).is_err() {
             return None;
         }
         // The watcher already holds the clipboard open when this is
-        // called from the WM_CLIPBOARDUPDATE handler. For belt-and-
-        // suspenders, OpenClipboard(HWND(0)) is a no-op if we already
-        // own it; we don't call CloseClipboard here.
+        // called from the WM_CLIPBOARDUPDATE handler; no explicit
+        // OpenClipboard / CloseClipboard needed.
         let handle: HANDLE = GetClipboardData(fmt).ok()?;
-        let ptr: *mut c_void = GlobalLock(handle.0 as _);
+        // HANDLE and HGLOBAL are both #[repr(transparent)] newtypes around
+        // *mut c_void, but the GlobalLock signature takes HGLOBAL — bridge
+        // explicitly via the public ctor rather than a raw cast.
+        let hglobal = HGLOBAL(handle.0);
+        let ptr: *mut c_void = GlobalLock(hglobal);
         if ptr.is_null() {
             return None;
         }
         let value = *(ptr as *const u32);
-        let _ = GlobalUnlock(handle.0 as _);
+        let _ = GlobalUnlock(hglobal);
         Some(value)
     }
 }
@@ -830,9 +922,10 @@ pub(crate) fn is_sensitive() -> bool {
     let can_upload = register_format(FMT_CAN_UPLOAD_TO_CLOUD);
 
     // CFSTR_EXCLUDECLIPBOARDCONTENTFROMMONITORING is presence-only — its
-    // existence flags the content as excluded.
+    // existence flags the content as excluded. (windows-rs 0.61:
+    // Result<()> — Ok == present, Err == not present.)
     unsafe {
-        if IsClipboardFormatAvailable(exclude).as_bool() {
+        if IsClipboardFormatAvailable(exclude).is_ok() {
             return true;
         }
     }
@@ -946,7 +1039,10 @@ fn file_description(exe_path: &str) -> Option<String> {
         let mut buf: Vec<u8> = vec![0; size as usize];
         if GetFileVersionInfoW(
             PCWSTR(wide_path.as_ptr()),
-            0,
+            // windows-rs 0.61: dwhandle is Option<u32>, not raw u32.
+            // The Win32 docs say "this parameter is ignored," so None
+            // is the canonical pass-through.
+            None,
             size,
             buf.as_mut_ptr() as *mut c_void,
         )
@@ -991,6 +1087,8 @@ git commit -m "feat(clipboard): Windows source-app via GetForegroundWindow + ver
 
 ## Task 10: Extract `worker_step` from the watcher
 
+> **Plan-fix note (2026-05-24):** Original plan returned `SkipReason::EmptyContent` on the three persist-failure paths (text insert error, image `write_atomic` error, image insert error). That misnames the cause in logs — a transient DB or disk error would surface as "EmptyContent" to whoever's tailing the watcher. Added a dedicated `SkipReason::PersistFailed` variant and routed the three error paths to it; the two legitimate empty-input checks (`text.is_empty()`, `bytes.is_empty()`) still return `EmptyContent`. Flagged by `quality-sentinel` after Task #10 landed; corrective commit was a separate `refactor(clipboard):` follow-up.
+
 **Files:**
 - Modify: `crates/snk-clipboard/src/watcher.rs`
 
@@ -1021,6 +1119,9 @@ pub(crate) enum SkipReason {
     AppBlocked(String), // identifier
     DuplicateHash,
     EmptyContent,
+    /// Insert or disk-write failed; treated as a skip so the watcher loop
+    /// keeps draining events instead of crashing on a transient error.
+    PersistFailed,
 }
 
 /// Outcome of a single decision cycle.
@@ -1100,7 +1201,7 @@ pub(crate) fn worker_step(
                             let _ = snk_library::clipboard::evict_unpinned(db, MAX_UNPINNED);
                             StepResult::Saved { item_id: item.id }
                         }
-                        Err(_) => StepResult::Skipped(SkipReason::EmptyContent),
+                        Err(_) => StepResult::Skipped(SkipReason::PersistFailed),
                     }
                 }
             }
@@ -1124,7 +1225,7 @@ pub(crate) fn worker_step(
                     let id = uuid::Uuid::now_v7();
                     let relative = files::clipboard_image_relative_path(&id);
                     if files::write_atomic(library_root, &relative, &bytes).is_err() {
-                        return StepResult::Skipped(SkipReason::EmptyContent);
+                        return StepResult::Skipped(SkipReason::PersistFailed);
                     }
                     let new_item = NewClipboardItem {
                         kind: ClipboardItemKind::Image,
@@ -1139,7 +1240,7 @@ pub(crate) fn worker_step(
                             let _ = snk_library::clipboard::evict_unpinned(db, MAX_UNPINNED);
                             StepResult::Saved { item_id: item.id }
                         }
-                        Err(_) => StepResult::Skipped(SkipReason::EmptyContent),
+                        Err(_) => StepResult::Skipped(SkipReason::PersistFailed),
                     }
                 }
             }
@@ -1170,6 +1271,8 @@ git commit -m "refactor(clipboard): extract pure worker_step from watcher (#57 f
 ---
 
 ## Task 11: Unit-test `worker_step` exhaustively
+
+> **Plan-fix note (2026-05-24):** Original plan called `db.with_conn(...)` directly from the watcher test module. `Db::with_conn` is `pub(crate)` and snk-clipboard can't reach it; promoting it to `pub` would violate architecture rule #2 ("All persistence flows through `snk-library`"). Rewritten to use the public typed API (`snk_library::clipboard::list` for row counts, `snk_library::clipboard::get` for the `source_app` field round-trip). Tests retain equivalent rigor — they verify the same semantics through the public contract the watcher would actually use. See [[reference_team_driven_shared_worktree]] for the broader plan-fix protocol context.
 
 **Files:**
 - Modify: `crates/snk-clipboard/src/watcher.rs` (append a `#[cfg(test)] mod tests`)
@@ -1209,10 +1312,9 @@ mod tests {
         assert_eq!(result, StepResult::Skipped(SkipReason::SensitiveFlag));
         assert!(state.last_hash.is_some(), "last_hash should be set on skip");
 
-        let count: i64 = db
-            .with_conn(|c| c.query_row("SELECT COUNT(*) FROM clipboard_items", [], |r| r.get(0)))
-            .unwrap();
-        assert_eq!(count, 0, "no row should be inserted on sensitive skip");
+        let items =
+            snk_library::clipboard::list(&db, snk_library::ListClipboardQuery::default()).unwrap();
+        assert_eq!(items.len(), 0, "no row should be inserted on sensitive skip");
     }
 
     #[test]
@@ -1243,10 +1345,9 @@ mod tests {
             Some(src.clone()),
         );
         assert_eq!(result, StepResult::Skipped(SkipReason::AppBlocked(src.identifier)));
-        let count: i64 = db
-            .with_conn(|c| c.query_row("SELECT COUNT(*) FROM clipboard_items", [], |r| r.get(0)))
-            .unwrap();
-        assert_eq!(count, 0);
+        let items =
+            snk_library::clipboard::list(&db, snk_library::ListClipboardQuery::default()).unwrap();
+        assert_eq!(items.len(), 0);
     }
 
     #[test]
@@ -1268,16 +1369,8 @@ mod tests {
         );
         match result {
             StepResult::Saved { item_id } => {
-                let stored: Option<String> = db
-                    .with_conn(|c| {
-                        c.query_row(
-                            "SELECT source_app FROM clipboard_items WHERE id = ?1",
-                            [&item_id],
-                            |r| r.get(0),
-                        )
-                    })
-                    .unwrap();
-                assert_eq!(stored, Some(src.identifier));
+                let stored = snk_library::clipboard::get(&db, &item_id).unwrap();
+                assert_eq!(stored.source_app, Some(src.identifier));
             }
             other => panic!("expected Saved, got {other:?}"),
         }
@@ -1649,7 +1742,12 @@ In `crates/snk-clipboard/src/watcher.rs`:
 
 - Change `static SKIP_NEXT: AtomicBool` → `pub(crate) static SKIP_NEXT: AtomicBool`.
 - Change `fn start_polling` → `pub(crate) fn start_polling`.
+- **Drop the `#[cfg(not(target_os = "windows"))]` attribute on `start_polling`'s definition.** Task 12 originally cfg-gated it for the macOS-only path, but Task 13's Windows event-driven watcher needs to call `start_polling` from its `AddClipboardFormatListener`-failure fallback path. Dropping the cfg makes `start_polling` available on Windows too (pure additive — Windows builds compile the function but only invoke it via the fallback). Also drop the same cfg from `start_polling`'s `use crate::sensitivity::OsProbe; use crate::source_app;` lines if present.
 - Also make `ClipboardEvent`, `WatcherState`, `StepResult`, `worker_step` all `pub(crate)` if they aren't already.
+
+(Plan-fix note 2026-05-24: original Step 2 only mentioned the visibility change; the cfg-drop was implicit but uncaught. win-native surfaced the compile-error during Task 13 pre-flight. See [[reference_team_driven_shared_worktree]].)
+
+> **CTX shape divergence (2026-05-24):** Plan §Task 13 Step 1 code block uses `static mut CTX: Option<WatcherCtx>` with raw `unsafe { CTX = ...; CTX.as_mut() }` access. Shipped impl uses `static CTX: OnceLock<Mutex<WatcherCtx>> = OnceLock::new()` instead. Rationale: stable Rust 1.77+ warns on `static mut` references (`static_mut_refs` lint), and the modernized shape avoids both the warning and the per-access `unsafe` block. `arboard::Clipboard` on Windows is a ZST (`pub(crate) struct Clipboard(())`), so `Mutex<WatcherCtx>` requires no extra Send/Sync impls. The `OsProbe` field is omitted from `WatcherCtx` (it's a ZST, constructed `&OsProbe` at the call site). Mutex contention is zero in practice (single listener thread). See platform_watcher.rs for the as-shipped shape.
 
 **Step 3: Compile on Windows**
 
@@ -1737,20 +1835,16 @@ git commit -m "feat(clipboard): detect_frontmost_app IPC command"
 ## Task 15: TS binding for `detect_frontmost_app` + blocklist types
 
 **Files:**
-- Modify: `packages/snk-clipboard/src/index.ts` (or wherever bindings live — check the file layout first)
+- Modify: `packages/snk-clipboard/src/types.ts` (add new types)
+- Modify: `packages/snk-clipboard/src/index.ts` (add the function + constant)
 
-**Step 1: Locate the existing binding file**
+**Local convention:** `packages/snk-clipboard/src/` splits pure type definitions from command bindings. `types.ts` holds types (`ClipboardItem`, `ListClipboardQuery`, `CaretPosition`); `index.ts` holds the invoke wrappers + re-exports types via `export * from './types'`. New code follows the same split.
 
-Run: `ls packages/snk-clipboard/src/`
-Expected: there's an `index.ts` or `commands.ts` exporting `pasteItem` / `showPopup`. Use the same style for the new export.
+**Step 1: Add the new types to `types.ts`**
 
-**Step 2: Add the SourceApp type and the binding**
-
-Append to the binding file:
+Append to `packages/snk-clipboard/src/types.ts`:
 
 ```typescript
-import { invoke } from '@tauri-apps/api/core';
-
 export type SourceAppKind = 'macos_bundle_id' | 'windows_exe';
 
 export interface SourceApp {
@@ -1764,6 +1858,15 @@ export interface BlocklistEntry {
   display_name: string;
   kind: SourceAppKind;
 }
+```
+
+**Step 2: Add the function + constant to `index.ts`**
+
+Append to `packages/snk-clipboard/src/index.ts` (after the existing command-binding functions):
+
+```typescript
+// SourceApp and BlocklistEntry flow through `export * from './types'`.
+import type { SourceApp } from './types';
 
 export async function detectFrontmostApp(): Promise<SourceApp | null> {
   return invoke<SourceApp | null>('plugin:snk-clipboard|detect_frontmost_app');
@@ -1771,6 +1874,8 @@ export async function detectFrontmostApp(): Promise<SourceApp | null> {
 
 export const APP_BLOCKLIST_SETTING_KEY = 'clipboard.app_blocklist';
 ```
+
+If `invoke` isn't already imported at the top of `index.ts`, add `import { invoke } from '@tauri-apps/api/core';` to the imports block. (The original plan put everything in one file; corrected 2026-05-24 to match the existing types.ts vs index.ts convention.)
 
 **Step 3: Verify TS compiles + lints**
 
@@ -1781,14 +1886,16 @@ pnpm --filter @snk/clipboard typecheck
 pnpm --filter @snk/clipboard lint
 ```
 
-Expected: clean. If `tsconfig` doesn't include the file (new file in an existing package), nothing extra is required — `tsc -b` picks it up.
+Expected: clean. Downstream consumers (`@snk/app`) automatically pick up the new exports via the existing `export * from './types'` re-export.
 
 **Step 4: Commit**
 
 ```bash
-git add packages/snk-clipboard/src/
-git commit -m "feat(clipboard): TS binding for detectFrontmostApp + BlocklistEntry types"
+git commit -m "feat(clipboard): TS binding for detectFrontmostApp + BlocklistEntry types" \
+  -- packages/snk-clipboard/src/types.ts packages/snk-clipboard/src/index.ts
 ```
+
+(Note the `-- path1 path2` form to restrict the commit to your files only — see [[reference_team_driven_shared_worktree]] discipline rule 2.)
 
 ---
 
@@ -2323,7 +2430,7 @@ fn macos_plain_text_is_not_sensitive() {
 #[test]
 #[serial_test::serial(clipboard)]
 fn windows_can_include_in_history_zero_marks_sensitive() {
-    use windows::core::{w, PCWSTR};
+    use windows::core::w;
     use windows::Win32::Foundation::HANDLE;
     use windows::Win32::System::DataExchange::{
         CloseClipboard, EmptyClipboard, OpenClipboard, RegisterClipboardFormatW,
@@ -2380,9 +2487,13 @@ Expected: both per-OS tests pass on their respective platforms. Linux prints `SK
 **Step 4: Commit**
 
 ```bash
-git add crates/snk-clipboard/tests/sensitivity_integration.rs crates/snk-clipboard/Cargo.toml Cargo.lock
-git commit -m "test(clipboard): real-OS sensitivity integration tests (macOS + Windows)"
+git commit -m "test(clipboard): real-clipboard integration test for Windows + macOS sensitivity" \
+  -- crates/snk-clipboard/tests/sensitivity_integration.rs \
+     crates/snk-clipboard/Cargo.toml \
+     Cargo.lock
 ```
+
+(Plan-fix note 2026-05-24: original message was `test(clipboard): real-OS sensitivity integration tests (macOS + Windows)`. Aligned with shipped subject — "real-clipboard" cues the destructive-action concern more directly than "real-OS." Commit form also updated to path-restricted per [[reference_team_driven_shared_worktree]] discipline rule 2.)
 
 ---
 

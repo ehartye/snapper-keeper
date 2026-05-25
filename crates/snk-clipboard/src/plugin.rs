@@ -8,6 +8,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         .invoke_handler(tauri::generate_handler![
             crate::commands::paste_item,
             crate::commands::show_popup,
+            crate::commands::detect_frontmost_app,
         ])
         .setup(|app, _api| {
             let state: tauri::State<'_, snk_library::LibraryState> = app.state();
