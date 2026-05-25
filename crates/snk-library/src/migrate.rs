@@ -151,12 +151,7 @@ mod tests {
 
         let mut conn = Connection::open_in_memory().unwrap();
         // Apply through V004 only.
-        let v1_to_v4 = Migrations::new(vec![
-            M::up(V001),
-            M::up(V002),
-            M::up(V003),
-            M::up(V004),
-        ]);
+        let v1_to_v4 = Migrations::new(vec![M::up(V001), M::up(V002), M::up(V003), M::up(V004)]);
         v1_to_v4.to_latest(&mut conn).unwrap();
 
         conn.execute(
