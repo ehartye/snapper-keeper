@@ -1700,13 +1700,15 @@ pnpm view @cyclonedx/cyclonedx-npm version
 
 Record as `CDX_NPM_VERSION`.
 
-**Step 4: Look up `@cyclonedx/cyclonedx-cli` latest stable**
+**Step 4: Look up `cyclonedx-cli` latest stable**
+
+> Earlier plan drafts assumed `@cyclonedx/cyclonedx-cli` exists on npm — it does not. `cyclonedx-cli` is a .NET project distributed as precompiled platform binaries on GitHub releases. The Linux x64 binary is the one publish-release uses.
 
 ```bash
-pnpm view @cyclonedx/cyclonedx-cli version
+gh api repos/CycloneDX/cyclonedx-cli/releases/latest --jq '.tag_name'
 ```
 
-Record as `CDX_CLI_VERSION`.
+Record (e.g. `0.32.0` without the leading `v`) as `CDX_CLI_VERSION`.
 
 Keep these versions for use in subsequent tasks.
 
@@ -2316,17 +2318,39 @@ gh issue list --label "audit:auto" --state open --json number --jq '.[].number' 
 In `release.yml`'s `publish-release` job, after the `Create GitHub Release` step, add:
 
 ```yaml
+      # publish-release didn't previously need rust/node/pnpm setup; add
+      # them inline so the SBOM steps have what they need.
+      - uses: pnpm/action-setup@<sha> # v3
+        with:
+          version: 9
+      - uses: actions/setup-node@<sha> # v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - uses: dtolnay/rust-toolchain@<sha> # stable
 
-      - name: Install SBOM tools
-        run: |
-          cargo install cargo-cyclonedx --locked --version <CARGO_CYCLONEDX_VERSION>
+      - name: Install cargo-cyclonedx
+        run: cargo install cargo-cyclonedx --locked --version <CARGO_CYCLONEDX_VERSION>
 
-      - name: Generate Rust SBOM
+      - name: Install cyclonedx-cli
+        env:
+          CDX_CLI_VERSION: '<CDX_CLI_VERSION>'
         run: |
-          # cargo cyclonedx emits ./bom.cdx.json (or per-crate files with
-          # --output-pattern).
-          cargo cyclonedx --format json --output-pattern bom -- --workspace
+          # cyclonedx-cli is a .NET binary distributed on GitHub releases
+          # (NOT an npm package). Download the Linux x64 binary for the
+          # ubuntu-latest publish-release runner.
+          curl -fsSL "https://github.com/CycloneDX/cyclonedx-cli/releases/download/v${CDX_CLI_VERSION}/cyclonedx-linux-x64" -o /tmp/cyclonedx
+          chmod +x /tmp/cyclonedx
+          sudo mv /tmp/cyclonedx /usr/local/bin/cyclonedx
+          cyclonedx --version
+
+      - name: Generate Rust SBOM (workspace)
+        run: |
+          # --workspace processes all workspace members. Earlier draft
+          # used `-- --workspace` (positional after --), which is wrong;
+          # --workspace is a direct flag to cargo-cyclonedx.
+          cargo cyclonedx --format json --output-pattern bom --workspace
 
       - name: Generate npm SBOM
         run: |
@@ -2335,14 +2359,14 @@ In `release.yml`'s `publish-release` job, after the `Create GitHub Release` step
 
       - name: Merge SBOMs
         run: |
-          pnpm dlx @cyclonedx/cyclonedx-cli@<CDX_CLI_VERSION> merge \
-            --input-files ./bom.cdx.json ./bom-npm.cdx.json \
+          shopt -s nullglob
+          inputs=(bom*.cdx.json bom-npm.cdx.json)
+          cyclonedx merge \
+            --input-files "${inputs[@]}" \
             --output-file ./sbom.cdx.json
 
       - name: Validate SBOM
-        run: |
-          pnpm dlx @cyclonedx/cyclonedx-cli@<CDX_CLI_VERSION> validate \
-            --input-file ./sbom.cdx.json
+        run: cyclonedx validate --input-file ./sbom.cdx.json
 
       - name: Attach SBOM to release
         env:
