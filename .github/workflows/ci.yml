@@ -93,7 +93,13 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libxdo-dev libssl-dev libpipewire-0.3-dev libgbm-dev libegl1-mesa-dev libwayland-dev libdrm-dev
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov --locked
-      - name: Run coverage on testable surface
+      # Split per #45: logic surface is gated at 90%; IPC surface
+      # (plugin.rs / commands.rs and the platform-bound code that
+      # needs a real Tauri runtime) is reported only, no gate.
+      # Pre-#45 the gate hid behind the exclusion list — high overall
+      # coverage number while the IPC perimeter (where user-visible
+      # failures live) was invisible.
+      - name: Logic coverage (gated at 90%)
         # Excludes Tauri integration glue (plugins, command wrappers) and
         # platform-bound code (hotkeys, watcher, paste, caret, grab, orchestrate,
         # foreground) — those need a real Tauri runtime or live monitors/keyboard.
@@ -101,6 +107,16 @@ jobs:
           cargo llvm-cov --workspace --exclude snapper-keeper-app \
             --ignore-filename-regex '(plugin\.rs|commands\.rs|caret\.rs|paste\.rs|watcher\.rs|hotkeys.src.lib\.rs|queue\.rs|build\.rs|foreground\.rs|capture.src.grab\.rs|capture.src.orchestrate\.rs)' \
             --fail-under-lines 90 --summary-only
+      - name: IPC-surface coverage (report only — no gate)
+        # Inverse of the logic-coverage filter: only the files excluded
+        # above. No --fail-under, so this never blocks the build. Tracked
+        # quarterly to ensure IPC surface coverage trends up over time as
+        # #53/#54 (tauri::test mock-app tests) land. Per #45 captured
+        # decision: report honest IPC numbers instead of hiding them.
+        run: |
+          cargo llvm-cov --workspace --exclude snapper-keeper-app \
+            --ignore-filename-regex '^(?!.*(plugin\.rs|commands\.rs|caret\.rs|paste\.rs|watcher\.rs|hotkeys.src.lib\.rs|queue\.rs|build\.rs|foreground\.rs|capture.src.grab\.rs|capture.src.orchestrate\.rs)).*$' \
+            --summary-only || echo "::warning::IPC-surface coverage tool returned non-zero (likely no matching files); not gating"
 
   build-app:
     needs: [lint-typecheck, rust-test]
