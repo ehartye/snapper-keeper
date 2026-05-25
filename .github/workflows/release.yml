@@ -671,13 +671,14 @@ jobs:
 
       - name: Generate Rust SBOM (workspace)
         run: |
-          # cargo-cyclonedx 0.5.x: --all (alias --workspace removed) processes
-          # all workspace members; each crate emits `bom.json` in its own
-          # manifest directory. NOT `--output-pattern` (doesn't exist) or
-          # `--workspace` (renamed). Collect the per-crate files for merge.
-          cargo cyclonedx --format json --all
+          # cargo-cyclonedx 0.5.x: --all processes all workspace members.
+          # Default per-crate output name is `<crate>.cdx.json` (in each
+          # crate's manifest directory) — not `bom.json`. Force a
+          # predictable name with --override-filename so the merge step's
+          # `find` can collect them deterministically.
+          cargo cyclonedx --format json --all --override-filename rust-sbom
           echo "Per-crate Rust SBOMs produced:"
-          find . -name 'bom.json' -type f -not -path './node_modules/*'
+          find . -name 'rust-sbom.cdx.json' -type f -not -path './node_modules/*'
 
       - name: Generate npm SBOM
         run: |
@@ -690,10 +691,14 @@ jobs:
 
       - name: Merge SBOMs
         run: |
-          # Per-crate `bom.json` files (one per workspace member) + the
-          # single npm `bom-npm.cdx.json`. Merge into one sbom.cdx.json.
-          mapfile -t rust_boms < <(find . -name 'bom.json' -type f -not -path './node_modules/*')
+          # Per-crate `rust-sbom.cdx.json` files (one per workspace member)
+          # + the single npm `bom-npm.cdx.json`. Merge into one sbom.cdx.json.
+          mapfile -t rust_boms < <(find . -name 'rust-sbom.cdx.json' -type f -not -path './node_modules/*')
           echo "Merging ${#rust_boms[@]} Rust BOMs + 1 npm BOM"
+          if [ "${#rust_boms[@]}" -eq 0 ]; then
+            echo "::error::No Rust SBOMs found — cargo cyclonedx didn't emit expected files"
+            exit 1
+          fi
           cyclonedx merge \
             --input-files "${rust_boms[@]}" ./bom-npm.cdx.json \
             --output-file ./sbom.cdx.json
