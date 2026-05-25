@@ -111,10 +111,12 @@ Plus a scheduled `audit.yml` (daily at 06:17 UTC; also `workflow_dispatch`) that
 **To approve a tag-triggered release deployment:**
 ```bash
 # Pending deployments for the run
-gh api repos/ehartye/snapper-keeper/actions/runs/<RUN_ID>/pending_deployments
+pending="$(gh api repos/ehartye/snapper-keeper/actions/runs/<RUN_ID>/pending_deployments)"
+echo "$pending"
 
-# Approve (replace 15753639452 if env id changes; check via /environments/production-release)
-echo '{"environment_ids":[15753639452],"state":"approved","comment":"..."}' \
+# Approve the production-release environment for this run
+env_id="$(echo "$pending" | jq -r '.[] | select(.environment.name == "production-release") | .environment.id')"
+echo "{\"environment_ids\":[${env_id}],\"state\":\"approved\",\"comment\":\"...\"}" \
   | gh api -X POST repos/ehartye/snapper-keeper/actions/runs/<RUN_ID>/pending_deployments --input -
 ```
 
