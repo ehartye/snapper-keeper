@@ -968,16 +968,27 @@ Delete the entire `build-and-release:` job (everything from `build-and-release:`
           pnpm tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} \
             --config '{"bundle":{"windows":{"signCommand":""}},"plugins":{"updater":{"pubkey":""}}}'
 
-      # macOS: upload the .app directory only. The sign job will codesign the
-      # .app, then rebuild .dmg from the signed .app, then tar the signed .app
-      # to make .app.tar.gz, then minisign the tar.
+      # macOS: upload the .app directory. The sign job will codesign the .app,
+      # then rebuild .dmg from the signed .app, tar the signed .app to make
+      # .app.tar.gz, then minisign the tar.
+      #
+      # IMPORTANT: path glob is `macos/**`, NOT `macos/Snapper Keeper.app/**`.
+      # upload-artifact uses the common ancestor of matched files as the
+      # archive root. With `.app/**` the common ancestor is the .app
+      # directory itself, which strips `Snapper Keeper.app/` from the
+      # archive — the sign job's `"artifacts/unsigned/Snapper Keeper.app"`
+      # reference would not exist after download. Uploading from `macos/**`
+      # preserves `Snapper Keeper.app/...` as a subdirectory (and
+      # incidentally also picks up the unsigned `.app.tar.gz` that the
+      # updater bundler emits; the sign job ignores that and recreates it
+      # post-codesign).
       - name: Upload unsigned macOS artifacts
         if: runner.os == 'macOS'
         uses: actions/upload-artifact@<sha> # v4
         with:
           name: unsigned-artifacts-${{ matrix.label }}
           path: |
-            target/${{ matrix.target }}/release/bundle/macos/Snapper Keeper.app/**
+            target/${{ matrix.target }}/release/bundle/macos/**
           if-no-files-found: error
 
       - name: Upload unsigned Windows artifacts
