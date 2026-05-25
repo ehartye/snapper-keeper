@@ -1,0 +1,18 @@
+{
+  "vulnerabilities": {
+    "found": true,
+    "count": 1,
+    "list": [
+      {
+        "advisory": {
+          "id": "RUSTSEC-2026-0099",
+          "title": "Buffer overflow in fake-crate",
+          "description": "A buffer-overflow vuln in fake-crate before 0.5.1.",
+          "url": "https://rustsec.org/advisories/RUSTSEC-2026-0099.html",
+          "cvss": "high"
+        },
+        "package": { "name": "fake-crate", "version": "0.5.0" }
+      }
+    ]
+  }
+}
