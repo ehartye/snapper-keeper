@@ -665,9 +665,10 @@ describe('<AboutSection />', () => {
     renderAbout();
     // vitest.config.ts defines __UPDATER_FINGERPRINT__ = "testfingerprint"
     // for test runs (production define is in vite.config.ts).
+    // Match on the value (unique) rather than /Fingerprint/i which would
+    // collide with the row label "Fingerprint".
     await waitFor(() => {
-      const row = screen.getByText(/Fingerprint/i).closest('div.flex')!;
-      expect(row.textContent).toMatch(/testfingerprint/i);
+      expect(screen.getByText('testfingerprint')).toBeInTheDocument();
     });
   });
 
@@ -719,7 +720,9 @@ describe('<AboutSection />', () => {
     renderAbout();
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
-      expect(screen.getByText(/Restart/i)).toBeInTheDocument();
+      // Use role+name to scope to the confirm button; bare /Restart/i
+      // would collide with the body text "Restart now to install?".
+      expect(screen.getByRole('button', { name: 'Restart' })).toBeInTheDocument();
     });
   });
 
