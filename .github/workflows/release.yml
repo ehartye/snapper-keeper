@@ -681,8 +681,12 @@ jobs:
 
       - name: Generate npm SBOM
         run: |
-          pnpm dlx @cyclonedx/cyclonedx-npm@4.2.1 \
-            --output-format JSON --output-file ./bom-npm.cdx.json
+          # @cyclonedx/cyclonedx-npm runs `npm ls` internally and assumes
+          # an npm-managed install. Our workspace uses pnpm, which means
+          # `npm ls` returns exit 1 (different node_modules layout +
+          # workspace symlinks). Use @cyclonedx/cdxgen instead — supports
+          # pnpm via `-t pnpm` and reads pnpm-lock.yaml directly.
+          pnpm dlx @cyclonedx/cdxgen@12.4.3 -t pnpm -o ./bom-npm.cdx.json .
 
       - name: Merge SBOMs
         run: |

@@ -2357,8 +2357,12 @@ In `release.yml`'s `publish-release` job, after the `Create GitHub Release` step
 
       - name: Generate npm SBOM
         run: |
-          pnpm dlx @cyclonedx/cyclonedx-npm@<CDX_NPM_VERSION> \
-            --output-format JSON --output-file ./bom-npm.cdx.json
+          # @cyclonedx/cyclonedx-npm runs `npm ls` internally and requires
+          # an npm-managed install. Our workspace uses pnpm, so npm ls
+          # exits 1 (different node_modules layout + workspace symlinks).
+          # @cyclonedx/cdxgen supports pnpm via `-t pnpm` and reads
+          # pnpm-lock.yaml directly.
+          pnpm dlx @cyclonedx/cdxgen@<CDXGEN_VERSION> -t pnpm -o ./bom-npm.cdx.json .
 
       - name: Merge SBOMs
         run: |
