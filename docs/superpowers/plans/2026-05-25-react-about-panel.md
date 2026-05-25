@@ -1059,7 +1059,37 @@ pnpm --filter @snk/app test -- --run src/windows/settings/SettingsWindow.test.ts
 
 Expected: all 5 tests passing. (The existing tests don't assert on AboutSection internals — they just verify the headers render.)
 
-**Step 3: Add one new SettingsWindow test for the About section header**
+**Step 3: Wrap all `renderWithQuery` calls with `<ModalProvider>` and add modal-root setup**
+
+`<AboutSection />` calls `useModal()`, which throws if not inside a `<ModalProvider>`. The runtime app wraps everything in `main.tsx`, but the tests render `<SettingsWindow />` directly. Add the wrapper inline at all 5 callsites.
+
+Top-of-file imports — add:
+
+```tsx
+import { ModalProvider } from '../../components/Modal';
+```
+
+Add a modal-root setup in the existing `beforeEach` (or create one if absent):
+
+```tsx
+beforeEach(() => {
+  mockedInvoke.mockReset();
+  mockedInvoke.mockResolvedValue(null);
+  const existing = document.getElementById('modal-root');
+  if (existing) existing.remove();
+  const root = document.createElement('div');
+  root.id = 'modal-root';
+  document.body.appendChild(root);
+});
+```
+
+Then replace each `renderWithQuery(<SettingsWindow />)` (5 occurrences) with:
+
+```tsx
+renderWithQuery(<ModalProvider><SettingsWindow /></ModalProvider>);
+```
+
+**Step 4: Update the section-header test to include About**
 
 In `app/src/windows/settings/SettingsWindow.test.tsx`, find the existing test:
 
@@ -1067,11 +1097,11 @@ In `app/src/windows/settings/SettingsWindow.test.tsx`, find the existing test:
 it('renders the Settings header and Appearance + Capture + Clipboard + OCR sections', async () => {
 ```
 
-Add "About" to the expected sections list:
+Add "About" to the expected sections list and rename for accuracy:
 
 ```tsx
   it('renders Settings header + Appearance + Capture + Clipboard + OCR + About sections', async () => {
-    renderWithQuery(<SettingsWindow />);
+    renderWithQuery(<ModalProvider><SettingsWindow /></ModalProvider>);
     expect(screen.getByText('Settings')).toBeInTheDocument();
     expect(screen.getByText('Appearance')).toBeInTheDocument();
     expect(screen.getByText('Capture')).toBeInTheDocument();
@@ -1087,9 +1117,9 @@ Run:
 pnpm --filter @snk/app test -- --run src/windows/settings/SettingsWindow.test.tsx
 ```
 
-Expected: 5 tests passing (the updated one still counts as 1).
+Expected: 5 tests passing.
 
-**Step 4: Lint + typecheck**
+**Step 5: Lint + typecheck**
 
 ```bash
 cd C:/Users/ehart/repos/snapper-keeper-worktrees/feat-react-about-panel
@@ -1099,7 +1129,7 @@ pnpm --filter @snk/app typecheck
 
 Expected: both clean.
 
-**Step 5: Commit**
+**Step 6: Commit**
 
 ```bash
 git add app/src/windows/settings/SettingsWindow.tsx app/src/windows/settings/SettingsWindow.test.tsx
