@@ -1087,6 +1087,8 @@ git commit -m "feat(clipboard): Windows source-app via GetForegroundWindow + ver
 
 ## Task 10: Extract `worker_step` from the watcher
 
+> **Plan-fix note (2026-05-24):** Original plan returned `SkipReason::EmptyContent` on the three persist-failure paths (text insert error, image `write_atomic` error, image insert error). That misnames the cause in logs — a transient DB or disk error would surface as "EmptyContent" to whoever's tailing the watcher. Added a dedicated `SkipReason::PersistFailed` variant and routed the three error paths to it; the two legitimate empty-input checks (`text.is_empty()`, `bytes.is_empty()`) still return `EmptyContent`. Flagged by `quality-sentinel` after Task #10 landed; corrective commit was a separate `refactor(clipboard):` follow-up.
+
 **Files:**
 - Modify: `crates/snk-clipboard/src/watcher.rs`
 
@@ -1117,6 +1119,9 @@ pub(crate) enum SkipReason {
     AppBlocked(String), // identifier
     DuplicateHash,
     EmptyContent,
+    /// Insert or disk-write failed; treated as a skip so the watcher loop
+    /// keeps draining events instead of crashing on a transient error.
+    PersistFailed,
 }
 
 /// Outcome of a single decision cycle.
@@ -1196,7 +1201,7 @@ pub(crate) fn worker_step(
                             let _ = snk_library::clipboard::evict_unpinned(db, MAX_UNPINNED);
                             StepResult::Saved { item_id: item.id }
                         }
-                        Err(_) => StepResult::Skipped(SkipReason::EmptyContent),
+                        Err(_) => StepResult::Skipped(SkipReason::PersistFailed),
                     }
                 }
             }
@@ -1220,7 +1225,7 @@ pub(crate) fn worker_step(
                     let id = uuid::Uuid::now_v7();
                     let relative = files::clipboard_image_relative_path(&id);
                     if files::write_atomic(library_root, &relative, &bytes).is_err() {
-                        return StepResult::Skipped(SkipReason::EmptyContent);
+                        return StepResult::Skipped(SkipReason::PersistFailed);
                     }
                     let new_item = NewClipboardItem {
                         kind: ClipboardItemKind::Image,
@@ -1235,7 +1240,7 @@ pub(crate) fn worker_step(
                             let _ = snk_library::clipboard::evict_unpinned(db, MAX_UNPINNED);
                             StepResult::Saved { item_id: item.id }
                         }
-                        Err(_) => StepResult::Skipped(SkipReason::EmptyContent),
+                        Err(_) => StepResult::Skipped(SkipReason::PersistFailed),
                     }
                 }
             }
@@ -2482,9 +2487,13 @@ Expected: both per-OS tests pass on their respective platforms. Linux prints `SK
 **Step 4: Commit**
 
 ```bash
-git add crates/snk-clipboard/tests/sensitivity_integration.rs crates/snk-clipboard/Cargo.toml Cargo.lock
-git commit -m "test(clipboard): real-OS sensitivity integration tests (macOS + Windows)"
+git commit -m "test(clipboard): real-clipboard integration test for Windows + macOS sensitivity" \
+  -- crates/snk-clipboard/tests/sensitivity_integration.rs \
+     crates/snk-clipboard/Cargo.toml \
+     Cargo.lock
 ```
+
+(Plan-fix note 2026-05-24: original message was `test(clipboard): real-OS sensitivity integration tests (macOS + Windows)`. Aligned with shipped subject — "real-clipboard" cues the destructive-action concern more directly than "real-OS." Commit form also updated to path-restricted per [[reference_team_driven_shared_worktree]] discipline rule 2.)
 
 ---
 

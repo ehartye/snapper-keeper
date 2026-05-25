@@ -28,6 +28,9 @@ pub(crate) enum SkipReason {
     AppBlocked(String), // identifier
     DuplicateHash,
     EmptyContent,
+    /// Insert or disk-write failed; treated as a skip so the watcher loop
+    /// keeps draining events instead of crashing on a transient error.
+    PersistFailed,
 }
 
 /// Outcome of a single decision cycle.
@@ -174,7 +177,7 @@ pub(crate) fn worker_step(
                             let _ = snk_library::clipboard::evict_unpinned(db, MAX_UNPINNED);
                             StepResult::Saved { item_id: item.id }
                         }
-                        Err(_) => StepResult::Skipped(SkipReason::EmptyContent),
+                        Err(_) => StepResult::Skipped(SkipReason::PersistFailed),
                     }
                 }
             }
@@ -198,7 +201,7 @@ pub(crate) fn worker_step(
                     let id = uuid::Uuid::now_v7();
                     let relative = files::clipboard_image_relative_path(&id);
                     if files::write_atomic(library_root, &relative, &bytes).is_err() {
-                        return StepResult::Skipped(SkipReason::EmptyContent);
+                        return StepResult::Skipped(SkipReason::PersistFailed);
                     }
                     let new_item = NewClipboardItem {
                         kind: ClipboardItemKind::Image,
@@ -213,7 +216,7 @@ pub(crate) fn worker_step(
                             let _ = snk_library::clipboard::evict_unpinned(db, MAX_UNPINNED);
                             StepResult::Saved { item_id: item.id }
                         }
-                        Err(_) => StepResult::Skipped(SkipReason::EmptyContent),
+                        Err(_) => StepResult::Skipped(SkipReason::PersistFailed),
                     }
                 }
             }
