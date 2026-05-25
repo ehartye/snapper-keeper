@@ -5,7 +5,6 @@
 #[cfg(target_os = "windows")]
 pub mod windows {
     use std::path::PathBuf;
-    use std::sync::atomic::Ordering;
     use std::sync::{Arc, Mutex, OnceLock};
 
     use arboard::Clipboard;
@@ -25,7 +24,7 @@ pub mod windows {
 
     use crate::sensitivity::OsProbe;
     use crate::source_app;
-    use crate::watcher::{worker_step, ClipboardEvent, WatcherState, SKIP_NEXT};
+    use crate::watcher::{worker_step, ClipboardEvent, WatcherState};
 
     /// Storage handed to the window-procedure callback via a process-global
     /// OnceLock. Wrapping in Mutex makes interior mutation safe even though
@@ -149,13 +148,10 @@ pub mod windows {
     }
 
     fn handle_clipboard_update() {
-        if SKIP_NEXT
-            .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
-            .is_ok()
-        {
-            debug!("skipping own clipboard write");
-            return;
-        }
+        // Skip-set check moved into worker_step (content-hash based,
+        // see SkipReason::OwnWrite). The WM_CLIPBOARDUPDATE handler
+        // proceeds to read+hash the clipboard event; worker_step
+        // recognizes any self-emitted content and skips it there.
 
         let ctx_mtx = CTX
             .get()

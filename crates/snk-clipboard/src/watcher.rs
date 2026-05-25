@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use arboard::Clipboard;
@@ -10,6 +9,7 @@ use snk_library::{files, Db};
 
 use crate::blocklist;
 use crate::sensitivity::SensitivityProbe;
+use crate::skip_set;
 use crate::source_app::SourceApp;
 
 /// A single observed clipboard change that the watcher must decide
@@ -31,6 +31,10 @@ pub(crate) enum SkipReason {
     /// Insert or disk-write failed; treated as a skip so the watcher loop
     /// keeps draining events instead of crashing on a transient error.
     PersistFailed,
+    /// The event matches a content hash recently emitted by us
+    /// (e.g. via `paste_item`). The watcher would otherwise re-record
+    /// what we just wrote into the clipboard ourselves.
+    OwnWrite,
 }
 
 /// Outcome of a single decision cycle.
@@ -54,10 +58,15 @@ impl WatcherState {
 
 const MAX_UNPINNED: u32 = 200;
 
-pub(crate) static SKIP_NEXT: AtomicBool = AtomicBool::new(false);
-
+/// Shim retained for source compatibility during the SKIP_NEXT → skip_set
+/// transition; callers (e.g. `paste_item`) now hash their content and
+/// call `skip_set::mark_emitted` directly. Kept temporarily so any
+/// downstream consumer using the public name doesn't break.
+#[deprecated(note = "use skip_set::mark_emitted with a content hash instead")]
 pub fn mark_skip_next() {
-    SKIP_NEXT.store(true, Ordering::SeqCst);
+    // Intentionally a no-op. The new mechanism is content-aware, so a
+    // blanket "skip the next event" can't be implemented without a hash.
+    // Callers should compute the hash and call skip_set::mark_emitted.
 }
 
 pub fn start_watcher(db: Arc<Db>, library_root: std::path::PathBuf) {
@@ -94,13 +103,9 @@ pub(crate) fn start_polling(
 
         loop {
             std::thread::sleep(interval);
-            if SKIP_NEXT
-                .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
-                .is_ok()
-            {
-                debug!("skipping own clipboard write");
-                continue;
-            }
+            // Skip-set check moved into worker_step (content-hash based,
+            // see SkipReason::OwnWrite). The polling loop no longer
+            // needs its own skip gate.
 
             // Try text first; image only if text is absent.
             let event = if let Ok(t) = clip.get_text() {
@@ -133,6 +138,19 @@ pub(crate) fn worker_step(
     probe: &dyn SensitivityProbe,
     source: Option<SourceApp>,
 ) -> StepResult {
+    // First gate: content hash matches a recent self-emission? Skip.
+    // This replaces the previous SKIP_NEXT AtomicBool which could only
+    // skip ONE next event regardless of which event matched.
+    let event_bytes: &[u8] = match &event {
+        ClipboardEvent::Text(t) => t.as_bytes(),
+        ClipboardEvent::Image(bytes) => bytes,
+    };
+    let event_hash_u64 = skip_set::hash_content(event_bytes);
+    if skip_set::should_skip(event_hash_u64) {
+        debug!("skipping own clipboard write (hash match)");
+        return StepResult::Skipped(SkipReason::OwnWrite);
+    }
+
     if probe.is_sensitive() {
         // Record the hash so a follow-up identical observation doesn't
         // re-run the whole pipeline. We compute it cheaply from the event.
