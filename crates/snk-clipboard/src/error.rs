@@ -2,7 +2,7 @@ use serde::Serialize;
 use thiserror::Error;
 
 #[derive(Error, Debug, Serialize)]
-#[serde(tag = "kind", rename_all = "kebab-case")]
+#[serde(tag = "kind", content = "data", rename_all = "kebab-case")]
 pub enum ClipboardError {
     #[error("library error: {0:?}")]
     Library(snk_library::LibraryError),
