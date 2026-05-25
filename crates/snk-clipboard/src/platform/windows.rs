@@ -6,15 +6,20 @@ use std::ffi::c_void;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{CloseHandle, HANDLE, HGLOBAL, HWND};
 use windows::Win32::System::DataExchange::{
-    GetClipboardData, IsClipboardFormatAvailable, RegisterClipboardFormatW,
+    CloseClipboard, GetClipboardData, IsClipboardFormatAvailable, OpenClipboard,
+    RegisterClipboardFormatW,
 };
 use windows::Win32::System::Memory::{GlobalLock, GlobalUnlock};
 use windows::Win32::System::Threading::{
     OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_FORMAT, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
-// OpenClipboard/CloseClipboard are not needed — WM_CLIPBOARDUPDATE
-// handler runs with the clipboard already open by the OS.
+// `is_sensitive` manages its own OpenClipboard/CloseClipboard lifecycle.
+// The original Task 8 design assumed the WM_CLIPBOARDUPDATE handler held
+// the clipboard open, but that assumption was wrong: arboard's get_text()
+// (called earlier in the handler) opens AND closes the clipboard before
+// the sensitivity check runs, so `is_sensitive` must open it again or
+// `GetClipboardData` returns NULL and the check silently fails.
 
 use crate::source_app::SourceApp;
 
@@ -36,31 +41,32 @@ fn register_format(name: &str) -> u32 {
 }
 
 /// Read a `u32` value out of a clipboard format that stores a single
-/// DWORD. Returns `None` if the format isn't present or the data isn't
-/// the expected size.
-fn read_u32_format(fmt: u32) -> Option<u32> {
-    unsafe {
-        // windows-rs 0.61: IsClipboardFormatAvailable returns Result<()>,
-        // not BOOL. Ok == "format present"; Err == "not present" (or error).
-        if IsClipboardFormatAvailable(fmt).is_err() {
-            return None;
-        }
-        // The watcher already holds the clipboard open when this is
-        // called from the WM_CLIPBOARDUPDATE handler; no explicit
-        // OpenClipboard / CloseClipboard needed.
-        let handle: HANDLE = GetClipboardData(fmt).ok()?;
-        // HANDLE and HGLOBAL are both #[repr(transparent)] newtypes around
-        // *mut c_void, but the GlobalLock signature takes HGLOBAL — bridge
-        // explicitly via the public ctor rather than a raw cast.
-        let hglobal = HGLOBAL(handle.0);
-        let ptr: *mut c_void = GlobalLock(hglobal);
-        if ptr.is_null() {
-            return None;
-        }
-        let value = *(ptr as *const u32);
-        let _ = GlobalUnlock(hglobal);
-        Some(value)
+/// DWORD. **Caller must already hold the clipboard open via OpenClipboard.**
+/// Returns `None` if the format isn't present or the data isn't the
+/// expected size.
+///
+/// # Safety
+/// Caller must have successfully called `OpenClipboard` before invoking
+/// this helper, and must call `CloseClipboard` after the surrounding
+/// sensitivity check completes.
+unsafe fn read_u32_format_locked(fmt: u32) -> Option<u32> {
+    // windows-rs 0.61: IsClipboardFormatAvailable returns Result<()>,
+    // not BOOL. Ok == "format present"; Err == "not present" (or error).
+    if IsClipboardFormatAvailable(fmt).is_err() {
+        return None;
     }
+    let handle: HANDLE = GetClipboardData(fmt).ok()?;
+    // HANDLE and HGLOBAL are both #[repr(transparent)] newtypes around
+    // *mut c_void, but the GlobalLock signature takes HGLOBAL — bridge
+    // explicitly via the public ctor rather than a raw cast.
+    let hglobal = HGLOBAL(handle.0);
+    let ptr: *mut c_void = GlobalLock(hglobal);
+    if ptr.is_null() {
+        return None;
+    }
+    let value = *(ptr as *const u32);
+    let _ = GlobalUnlock(hglobal);
+    Some(value)
 }
 
 pub(crate) fn is_sensitive() -> bool {
@@ -68,24 +74,31 @@ pub(crate) fn is_sensitive() -> bool {
     let can_include = register_format(FMT_CAN_INCLUDE_IN_HISTORY);
     let can_upload = register_format(FMT_CAN_UPLOAD_TO_CLOUD);
 
-    // CFSTR_EXCLUDECLIPBOARDCONTENTFROMMONITORING is presence-only — its
-    // existence flags the content as excluded. (windows-rs 0.61:
-    // Result<()> — Ok == present, Err == not present.)
+    // SAFETY: OpenClipboard(None) attaches the clipboard to the calling
+    // thread without binding it to a window. Required for GetClipboardData
+    // to succeed inside `read_u32_format_locked`. Returns Err if the
+    // clipboard is already held elsewhere (e.g. another listener mid-read);
+    // we fail-open (return false) in that transient case rather than
+    // dropping all clipboard events on a race.
     unsafe {
-        if IsClipboardFormatAvailable(exclude).is_ok() {
-            return true;
+        if OpenClipboard(None).is_err() {
+            return false;
         }
-    }
 
-    // CanIncludeInClipboardHistory / CanUploadToCloudClipboard are DWORDs
-    // with value 0 = "do not include / do not upload".
-    if matches!(read_u32_format(can_include), Some(0)) {
-        return true;
+        // FMT_EXCLUDE_FROM_MONITORING (the legacy CFSTR_…) is presence-only —
+        // its existence flags the content as excluded.
+        let result = if IsClipboardFormatAvailable(exclude).is_ok() {
+            true
+        } else {
+            // CanIncludeInClipboardHistory / CanUploadToCloudClipboard
+            // are DWORDs with value 0 = "do not include / do not upload".
+            matches!(read_u32_format_locked(can_include), Some(0))
+                || matches!(read_u32_format_locked(can_upload), Some(0))
+        };
+
+        let _ = CloseClipboard();
+        result
     }
-    if matches!(read_u32_format(can_upload), Some(0)) {
-        return true;
-    }
-    false
 }
 
 pub(crate) fn current_source_app() -> Option<SourceApp> {
