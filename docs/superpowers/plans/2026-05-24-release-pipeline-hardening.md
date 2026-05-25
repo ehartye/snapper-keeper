@@ -2347,10 +2347,13 @@ In `release.yml`'s `publish-release` job, after the `Create GitHub Release` step
 
       - name: Generate Rust SBOM (workspace)
         run: |
-          # --workspace processes all workspace members. Earlier draft
-          # used `-- --workspace` (positional after --), which is wrong;
-          # --workspace is a direct flag to cargo-cyclonedx.
-          cargo cyclonedx --format json --output-pattern bom --workspace
+          # cargo-cyclonedx 0.5.x: --all processes all workspace members;
+          # each crate emits `bom.json` in its own manifest directory.
+          # NOT `--output-pattern` (doesn't exist) or `--workspace`
+          # (alias removed). An earlier draft of this plan used both.
+          cargo cyclonedx --format json --all
+          echo "Per-crate Rust SBOMs produced:"
+          find . -name 'bom.json' -type f -not -path './node_modules/*'
 
       - name: Generate npm SBOM
         run: |
@@ -2359,10 +2362,10 @@ In `release.yml`'s `publish-release` job, after the `Create GitHub Release` step
 
       - name: Merge SBOMs
         run: |
-          shopt -s nullglob
-          inputs=(bom*.cdx.json bom-npm.cdx.json)
+          mapfile -t rust_boms < <(find . -name 'bom.json' -type f -not -path './node_modules/*')
+          echo "Merging ${#rust_boms[@]} Rust BOMs + 1 npm BOM"
           cyclonedx merge \
-            --input-files "${inputs[@]}" \
+            --input-files "${rust_boms[@]}" ./bom-npm.cdx.json \
             --output-file ./sbom.cdx.json
 
       - name: Validate SBOM

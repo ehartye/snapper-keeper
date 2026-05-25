@@ -671,9 +671,13 @@ jobs:
 
       - name: Generate Rust SBOM (workspace)
         run: |
-          # --workspace processes all workspace members. Each crate emits
-          # a separate file with the --output-pattern as prefix.
-          cargo cyclonedx --format json --output-pattern bom --workspace
+          # cargo-cyclonedx 0.5.x: --all (alias --workspace removed) processes
+          # all workspace members; each crate emits `bom.json` in its own
+          # manifest directory. NOT `--output-pattern` (doesn't exist) or
+          # `--workspace` (renamed). Collect the per-crate files for merge.
+          cargo cyclonedx --format json --all
+          echo "Per-crate Rust SBOMs produced:"
+          find . -name 'bom.json' -type f -not -path './node_modules/*'
 
       - name: Generate npm SBOM
         run: |
@@ -682,14 +686,12 @@ jobs:
 
       - name: Merge SBOMs
         run: |
-          # cargo cyclonedx --workspace produces one bom*.cdx.json per
-          # crate; npm produces bom-npm.cdx.json. Merge into one file.
-          shopt -s nullglob
-          inputs=(bom*.cdx.json bom-npm.cdx.json)
-          echo "Merging ${#inputs[@]} input SBOMs:"
-          printf '  %s\n' "${inputs[@]}"
+          # Per-crate `bom.json` files (one per workspace member) + the
+          # single npm `bom-npm.cdx.json`. Merge into one sbom.cdx.json.
+          mapfile -t rust_boms < <(find . -name 'bom.json' -type f -not -path './node_modules/*')
+          echo "Merging ${#rust_boms[@]} Rust BOMs + 1 npm BOM"
           cyclonedx merge \
-            --input-files "${inputs[@]}" \
+            --input-files "${rust_boms[@]}" ./bom-npm.cdx.json \
             --output-file ./sbom.cdx.json
 
       - name: Validate SBOM
