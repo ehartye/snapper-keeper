@@ -1442,6 +1442,8 @@ function useSetting<T>(key: string, defaultValue: T): [T, (v: T) => void, boolea
   return [value, update, isLoading];
 }
 
+// Launch-at-login is managed by the autostart plugin, not the settings table,
+// so it has its own little hook.
 function useAutostart(): [boolean, (v: boolean) => void, boolean] {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
@@ -1462,6 +1464,9 @@ function useAutostart(): [boolean, (v: boolean) => void, boolean] {
   return [data ?? false, update, isLoading];
 }
 
+// DividerPreview is now colocated with each family's CSS — see
+// themes/<family>.preview.tsx. SettingsWindow reads the matching component
+// from THEME_FAMILIES[family].DividerPreview.
 function ThemeCard({
   themeId,
   label,
@@ -1571,6 +1576,8 @@ export function SettingsWindow() {
   const { theme, setTheme } = useTheme();
   const [captureFormat, setCaptureFormat] = useSetting('capture.format', 'png');
 
+  // Intercept window close so the X just hides; the webview stays alive
+  // and the tray menu can re-open it instantly with show().
   useEffect(() => {
     let cleanup: (() => void) | undefined;
     getCurrentWindow()
