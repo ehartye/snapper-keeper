@@ -1132,7 +1132,7 @@ Create `app/src/components/__tests__/useModal.test.tsx`:
 
 ```tsx
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { ModalProvider } from '../Modal/ModalProvider';
 import { useModal } from '../Modal/useModal';
 
