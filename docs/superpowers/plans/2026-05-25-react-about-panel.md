@@ -545,6 +545,8 @@ git commit -m "chore: delete unused @snk/ocr TS package (closes #62)"
 - Create: `app/src/windows/settings/AboutSection.tsx`
 - Create: `app/src/windows/settings/AboutSection.test.tsx`
 - Modify: `app/vitest.config.ts` — mirror the Vite `define` block so vitest substitutes `__GIT_SHA__` / `__UPDATER_FINGERPRINT__` in test runs (the production `vite.config.ts` define doesn't apply to vitest)
+- Modify: `eslint.config.mjs` — declare `__GIT_SHA__` / `__UPDATER_FINGERPRINT__` as readonly globals (ESLint doesn't honor TS ambient `.d.ts` declarations; without this, `no-undef` fires)
+- Modify: `app/package.json` — add `"@snk/updater": "workspace:*"` to dependencies (AboutSection.tsx imports from `@snk/updater`; the package wasn't previously consumed by the app)
 
 **Context:** New React component. Uses shared primitives from PR A (`SettingsSection`, `SettingRow`, `Button`, `useModal`). Renders 8 rows in this order:
 
@@ -774,6 +776,30 @@ In `app/vitest.config.ts`, add a `define` block inside the existing `defineConfi
   },
 ```
 
+**Step 2b: Declare globals to ESLint**
+
+In `eslint.config.mjs`, modify the `globals:` line in the `**/*.{ts,tsx}` block (line ~18) to add the two readonly globals:
+
+```js
+      globals: {
+        ...globals.browser,
+        __GIT_SHA__: 'readonly',
+        __UPDATER_FINGERPRINT__: 'readonly',
+      },
+```
+
+ESLint does NOT honor TS `.d.ts` ambient declarations, so without this, `no-undef` fires on every reference to either global.
+
+**Step 2c: Add `@snk/updater` as a workspace dep of the app**
+
+In `app/package.json`, add to the `dependencies` block (alphabetically alongside the other `@snk/*` entries):
+
+```json
+"@snk/updater": "workspace:*",
+```
+
+Run `pnpm install` to update the lockfile.
+
 **Step 3: Run test, verify fail**
 
 ```bash
@@ -825,6 +851,13 @@ function formatStatus(s: UpdateStatus): string {
       return `Ready to install v${s.version}`;
     case 'error':
       return `Error: ${s.detail}`;
+    default: {
+      // Exhaustiveness guard — also satisfies TS's "function lacks
+      // ending return statement" check. If a new variant is added,
+      // this line becomes a compile error.
+      const _exhaustive: never = s;
+      return _exhaustive;
+    }
   }
 }
 
@@ -981,7 +1014,7 @@ Expected: both clean.
 **Step 7: Commit**
 
 ```bash
-git add app/src/windows/settings/AboutSection.tsx app/src/windows/settings/AboutSection.test.tsx app/vitest.config.ts
+git add app/src/windows/settings/AboutSection.tsx app/src/windows/settings/AboutSection.test.tsx app/vitest.config.ts eslint.config.mjs app/package.json pnpm-lock.yaml
 git commit -m "feat(ui): add About section with version, paths, updater status (closes #36)"
 ```
 
