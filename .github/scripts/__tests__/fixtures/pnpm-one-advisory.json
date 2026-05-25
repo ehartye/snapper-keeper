@@ -1,0 +1,13 @@
+{
+  "advisories": {
+    "9999": {
+      "github_advisory_id": "GHSA-fake-fake-fake",
+      "title": "Prototype pollution in fake-pkg",
+      "overview": "fake-pkg before 2.0.0 is vulnerable to prototype pollution.",
+      "url": "https://github.com/advisories/GHSA-fake-fake-fake",
+      "severity": "high",
+      "module_name": "fake-pkg",
+      "vulnerable_versions": "<2.0.0"
+    }
+  }
+}
