@@ -23,13 +23,19 @@ cargo build -p snk-smoke-target --release
 case "$PLATFORM" in
   windows)
     cp target/release/snk-smoke-target.exe ./smoke.exe
+    # `sign code` exits non-zero on failure and set -e propagates, so the
+    # signing call itself is the validation. Earlier drafts also called
+    # `signtool verify /pa /v` here, but signtool ships with the Windows
+    # SDK and isn't on Git Bash's PATH (it's only resolvable from
+    # PowerShell or after vcvarsall.bat). The real installer signature
+    # gets verified by a PowerShell `signtool verify /pa` step later in
+    # sign-win-x64 — that's where the proof of correctness lives.
     sign code artifact-signing \
       -ase https://eus.codesigning.azure.net \
       -asa HartyeTech \
       -ascp snapper-keeper \
       -v Information \
       ./smoke.exe
-    signtool verify /pa /v ./smoke.exe
     ;;
   macos)
     cp target/release/snk-smoke-target ./smoke
