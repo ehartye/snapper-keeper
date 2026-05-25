@@ -88,7 +88,7 @@ fn main() {
         .plugin(snk_clipboard::init())
         .plugin(snk_ocr::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(snk_updater::init())
+        .plugin(snk_releaser::init())
         .invoke_handler(tauri::generate_handler![set_tray_theme])
         .setup(|app| {
             let capture_region = MenuItem::with_id(
@@ -192,7 +192,7 @@ fn main() {
                     "tray:check-update" => {
                         let handle = app.app_handle().clone();
                         tauri::async_runtime::spawn(async move {
-                            let _ = snk_updater::plugin::check_for_update(handle).await;
+                            let _ = snk_releaser::plugin::check_for_update(handle).await;
                         });
                     }
                     "tray:quit" => app.exit(0),
