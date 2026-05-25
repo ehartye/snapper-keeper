@@ -513,7 +513,9 @@ jobs:
         run: |
           EXE=$(find artifacts/signed -name '*-setup.exe' | head -1)
           WORK=$(mktemp -d)
-          echo "$TAURI_SIGNING_PRIVATE_KEY" | base64 -d > "$WORK/priv.key"
+          # -di: ignore CR/garbage that Git Bash on Windows can inject when
+          # reading GitHub Actions secrets from env.
+          echo "$TAURI_SIGNING_PRIVATE_KEY" | base64 -di > "$WORK/priv.key"
           echo "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" | minisign -S -s "$WORK/priv.key" \
             -m "$EXE" -x "$EXE.sig"
           rm -rf "$WORK"
