@@ -161,7 +161,9 @@ pub(crate) fn worker_step(
             match snk_library::clipboard::find_by_hash(db, &hash) {
                 Ok(Some(existing)) => {
                     let _ = snk_library::clipboard::bump_timestamp(db, &existing.id);
-                    StepResult::DedupedTo { existing_id: existing.id }
+                    StepResult::DedupedTo {
+                        existing_id: existing.id,
+                    }
                 }
                 _ => {
                     let new_item = NewClipboardItem {
@@ -195,7 +197,9 @@ pub(crate) fn worker_step(
             match snk_library::clipboard::find_by_hash(db, &hash) {
                 Ok(Some(existing)) => {
                     let _ = snk_library::clipboard::bump_timestamp(db, &existing.id);
-                    StepResult::DedupedTo { existing_id: existing.id }
+                    StepResult::DedupedTo {
+                        existing_id: existing.id,
+                    }
                 }
                 _ => {
                     let id = uuid::Uuid::now_v7();
@@ -263,7 +267,11 @@ mod tests {
 
         let items =
             snk_library::clipboard::list(&db, snk_library::ListClipboardQuery::default()).unwrap();
-        assert_eq!(items.len(), 0, "no row should be inserted on sensitive skip");
+        assert_eq!(
+            items.len(),
+            0,
+            "no row should be inserted on sensitive skip"
+        );
     }
 
     #[test]
@@ -293,7 +301,10 @@ mod tests {
             &FakeProbe { answer: false },
             Some(src.clone()),
         );
-        assert_eq!(result, StepResult::Skipped(SkipReason::AppBlocked(src.identifier)));
+        assert_eq!(
+            result,
+            StepResult::Skipped(SkipReason::AppBlocked(src.identifier))
+        );
         let items =
             snk_library::clipboard::list(&db, snk_library::ListClipboardQuery::default()).unwrap();
         assert_eq!(items.len(), 0);

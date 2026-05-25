@@ -179,14 +179,7 @@ pub mod windows {
         // OsProbe is a ZST — passing &OsProbe is free and avoids a Copy bound.
         let db = ctx.db.clone();
         let library_root = ctx.library_root.clone();
-        let result = worker_step(
-            event,
-            &mut ctx.state,
-            &db,
-            &library_root,
-            &OsProbe,
-            source,
-        );
+        let result = worker_step(event, &mut ctx.state, &db, &library_root, &OsProbe, source);
         match result {
             crate::watcher::StepResult::Skipped(reason) => {
                 debug!(?reason, "clipboard event skipped");

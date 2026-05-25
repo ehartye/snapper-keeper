@@ -38,10 +38,7 @@ fn macos_plain_text_is_not_sensitive() {
         let pasteboard: Retained<NSPasteboard> = NSPasteboard::generalPasteboard();
         let _ = pasteboard.clearContents();
         let value = NSString::from_str("hello world");
-        let _ = pasteboard.setString_forType(
-            &value,
-            &NSString::from_str("public.utf8-plain-text"),
-        );
+        let _ = pasteboard.setString_forType(&value, &NSString::from_str("public.utf8-plain-text"));
     }
 
     assert!(!snk_clipboard::sensitivity::is_sensitive());
@@ -54,12 +51,9 @@ fn windows_can_include_in_history_zero_marks_sensitive() {
     use windows::core::w;
     use windows::Win32::Foundation::HANDLE;
     use windows::Win32::System::DataExchange::{
-        CloseClipboard, EmptyClipboard, OpenClipboard, RegisterClipboardFormatW,
-        SetClipboardData,
+        CloseClipboard, EmptyClipboard, OpenClipboard, RegisterClipboardFormatW, SetClipboardData,
     };
-    use windows::Win32::System::Memory::{
-        GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE,
-    };
+    use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
 
     unsafe {
         let _ = OpenClipboard(None);
@@ -68,8 +62,7 @@ fn windows_can_include_in_history_zero_marks_sensitive() {
         // Write a dummy text payload first.
         let text = "hello\0";
         let bytes = text.as_bytes();
-        let handle =
-            GlobalAlloc(GMEM_MOVEABLE, bytes.len()).expect("GlobalAlloc text");
+        let handle = GlobalAlloc(GMEM_MOVEABLE, bytes.len()).expect("GlobalAlloc text");
         let ptr = GlobalLock(handle);
         std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr as *mut u8, bytes.len());
         let _ = GlobalUnlock(handle);
