@@ -24,25 +24,26 @@ export function Modal() {
 
   useEffect(() => {
     if (!modal) return;
+    const closeNow = () => setModal(null);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        close();
+        closeNow();
       } else if (e.key === 'Enter') {
         if (modal.kind === 'confirm') {
           e.preventDefault();
           modal.onConfirm();
-          close();
+          closeNow();
         } else if (modal.kind === 'alert') {
           e.preventDefault();
-          close();
+          closeNow();
         }
         // .custom: ignore Enter — caller's form owns it.
       }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [modal]);
+  }, [modal, setModal]);
 
   if (!modal) return null;
 

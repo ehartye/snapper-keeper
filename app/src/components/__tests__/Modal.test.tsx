@@ -134,7 +134,7 @@ describe('<Modal />', () => {
   });
 
   it('custom modals render the provided ReactNode and Enter does NOT auto-submit', async () => {
-    const onFormSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    const onFormSubmit = vi.fn((e) => e.preventDefault());
     render(
       <ModalProvider>
         <SetModalOnMount
