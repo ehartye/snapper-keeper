@@ -12,7 +12,10 @@ Specifically:
 - The application does not transmit your captures, clipboard contents, OCR
   text, or any usage data over the network.
 - All data — captures, clipboard history, OCR text, settings — is stored
-  locally on your device.
+  locally on your device. <!-- CLAIM: privacy-md/local-only-storage -->
+- Password-manager copies (clipboard content marked sensitive by the OS) are
+  filtered before they reach the local clipboard history. <!-- CLAIM: privacy-md/sensitive-clipboard -->
+
 
 The application makes ONE category of network request, and only in the
 GitHub Releases edition:
