@@ -23,10 +23,13 @@ set -euo pipefail
 WORK=$(mktemp -d)
 trap "rm -rf '$WORK'" EXIT
 
-# -i (--ignore-garbage) skips CR/whitespace that Git Bash on Windows can
-# inject when reading GitHub Actions secrets from env. Linux/macOS get the
-# clean base64 stream and ignore-garbage is a no-op for them.
-echo "$TAURI_SIGNING_PRIVATE_KEY" | base64 -di > "$WORK/priv.key"
+# Strip CR before decoding: Git Bash on Windows can inject CR characters
+# when surfacing GitHub Actions secret env vars, which makes plain
+# `base64 -d` fail with "invalid input". `tr -d '\r'` is portable across
+# GNU coreutils (Linux) and BSD base64 (macOS) — GNU has `-i` for
+# --ignore-garbage but BSD reuses `-i` for input-file, so we can't use
+# that flag portably.
+echo "$TAURI_SIGNING_PRIVATE_KEY" | tr -d '\r' | base64 -d > "$WORK/priv.key"
 echo "snapper-keeper-pubkey-drift-canary" > "$WORK/canary.txt"
 
 # Sign the canary with the secret-held private key.
@@ -35,7 +38,7 @@ echo "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" | minisign -S -s "$WORK/priv.key" \
   -m "$WORK/canary.txt" -x "$WORK/canary.sig" >/dev/null
 
 # Verify the canary with the embedded public key.
-jq -r .plugins.updater.pubkey app/src-tauri/tauri.conf.json | base64 -di > "$WORK/pub.key"
+jq -r .plugins.updater.pubkey app/src-tauri/tauri.conf.json | tr -d '\r' | base64 -d > "$WORK/pub.key"
 
 if ! minisign -V -p "$WORK/pub.key" -m "$WORK/canary.txt" -x "$WORK/canary.sig" >/dev/null 2>&1; then
   echo "::error file=app/src-tauri/tauri.conf.json,line=109::Pubkey drift: TAURI_SIGNING_PRIVATE_KEY does not match plugins.updater.pubkey. Rotate one to match the other before tagging."

@@ -297,7 +297,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           WORK=$(mktemp -d)
-          echo "$TAURI_SIGNING_PRIVATE_KEY" | base64 -d > "$WORK/priv.key"
+          # tr -d '\r' before base64 -d: portable defense against CR
+          # mangling (Git Bash on Windows surfaces secret env vars with
+          # spurious CRs). No-op on Linux/macOS.
+          echo "$TAURI_SIGNING_PRIVATE_KEY" | tr -d '\r' | base64 -d > "$WORK/priv.key"
           echo "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" | minisign -S -s "$WORK/priv.key" \
             -m "artifacts/signed/Snapper.Keeper_${{ env.ARCH }}.app.tar.gz" \
             -x "artifacts/signed/Snapper.Keeper_${{ env.ARCH }}.app.tar.gz.sig"
@@ -411,7 +414,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           WORK=$(mktemp -d)
-          echo "$TAURI_SIGNING_PRIVATE_KEY" | base64 -d > "$WORK/priv.key"
+          # tr -d '\r' before base64 -d: portable defense against CR
+          # mangling (Git Bash on Windows surfaces secret env vars with
+          # spurious CRs). No-op on Linux/macOS.
+          echo "$TAURI_SIGNING_PRIVATE_KEY" | tr -d '\r' | base64 -d > "$WORK/priv.key"
           echo "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" | minisign -S -s "$WORK/priv.key" \
             -m "artifacts/signed/Snapper.Keeper_${{ env.ARCH }}.app.tar.gz" \
             -x "artifacts/signed/Snapper.Keeper_${{ env.ARCH }}.app.tar.gz.sig"
@@ -513,9 +519,11 @@ jobs:
         run: |
           EXE=$(find artifacts/signed -name '*-setup.exe' | head -1)
           WORK=$(mktemp -d)
-          # -di: ignore CR/garbage that Git Bash on Windows can inject when
-          # reading GitHub Actions secrets from env.
-          echo "$TAURI_SIGNING_PRIVATE_KEY" | base64 -di > "$WORK/priv.key"
+          # tr -d '\r' strips CR that Git Bash on Windows can inject when
+          # reading GitHub Actions secrets from env. Portable across GNU
+          # base64 (Linux) and BSD base64 (macOS) — can't use `-i` /
+          # --ignore-garbage since BSD reuses `-i` for input-file.
+          echo "$TAURI_SIGNING_PRIVATE_KEY" | tr -d '\r' | base64 -d > "$WORK/priv.key"
           echo "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" | minisign -S -s "$WORK/priv.key" \
             -m "$EXE" -x "$EXE.sig"
           rm -rf "$WORK"
