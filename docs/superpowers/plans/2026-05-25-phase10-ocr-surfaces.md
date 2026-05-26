@@ -1129,6 +1129,10 @@ pub mod error;
 pub mod plugin;
 pub mod queue;
 
+// Sidecar module kept (private) until T9 rewrites queue.rs and T10 rewrites plugin.rs.
+// Both still reference crate::sidecar::* internally. Full deletion happens in T13.
+mod sidecar;
+
 #[cfg(target_os = "macos")]
 pub mod vision;
 
@@ -1140,7 +1144,7 @@ pub use error::OcrError;
 pub use plugin::init;
 ```
 
-(Note: `sidecar.rs` is NOT re-exported. It still exists on disk for now — deletion is T13. This task only stops referencing it.)
+Plan amendment 2026-05-26: `sidecar.rs` is downgraded from `pub mod sidecar;` to a private `mod sidecar;` here (rather than removed entirely) because `queue.rs` and `plugin.rs` still reference `crate::sidecar::*` until T9 rewrites the queue and T10 rewrites the plugin. T13 deletes both the file and this `mod` declaration together. Without this private `mod` line, `cargo build -p snk-ocr` fails on Step 3. The two-line comment is a worthwhile exception to the "no comments" rule because the dead-walking transition is non-obvious.
 
 **Step 3: Run tests**
 
@@ -2292,27 +2296,34 @@ git commit -m "chore(cleanse): remove Tesseract references from README, CLAUDE.m
 
 ---
 
-### Task 17: Tesseract cleanse — `SNK_TESSERACT_PATH` env var sweep
+### Task 17: Tesseract cleanse — `SNK_TESSERACT_PATH` sweep + `docs/release-signing.md`
 
-**Files:** any file still referencing `SNK_TESSERACT_PATH`.
+**Files:**
+- Any file still referencing `SNK_TESSERACT_PATH` (sweep below).
+- `docs/release-signing.md` — delete the entire `## Tesseract bundling` section AND the "macOS bundles are not yet self-contained for OCR" paragraph that follows from it. Plan amendment 2026-05-26: winocr-pc's pre-work `git grep` found this section is not covered by T13/T14/T15/T16 and would fail the T18 verification predicate.
 
 **Step 1: Sweep**
 
 ```bash
 git grep -n SNK_TESSERACT_PATH
+git grep -n -i tesseract -- docs/release-signing.md
 ```
 
-Expected: zero results. If any remain (likely in inline doc comments missed elsewhere), delete those references.
+Expected after this task: zero results from both. If any other `SNK_TESSERACT_PATH` references remain (likely in inline doc comments missed elsewhere), delete those too.
 
-**Step 2: Commit (if anything changed)**
+**Step 2: Delete the release-signing Tesseract section**
+
+In `docs/release-signing.md`, remove the entire `## Tesseract bundling` H2 section (multi-paragraph: choco install, sidecar resolve order, macOS dylib `install_name_tool` caveat) AND the immediately-following "macOS bundles are not yet self-contained for OCR" paragraph. The exact line range varies; use `git grep -n` to find boundaries.
+
+**Step 3: Commit**
 
 ```bash
-git add <files-touched>
+git add docs/release-signing.md <any-other-files-touched>
 git diff --cached
-git commit -m "chore(cleanse): purge final SNK_TESSERACT_PATH references"
+git commit -m "chore(cleanse): purge Tesseract from release-signing docs + final env-var sweep"
 ```
 
-If nothing changed, skip the commit.
+If nothing changed (no SNK_TESSERACT_PATH refs AND no release-signing Tesseract section), skip the commit — but verify the predicate `git grep -i tesseract -- ':!docs/superpowers/**'` is clean before declaring no-op.
 
 ---
 
