@@ -2333,7 +2333,7 @@ Line 5 (`**Dev environment setup (toolchain versions, Tesseract install, per-OS 
 
 Also: update the "Phase status" table at the bottom to add a Phase 10 row, e.g.:
 
-| 10 | OCR surfaces: Vision + WinOcr + PII redact + Text Actions; full Tesseract cleanse | In progress |
+| 10 | OCR surfaces: Vision + WinOcr + PII redact + Text Actions; full bundled-engine removal | In progress |
 
 (Change to "Done" when the parent branch merges.)
 
@@ -4373,7 +4373,7 @@ gh issue close 40 --reason completed -c "Obsoleted by Phase 10 — in-process OC
 
 The phase status table entry added in T16 should now flip to "Done":
 
-| 10 | OCR surfaces: Vision + WinOcr + PII redact + Text Actions; full Tesseract cleanse | Done |
+| 10 | OCR surfaces: Vision + WinOcr + PII redact + Text Actions; full bundled-engine removal | Done |
 
 Commit this directly to `main` as a small docs follow-up, or fold into the parent PR before merge.
 
