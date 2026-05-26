@@ -3,14 +3,14 @@
 use std::path::Path;
 
 use tracing::debug;
+use windows::core::HSTRING;
 use windows::Globalization::Language;
 use windows::Graphics::Imaging::BitmapDecoder;
 use windows::Media::Ocr::OcrEngine;
 use windows::Storage::{FileAccessMode, StorageFile};
-use windows::core::HSTRING;
 
-use crate::OcrError;
 use crate::backend::{BBox, OcrBackend, OcrResult, OcrWord};
+use crate::OcrError;
 
 pub struct WinOcrBackend {
     engine: OcrEngine,
@@ -19,12 +19,11 @@ pub struct WinOcrBackend {
 impl WinOcrBackend {
     pub fn new() -> Result<Self, OcrError> {
         let engine = OcrEngine::TryCreateFromUserProfileLanguages().or_else(|_| {
-            let en =
-                Language::CreateLanguage(&HSTRING::from("en-US")).map_err(|e| {
-                    OcrError::NoRecognizerLanguage {
-                        detail: format!("CreateLanguage(en-US): {e}"),
-                    }
-                })?;
+            let en = Language::CreateLanguage(&HSTRING::from("en-US")).map_err(|e| {
+                OcrError::NoRecognizerLanguage {
+                    detail: format!("CreateLanguage(en-US): {e}"),
+                }
+            })?;
             OcrEngine::TryCreateFromLanguage(&en).map_err(|e| OcrError::NoRecognizerLanguage {
                 detail: format!("TryCreateFromLanguage(en-US): {e}"),
             })

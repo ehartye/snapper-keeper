@@ -1,5 +1,12 @@
 //! Integration tests for snk-ocr — exercises the active platform backend.
 //! Vision on macOS, WinOcr on Windows. No subprocess.
+//!
+//! Gated to Mac+Windows at the file level: on Linux there's no platform
+//! OcrBackend, so registering #[test] fns that would call a panic!()
+//! make_backend() arm causes the Linux CI runner to fail. With the file
+//! gate, the tests don't even compile on Linux and cargo skips them
+//! cleanly (the binary still builds; it just has zero tests).
+#![cfg(any(target_os = "macos", target_os = "windows"))]
 
 use std::path::PathBuf;
 
@@ -23,11 +30,6 @@ fn make_backend() -> Box<dyn OcrBackend> {
     }
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-fn make_backend() -> Box<dyn OcrBackend> {
-    panic!("snk-ocr integration tests require macOS or Windows");
-}
-
 fn fixture(name: &str) -> PathBuf {
     let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     p.push("tests");
@@ -39,9 +41,7 @@ fn fixture(name: &str) -> PathBuf {
 #[test]
 fn recognize_hello_world_returns_text_and_words() {
     let b = make_backend();
-    let r = b
-        .recognize(&fixture("hello-world.png"))
-        .expect("recognize");
+    let r = b.recognize(&fixture("hello-world.png")).expect("recognize");
     let text_lower = r.text.to_lowercase();
     assert!(
         text_lower.contains("hello"),
