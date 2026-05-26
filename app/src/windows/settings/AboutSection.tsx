@@ -21,7 +21,7 @@ import { useModal } from '../../components/Modal';
 const PRIVACY_URL =
   'https://github.com/ehartye/snapper-keeper/blob/main/PRIVACY.md';
 const LICENSE_URL =
-  'https://github.com/ehartye/snapper-keeper/blob/main/LICENSE';
+  'https://github.com/ehartye/snapper-keeper/blob/main/LICENSE.md';
 
 function formatStatus(s: UpdateStatus): string {
   switch (s.kind) {
