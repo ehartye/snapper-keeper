@@ -8,6 +8,7 @@ const V002: &str = include_str!("../migrations/V002__clipboard_items.sql");
 const V003: &str = include_str!("../migrations/V003__ocr_fts.sql");
 const V004: &str = include_str!("../migrations/V004__annotation_state.sql");
 const V005: &str = include_str!("../migrations/V005__drop_clipboard_sensitive.sql");
+const V006: &str = include_str!("../migrations/V006__phase10_ocr_bounds_and_pii.sql");
 
 pub fn migrations() -> Migrations<'static> {
     Migrations::new(vec![
@@ -16,6 +17,7 @@ pub fn migrations() -> Migrations<'static> {
         M::up(V003),
         M::up(V004),
         M::up(V005),
+        M::up(V006),
     ])
 }
 
@@ -24,7 +26,7 @@ pub fn migrate(conn: &mut Connection) -> Result<()> {
         .to_latest(conn)
         .map_err(|e| crate::LibraryError::Migration {
             from: 0,
-            to: 5,
+            to: 6,
             recoverable: e.to_string().contains("Backup"),
         })?;
     Ok(())
@@ -143,6 +145,61 @@ mod tests {
             !column_names.iter().any(|c| c == "sensitive"),
             "sensitive column should be dropped by V005; got columns {column_names:?}"
         );
+    }
+
+    #[test]
+    fn v006_adds_words_json_and_engine_to_ocr_text() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate(&mut conn).expect("apply migrations");
+
+        let cols: Vec<String> = conn
+            .prepare("PRAGMA table_info(ocr_text)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert!(
+            cols.contains(&"words_json".into()),
+            "words_json column missing; got {cols:?}"
+        );
+        assert!(
+            cols.contains(&"engine".into()),
+            "engine column missing; got {cols:?}"
+        );
+    }
+
+    #[test]
+    fn v006_creates_pii_spans_table_with_indexes() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate(&mut conn).expect("apply migrations");
+
+        let cnt: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='pii_spans'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(cnt, 1);
+
+        let idx_full: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_pii_spans_capture'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(idx_full, 1);
+
+        let idx_pending: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_pii_spans_pending'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(idx_pending, 1);
     }
 
     #[test]

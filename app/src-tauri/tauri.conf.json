@@ -116,8 +116,8 @@
     "targets": "all",
     "createUpdaterArtifacts": true,
     "icon": ["icons/icon.ico", "icons/icon.png"],
-    "resources": {
-      "resources/tesseract/**/*": "tesseract/"
+    "macOS": {
+      "minimumSystemVersion": "14.0"
     },
     "windows": {
       "signCommand": "sign code artifact-signing -ase https://eus.codesigning.azure.net -asa HartyeTech -ascp snapper-keeper %1"

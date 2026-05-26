@@ -315,7 +315,7 @@ This doc *itself* is plan-source-of-truth. If you hit a release-pipeline behavio
 
 | Cluster PRs (release pipeline) | Scope |
 |---|---|
-| #90 | SHA-pin actions + Tesseract + replace softprops |
+| #90 | SHA-pin actions + sidecar bundling + replace softprops |
 | #92 | Build/sign split + env gate + smoke vehicle |
 | #98 | Nightly audit + per-release SBOM (cdxgen) |
 | #109 | vite/esbuild advisory bumps |
