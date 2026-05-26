@@ -175,7 +175,24 @@ impl OcrBackend for WinOcrBackend {
 }
 
 fn win_build_number() -> Option<String> {
-    std::env::var("OS_BUILD").ok()
+    // Followup to plan §T8: the plan-literal `std::env::var("OS_BUILD")` path was
+    // wrong — Windows doesn't set `OS_BUILD`, so engine_version() always read
+    // "unknown". RtlGetVersion is the authoritative source (ntdll, not subject
+    // to the GetVersionEx app-compat lying that Microsoft bolted on in 8.1+).
+    // Returns NTSTATUS == 0 (STATUS_SUCCESS) on success.
+    use windows::Wdk::System::SystemServices::RtlGetVersion;
+    use windows::Win32::System::SystemInformation::OSVERSIONINFOW;
+
+    let mut info = OSVERSIONINFOW {
+        dwOSVersionInfoSize: std::mem::size_of::<OSVERSIONINFOW>() as u32,
+        ..Default::default()
+    };
+    let status = unsafe { RtlGetVersion(&mut info) };
+    if status.0 == 0 {
+        Some(info.dwBuildNumber.to_string())
+    } else {
+        None
+    }
 }
 
 #[cfg(all(test, target_os = "windows"))]
@@ -186,7 +203,15 @@ mod tests {
         match WinOcrBackend::new() {
             Ok(b) => {
                 assert_eq!(b.name(), "Windows.Media.Ocr");
-                assert!(b.engine_version().starts_with("Windows.Media.Ocr ("));
+                let v = b.engine_version();
+                assert!(v.starts_with("Windows.Media.Ocr ("));
+                // Confirm RtlGetVersion succeeded — `unknown` is the documented
+                // fall-back when the syscall returns non-zero NTSTATUS, which
+                // shouldn't happen on a normal Windows host.
+                assert!(
+                    !v.contains("unknown"),
+                    "expected real build number from RtlGetVersion, got: {v}"
+                );
             }
             Err(OcrError::NoRecognizerLanguage { detail }) => {
                 eprintln!("test machine has no recognizer language available: {detail}");

@@ -51,6 +51,13 @@ windows = { version = "0.62", features = [
     "Storage",
     "Storage_Streams",
     "Foundation",
+    # `engine_version()` reads the real OS build number via the `RtlGetVersion`
+    # ntdll syscall. The plan-literal `OS_BUILD` env-var path was wrong (Windows
+    # doesn't set that variable); this is the followup fix per spec-auditor's
+    # plan-level flag on T8.
+    "Wdk_System_SystemServices",
+    "Win32_System_SystemInformation",
+    "Win32_Foundation",
 ] }
 
 [dev-dependencies]
