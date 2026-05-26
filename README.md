@@ -75,6 +75,8 @@ Produce an unsigned installer locally for smoke-testing what end users will rece
 pnpm build:local
 ```
 
+> **Windows users:** Run from **Git Bash** (or any bash shell) — the underlying script is bash; PowerShell and `cmd.exe` will fail to invoke it. Git Bash ships with [Git for Windows](https://git-scm.com/download/win).
+
 On macOS this produces a `.app` + `.dmg` for your machine's architecture; on Windows it produces an NSIS `*-setup.exe`. The artifact path + SHA-256 are printed when the build completes.
 
 **Differences from production:**
