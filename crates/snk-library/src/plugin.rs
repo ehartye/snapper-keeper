@@ -52,17 +52,16 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             let db = match Db::open(&db_path) {
                 Ok(db) => db,
                 Err(crate::LibraryError::Migration {
-                    recoverable: true, ..
+                    recoverable: true,
+                    backup_path,
+                    ..
                 }) => {
                     // The backup has been restored; notify the frontend and
                     // open the DB at its prior (restored) schema version so
                     // the app can start and show the user an error modal.
-                    let backup_path = crate::migrate::latest_backup_path(&db_path)
-                        .map(|p| p.display().to_string())
-                        .unwrap_or_default();
                     let _ = app.emit(
                         "library:migration-failed",
-                        MigrationFailedPayload { backup_path },
+                        MigrationFailedPayload { backup_path: backup_path.unwrap_or_default() },
                     );
                     Db::open_no_migrate(&db_path)
                         .map_err(|e| format!("reopen db after migration restore: {e}"))?

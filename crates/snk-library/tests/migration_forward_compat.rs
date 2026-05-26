@@ -55,9 +55,9 @@ fn assert_at_v6(conn: &Connection) {
         .current_version(conn)
         .expect("current_version");
     assert_eq!(
-        format!("{v:?}"),
-        "Inside(6)",
-        "expected schema version 6 after migration"
+        usize::from(&v),
+        6usize,
+        "expected schema version 6 after migration, got {v:?}"
     );
 }
 
@@ -207,15 +207,13 @@ fn backup_pruning_keeps_at_most_five() {
     let backups = dir.path().join("backups");
     std::fs::create_dir_all(&backups).unwrap();
 
-    // Seed 7 fake backup files.
+    // Seed 7 fake backup files with ISO8601 timestamps that sort correctly lexicographically.
     for i in 0..7u8 {
         std::fs::write(
-            backups.join(format!("pre-v{i}-2025010{i}T000000Z.db")),
+            backups.join(format!("pre-v{i}-2025010{i}T000000000000000Z.db")),
             &[i],
         )
         .unwrap();
-        // Tiny sleep to ensure distinct mtimes on filesystems with 1-second resolution.
-        std::thread::sleep(std::time::Duration::from_millis(10));
     }
 
     // Run a migration from a v1 fixture through the full path so prune_backups fires.

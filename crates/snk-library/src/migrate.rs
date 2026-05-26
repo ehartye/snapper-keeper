@@ -39,9 +39,11 @@ fn create_backup(conn: &Connection, db_path: &Path, prior_version: u32) -> Resul
 
     conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")?;
 
-    let ts = Utc::now().format("%Y%m%dT%H%M%SZ");
+    // Sub-second precision eliminates timestamp collision risk for concurrent test runs.
+    let ts = Utc::now().format("%Y%m%dT%H%M%S%.9fZ");
     let backup_path = dir.join(format!("pre-v{prior_version}-{ts}.db"));
-    std::fs::copy(db_path, &backup_path).map_err(|e| crate::LibraryError::io(db_path, e))?;
+    // Use backup_path (not db_path) for the error: the failure is most likely at the destination.
+    std::fs::copy(db_path, &backup_path).map_err(|e| crate::LibraryError::io(&backup_path, e))?;
 
     Ok(backup_path)
 }
@@ -50,61 +52,35 @@ fn create_backup(conn: &Connection, db_path: &Path, prior_version: u32) -> Resul
 fn prune_backups(backups_dir: &Path) {
     const MAX_BACKUPS: usize = 5;
 
-    let mut entries: Vec<(std::time::SystemTime, PathBuf)> = std::fs::read_dir(backups_dir)
+    let mut entries: Vec<PathBuf> = std::fs::read_dir(backups_dir)
         .into_iter()
         .flatten()
         .filter_map(|e| e.ok())
         .filter(|e| e.path().extension().is_some_and(|ext| ext == "db"))
-        .filter_map(|e| {
-            let mt = e.metadata().ok()?.modified().ok()?;
-            Some((mt, e.path()))
-        })
+        .map(|e| e.path())
         .collect();
 
-    // Sort newest-first; drop anything beyond the limit.
-    entries.sort_by_key(|e| std::cmp::Reverse(e.0));
-    for (_, path) in entries.into_iter().skip(MAX_BACKUPS) {
+    // Sort newest-first by filename; ISO8601 timestamps are lexicographically ordered,
+    // making this more deterministic than mtime (which has 1-2s resolution on some FSes).
+    entries.sort_by(|a, b| b.file_name().cmp(&a.file_name()));
+    for path in entries.into_iter().skip(MAX_BACKUPS) {
         let _ = std::fs::remove_file(path);
     }
 }
 
-/// Find the most-recently modified `.db` file in `backups/`, if any.
-pub(crate) fn latest_backup_path(db_path: &Path) -> Option<PathBuf> {
-    let dir = backups_dir(db_path)?;
-    let mut entries: Vec<(std::time::SystemTime, PathBuf)> = std::fs::read_dir(&dir)
-        .ok()?
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().is_some_and(|ext| ext == "db"))
-        .filter_map(|e| {
-            let mt = e.metadata().ok()?.modified().ok()?;
-            Some((mt, e.path()))
-        })
-        .collect();
-    entries.sort_by_key(|e| std::cmp::Reverse(e.0));
-    entries.into_iter().next().map(|(_, p)| p)
-}
-
-/// Run all pending migrations.
+/// Internal implementation. Accepts a custom Migrations set so tests can inject failures.
 ///
-/// When `db_path` is `Some`:
-/// - Checkpoints the WAL and creates a timestamped backup in `backups/` before
-///   applying any pending migrations.
-/// - On success, prunes the backup directory to the 5 most-recent files.
-/// - On failure, restores the backup and returns a recoverable error.
-///
-/// When `db_path` is `None` (e.g. in-memory or test connections), the backup
-/// step is skipped.
-pub fn migrate(conn: &mut Connection, db_path: Option<&Path>) -> Result<()> {
-    let prior = migrations()
-        .current_version(conn)
-        .unwrap_or(SchemaVersion::NoneSet);
+/// Does NOT perform restore on failure — that is the caller's responsibility
+/// (`Db::open`) so the connection can be closed before the file is replaced.
+fn migrate_inner(conn: &mut Connection, db_path: Option<&Path>, m: &Migrations<'static>) -> Result<()> {
+    let prior = m.current_version(conn).unwrap_or(SchemaVersion::NoneSet);
     let prior_v = schema_version_as_u32(&prior);
     let target_v = MIGRATION_STRS.len() as u32;
 
     // Nothing to do if already at the latest version.
     let needs_migration = prior_v < target_v;
 
-    let backup_path: Option<PathBuf> = if needs_migration {
+    let backup_path_opt: Option<PathBuf> = if needs_migration {
         if let Some(path) = db_path {
             if path.exists() {
                 match create_backup(conn, path, prior_v) {
@@ -124,37 +100,52 @@ pub fn migrate(conn: &mut Connection, db_path: Option<&Path>) -> Result<()> {
         None
     };
 
-    let result = migrations()
-        .to_latest(conn)
-        .map_err(|_| crate::LibraryError::Migration {
-            from: prior_v,
-            to: target_v,
-            recoverable: false,
-        });
+    let result = m.to_latest(conn).map_err(|e| crate::LibraryError::Migration {
+        from: prior_v,
+        to: target_v,
+        recoverable: false,
+        backup_path: backup_path_opt.as_ref().map(|p| p.display().to_string()),
+        detail: e.to_string(),
+    });
 
     match result {
         Ok(()) => {
-            if let Some(ref backup) = backup_path {
+            if let Some(ref backup) = backup_path_opt {
                 if let Some(dir) = backup.parent() {
                     prune_backups(dir);
                 }
             }
             Ok(())
         }
-        Err(_) => {
-            // Attempt to restore the backup so the user's data is not lost.
-            let recoverable = if let (Some(path), Some(ref backup)) = (db_path, &backup_path) {
-                std::fs::copy(backup, path).is_ok()
-            } else {
-                false
-            };
-            Err(crate::LibraryError::Migration {
-                from: prior_v,
-                to: target_v,
-                recoverable,
-            })
-        }
+        Err(e) => Err(e),
     }
+}
+
+/// Run all pending migrations.
+///
+/// When `db_path` is `Some`:
+/// - Checkpoints the WAL and creates a timestamped backup in `backups/` before
+///   applying any pending migrations.
+/// - On success, prunes the backup directory to the 5 most-recent files.
+/// - On failure, returns the error with `backup_path` set. The caller is
+///   responsible for closing the connection and restoring the backup.
+///
+/// When `db_path` is `None` (e.g. in-memory or test connections), the backup
+/// step is skipped.
+pub fn migrate(conn: &mut Connection, db_path: Option<&Path>) -> Result<()> {
+    let m = migrations();
+    migrate_inner(conn, db_path, &m)
+}
+
+/// Test-only: run migrations using a custom `Migrations` set.
+/// Used by `Db::open_with_custom_migrations` to inject deliberate failures.
+#[cfg(test)]
+pub(crate) fn migrate_with(
+    conn: &mut Connection,
+    db_path: Option<&Path>,
+    m: &Migrations<'static>,
+) -> Result<()> {
+    migrate_inner(conn, db_path, m)
 }
 
 #[cfg(test)]
@@ -353,5 +344,41 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM clipboard_items", [], |row| row.get(0))
             .unwrap();
         assert_eq!(surviving, 2);
+    }
+
+    #[test]
+    fn migration_failure_creates_backup_with_path_in_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("test.db");
+
+        // Create a minimal v1 DB (one table, user_version = 1).
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute_batch("CREATE TABLE t (id INTEGER PRIMARY KEY)").unwrap();
+            conn.pragma_update(None, "user_version", 1u32).unwrap();
+        }
+
+        // Migrations: step 1 (already applied), step 2 (broken SQL).
+        let broken = Migrations::new(vec![
+            M::up("CREATE TABLE t (id INTEGER PRIMARY KEY)"),
+            M::up("THIS IS NOT VALID SQL"),
+        ]);
+
+        let mut conn = Connection::open(&db_path).unwrap();
+        let err = migrate_with(&mut conn, Some(&db_path), &broken)
+            .expect_err("broken migration must fail");
+
+        match err {
+            crate::LibraryError::Migration { backup_path, detail, recoverable, .. } => {
+                assert!(!recoverable, "migrate_with does not restore; restore is Db::open's job");
+                assert!(backup_path.is_some(), "backup_path must be set in error");
+                assert!(!detail.is_empty(), "detail must contain the rusqlite_migration error");
+                let bp = backup_path.unwrap();
+                assert!(bp.contains("pre-v1-"), "backup name must encode prior version; got {bp}");
+                // Backup file must exist on disk.
+                assert!(std::path::Path::new(&bp).exists(), "backup file must exist at {bp}");
+            }
+            other => panic!("expected Migration error, got {other:?}"),
+        }
     }
 }

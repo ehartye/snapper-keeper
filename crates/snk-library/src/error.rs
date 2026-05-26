@@ -17,6 +17,10 @@ pub enum LibraryError {
         from: u32,
         to: u32,
         recoverable: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        backup_path: Option<String>,
+        #[serde(skip)]
+        detail: String,
     },
 
     #[error("not found: {what}")]
@@ -95,6 +99,8 @@ mod tests {
             from: 1,
             to: 2,
             recoverable: true,
+            backup_path: None,
+            detail: String::new(),
         };
         assert!(mig.to_string().contains("1"));
         assert!(mig.to_string().contains("2"));
