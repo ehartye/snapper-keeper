@@ -96,19 +96,27 @@ impl OcrBackend for VisionBackend {
                 text_lines.push(line_text.clone());
 
                 let line_u32 = line_idx as u32;
-                let candidate_str = candidate.string();
-                let total_len = candidate_str.len();
-                let mut byte_pos: usize = 0;
+                let mut search_start: usize = 0;
                 for word in line_text.split_whitespace() {
-                    let word_len = word.len();
-                    let range = NSRange {
-                        location: byte_pos,
-                        length: word_len,
+                    let word_byte_start = match line_text[search_start..].find(word) {
+                        Some(off) => search_start + off,
+                        None => {
+                            warn!("vision word '{word}' not found in line — skipping");
+                            continue;
+                        }
                     };
-                    if byte_pos + word_len > total_len {
-                        warn!("vision word range out of bounds; skipping");
-                        break;
-                    }
+                    let word_byte_end = word_byte_start + word.len();
+                    search_start = word_byte_end;
+
+                    // NSRange uses UTF-16 code units (NSString semantics), not Rust UTF-8 bytes.
+                    // Convert byte offsets to UTF-16 unit counts so non-ASCII text aligns.
+                    let utf16_location: usize = line_text[..word_byte_start].encode_utf16().count();
+                    let utf16_length: usize = word.encode_utf16().count();
+                    let range = NSRange {
+                        location: utf16_location,
+                        length: utf16_length,
+                    };
+
                     match candidate.boundingBoxForRange_error(range) {
                         Ok(rect_obs) => {
                             let r = rect_obs.boundingBox();
@@ -131,7 +139,6 @@ impl OcrBackend for VisionBackend {
                             debug!("boundingBoxForRange failed for '{word}': {e:?}");
                         }
                     }
-                    byte_pos += word_len + 1;
                 }
             }
 
