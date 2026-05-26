@@ -169,38 +169,38 @@ describe('<SettingsWindow />', () => {
         value: false,
       });
     });
+  });
 
-    it('toggling update checks persists the new boolean', async () => {
-      mockedInvoke.mockImplementation((cmd: string, args: unknown) => {
-        if (cmd === 'plugin:snk-library|get_setting') {
-          const key = (args as { key: string }).key;
-          if (key === 'updater.enabled') return Promise.resolve(true);
-          return Promise.resolve(null);
-        }
-        if (cmd === 'plugin:snk-updater|get_update_status')
-          return Promise.resolve({ kind: 'idle' });
-        if (cmd === 'plugin:snk-updater|get_last_check_at')
-          return Promise.resolve(null);
-        return Promise.resolve(undefined);
-      });
-      renderWithQuery(
-        <ModalProvider>
-          <SettingsWindow />
-        </ModalProvider>,
-      );
-      await waitFor(() => expect(mockedInvoke).toHaveBeenCalled());
+  it('toggling update checks persists the new boolean', async () => {
+    mockedInvoke.mockImplementation((cmd: string, args: unknown) => {
+      if (cmd === 'plugin:snk-library|get_setting') {
+        const key = (args as { key: string }).key;
+        if (key === 'updater.enabled') return Promise.resolve(true);
+        return Promise.resolve(null);
+      }
+      if (cmd === 'plugin:snk-updater|get_update_status')
+        return Promise.resolve({ kind: 'idle' });
+      if (cmd === 'plugin:snk-updater|get_last_check_at')
+        return Promise.resolve(null);
+      return Promise.resolve(undefined);
+    });
+    renderWithQuery(
+      <ModalProvider>
+        <SettingsWindow />
+      </ModalProvider>,
+    );
+    await waitFor(() => expect(mockedInvoke).toHaveBeenCalled());
 
-      const rowLabel = await screen.findByText(/Enable update checks/i);
-      const row = rowLabel.closest('div.flex')!;
-      const toggle = row.querySelector('button');
-      expect(toggle).toBeTruthy();
+    const rowLabel = await screen.findByText(/Enable update checks/i);
+    const row = rowLabel.closest('div.flex')!;
+    const toggle = row.querySelector('button');
+    expect(toggle).toBeTruthy();
 
-      await act(async () => fireEvent.click(toggle!));
-      await waitFor(() => {
-        expect(invoke).toHaveBeenCalledWith('plugin:snk-library|set_setting', {
-          key: 'updater.enabled',
-          value: false,
-        });
+    await act(async () => fireEvent.click(toggle!));
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('plugin:snk-library|set_setting', {
+        key: 'updater.enabled',
+        value: false,
       });
     });
   });

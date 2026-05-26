@@ -213,8 +213,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             restart_app
         ])
         .setup(|app, _api| {
-            let initial_status = suppressed_by_policy_status(&app.app_handle())
-                .unwrap_or(UpdateStatus::Idle);
+            let initial_status =
+                suppressed_by_policy_status(&app.app_handle()).unwrap_or(UpdateStatus::Idle);
             app.manage(UpdaterState::with_status(initial_status));
 
             let handle = app.app_handle().clone();

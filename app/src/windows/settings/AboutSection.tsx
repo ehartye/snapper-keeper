@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getVersion } from '@tauri-apps/api/app';
 import { appDataDir, appLogDir } from '@tauri-apps/api/path';
@@ -109,11 +109,17 @@ export function AboutSection() {
     };
   }, [storeEdition]);
 
-  const effectiveStatus: UpdateStatus = storeEdition
-    ? { kind: 'suppressed-by-policy', reason: 'store-edition' }
-    : !updaterEnabled
-      ? { kind: 'suppressed-by-policy', reason: 'user-disabled' }
-      : status;
+  const effectiveStatus = useMemo<UpdateStatus>(() => {
+    if (storeEdition) {
+      return { kind: 'suppressed-by-policy', reason: 'store-edition' };
+    }
+
+    if (!updaterEnabled) {
+      return { kind: 'suppressed-by-policy', reason: 'user-disabled' };
+    }
+
+    return status;
+  }, [status, storeEdition, updaterEnabled]);
 
   useEffect(() => {
     if (effectiveStatus.kind === 'ready' && !restartPrompted) {
