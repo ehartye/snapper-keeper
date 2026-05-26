@@ -10,6 +10,7 @@ pub mod foreground;
 pub mod grab;
 pub mod orchestrate;
 pub mod plugin;
+pub mod window_hider;
 
 pub use error::{CaptureError, Result};
 pub use foreground::{get_foreground_info, ForegroundInfo};
