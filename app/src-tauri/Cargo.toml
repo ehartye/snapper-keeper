@@ -14,6 +14,7 @@ tauri = { version = "2", features = ["tray-icon", "protocol-asset"] }
 tauri-plugin-global-shortcut.workspace = true
 tauri-plugin-updater.workspace = true
 tauri-plugin-autostart.workspace = true
+tauri-plugin-opener.workspace = true
 snk-library = { path = "../../crates/snk-library" }
 snk-hotkeys = { path = "../../crates/snk-hotkeys" }
 snk-capture = { path = "../../crates/snk-capture" }

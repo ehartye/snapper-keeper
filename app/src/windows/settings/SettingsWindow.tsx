@@ -11,6 +11,7 @@ import { getSetting, setSetting } from '@snk/library';
 
 import { queryKeys } from '../../lib/queryKeys';
 import { THEMES, THEME_FAMILIES, familyOf, useTheme, type ThemeId } from '../../lib/theme';
+import { AboutSection } from './AboutSection';
 import { ClipboardSettings } from './ClipboardSettings';
 import { SettingRow } from '../../components/SettingRow';
 import { SettingsSection } from '../../components/SettingsSection';
@@ -296,6 +297,8 @@ export function SettingsWindow() {
             <Toggle value={autostart} onChange={setAutostart} />
           </SettingRow>
         </SettingsSection>
+
+        <AboutSection />
       </div>
     </main>
   );

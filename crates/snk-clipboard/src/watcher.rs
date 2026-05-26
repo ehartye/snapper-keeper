@@ -73,7 +73,6 @@ pub fn start_watcher(db: Arc<Db>, library_root: std::path::PathBuf) {
     #[cfg(target_os = "windows")]
     {
         crate::platform_watcher::windows::start(db, library_root);
-        return;
     }
 
     #[cfg(not(target_os = "windows"))]

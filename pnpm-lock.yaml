@@ -98,6 +98,9 @@ importers:
       '@snk/library':
         specifier: workspace:*
         version: link:../packages/snk-library
+      '@snk/updater':
+        specifier: workspace:*
+        version: link:../packages/snk-updater
       '@tanstack/react-query':
         specifier: ^5.40.0
         version: 5.100.11(react@18.3.1)
@@ -110,6 +113,9 @@ importers:
       '@tauri-apps/plugin-global-shortcut':
         specifier: ^2.0.0
         version: 2.3.1
+      '@tauri-apps/plugin-opener':
+        specifier: ^2.0.0
+        version: 2.5.4
       konva:
         specifier: ^10.3.0
         version: 10.3.0
@@ -230,22 +236,6 @@ importers:
         version: 3.2.4(@types/node@20.19.41)(happy-dom@20.9.0)(jiti@1.21.7)
 
   packages/snk-library:
-    dependencies:
-      '@tauri-apps/api':
-        specifier: ^2.0.0
-        version: 2.11.0
-    devDependencies:
-      '@vitest/coverage-v8':
-        specifier: ^3.2.4
-        version: 3.2.4(vitest@3.2.4(@types/node@20.19.41)(happy-dom@20.9.0)(jiti@1.21.7))
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.41)(happy-dom@20.9.0)(jiti@1.21.7)
-
-  packages/snk-ocr:
     dependencies:
       '@tauri-apps/api':
         specifier: ^2.0.0
@@ -895,6 +885,9 @@ packages:
 
   '@tauri-apps/plugin-global-shortcut@2.3.1':
     resolution: {integrity: sha512-vr40W2N6G63dmBPaha1TsBQLLURXG538RQbH5vAm0G/ovVZyXJrmZR1HF1W+WneNloQvwn4dm8xzwpEXRW560g==}
+
+  '@tauri-apps/plugin-opener@2.5.4':
+    resolution: {integrity: sha512-1HnPkb+AmgO29HBazm4uPLKB+r7zzcTBW1d0fyYp1uP+jwtpoiNDGKMMzz58SFp49nOIrxdE3aUJtT57lfO9CQ==}
 
   '@testing-library/dom@10.4.1':
     resolution: {integrity: sha512-o4PXJQidqJl82ckFaXUeoAW+XysPLauYI43Abki5hABd853iMhitooc6znOnczgbTYmEP6U6/y1ZyKAIsvMKGg==}
@@ -3067,6 +3060,10 @@ snapshots:
       '@tauri-apps/api': 2.11.0
 
   '@tauri-apps/plugin-global-shortcut@2.3.1':
+    dependencies:
+      '@tauri-apps/api': 2.11.0
+
+  '@tauri-apps/plugin-opener@2.5.4':
     dependencies:
       '@tauri-apps/api': 2.11.0
 

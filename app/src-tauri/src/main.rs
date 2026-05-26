@@ -81,6 +81,7 @@ fn main() {
             // to start hidden or focused.
             None,
         ))
+        .plugin(tauri_plugin_opener::init())
         .plugin(snk_library::init())
         .plugin(snk_hotkeys::init())
         .plugin(snk_capture::init())
