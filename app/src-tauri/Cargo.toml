@@ -10,6 +10,10 @@ publish.workspace = true
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+# `devtools` is intentionally enabled for release builds too: open-source
+# dev-facing app — end users may need to inspect issues for bug reports.
+# (Tauri auto-enables devtools in debug; the feature flag is required for
+# release.) Toggle off here if shipping to non-developer audiences.
 tauri = { version = "2", features = ["tray-icon", "protocol-asset", "devtools"] }
 tauri-plugin-global-shortcut.workspace = true
 tauri-plugin-updater.workspace = true
