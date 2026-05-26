@@ -43,8 +43,17 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
 
             // Startup sweep (per #40): re-enqueue captures whose OCR never
             // ran (e.g. app quit mid-queue, queue overflow, plugin start
-            // failure on previous launch).
-            startup_sweep(app.app_handle(), &db);
+            // failure on previous launch). Deferred to a background task so
+            // the synchronous DB query doesn't block Tauri's main thread.
+            let app_handle_for_sweep = app.app_handle().clone();
+            let db_for_sweep = Arc::clone(&db);
+            tauri::async_runtime::spawn(async move {
+                tokio::task::spawn_blocking(move || {
+                    startup_sweep(app_handle_for_sweep, db_for_sweep);
+                })
+                .await
+                .ok();
+            });
 
             // Re-bind only what the listener closure captures.
             let db_for_listener = Arc::clone(&db);
@@ -82,12 +91,12 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
 }
 
 /// Re-enqueue any non-deleted captures that lack an OCR row. Runs once
-/// at plugin setup. Bounded by the queue capacity — if the sweep finds
-/// more than 100 missing captures, the first 100 are queued and the rest
-/// get dropped via the queue's overflow eviction (and will be picked up
-/// by the NEXT startup sweep, etc).
-fn startup_sweep<R: Runtime>(app: &tauri::AppHandle<R>, db: &snk_library::Db) {
-    match snk_library::ocr::captures_missing_text(db) {
+/// at plugin setup in a background thread. Bounded by the queue capacity
+/// — if the sweep finds more than 100 missing captures, the first 100 are
+/// enqueued and the rest are left for the next startup sweep (they will
+/// still be missing OCR text and will be picked up then).
+fn startup_sweep<R: Runtime>(app: tauri::AppHandle<R>, db: Arc<snk_library::Db>) {
+    match snk_library::ocr::captures_missing_text(&db) {
         Ok(missing) => {
             if missing.is_empty() {
                 tracing::info!("ocr startup sweep: no missing captures");
@@ -102,13 +111,19 @@ fn startup_sweep<R: Runtime>(app: &tauri::AppHandle<R>, db: &snk_library::Db) {
                 return;
             };
             for (capture_id, file_path) in missing {
+                if ocr.queue.is_full() {
+                    tracing::info!(
+                        "ocr startup sweep: queue full, remaining captures deferred to next sweep"
+                    );
+                    break;
+                }
                 let dropped = ocr.queue.enqueue(
                     capture_id,
                     std::path::PathBuf::from(file_path),
                     DEFAULT_LANGUAGE.to_string(),
                 );
                 if let Some(dropped_id) = dropped {
-                    emit_dropped(app, &dropped_id);
+                    emit_dropped(&app, &dropped_id);
                 }
             }
         }

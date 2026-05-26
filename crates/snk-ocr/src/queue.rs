@@ -63,8 +63,9 @@ impl OcrQueue {
         image_path: std::path::PathBuf,
         language: String,
     ) -> Option<String> {
-        let dropped = {
+        let (dropped, was_empty) = {
             let mut q = self.queue.lock().expect("ocr queue mutex poisoned");
+            let was_empty = q.is_empty();
             let dropped = if q.len() >= MAX_QUEUE_SIZE {
                 q.pop_front().map(|j| j.capture_id)
             } else {
@@ -75,10 +76,22 @@ impl OcrQueue {
                 image_path,
                 language,
             });
-            dropped
+            (dropped, was_empty)
         };
-        self.notify.notify_one();
+        // Only wake the worker on the empty→non-empty transition; extra
+        // notifications on an already-running worker would leave buffered
+        // permits that cause spurious outer-loop iterations.
+        if was_empty {
+            self.notify.notify_one();
+        }
         dropped
+    }
+
+    /// Returns `true` if the queue is at maximum capacity. Used by the
+    /// startup sweep to stop enqueuing before eviction would discard
+    /// items already queued in this sweep pass.
+    pub fn is_full(&self) -> bool {
+        self.queue.lock().expect("ocr queue mutex poisoned").len() >= MAX_QUEUE_SIZE
     }
 
     /// Current queued-jobs count. Used by tests + the optional About-
