@@ -2,8 +2,8 @@ import { useEffect, useCallback, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { LogicalPosition } from '@tauri-apps/api/dpi';
-import { availableMonitors, getCurrentWindow } from '@tauri-apps/api/window';
+import { LogicalPosition, PhysicalPosition, PhysicalSize } from '@tauri-apps/api/dpi';
+import { availableMonitors, cursorPosition, getCurrentWindow } from '@tauri-apps/api/window';
 
 import {
   CAPTURE_FULL_SCREEN_EVENT,
@@ -100,12 +100,36 @@ export function LibraryWindow() {
 
   const handleRegion = useCallback(async () => {
     try {
-      const preview = await grabScreenPreview();
+      const monitors = await availableMonitors();
+      const fallback = monitors[0];
+      if (!fallback) {
+        console.warn('no monitors available for region overlay');
+        return;
+      }
+      const cursor = await cursorPosition();
+      const monitorIndex = Math.max(
+        monitors.findIndex(
+          (m) =>
+            cursor.x >= m.position.x &&
+            cursor.x < m.position.x + m.size.width &&
+            cursor.y >= m.position.y &&
+            cursor.y < m.position.y + m.size.height,
+        ),
+        0,
+      );
+      const monitor = monitors[monitorIndex] ?? fallback;
+      const preview = await grabScreenPreview(monitorIndex);
       const overlay = await WebviewWindow.getByLabel('capture-overlay');
       if (overlay) {
+        await overlay.setPosition(
+          new PhysicalPosition(monitor.position.x, monitor.position.y),
+        );
+        await overlay.setSize(new PhysicalSize(monitor.size.width, monitor.size.height));
         await overlay.emit('overlay:preview', {
           path: preview.path,
           token: preview.token,
+          monitorId: monitorIndex,
+          scaleFactor: monitor.scaleFactor,
         });
         await overlay.show();
         await overlay.setFocus();

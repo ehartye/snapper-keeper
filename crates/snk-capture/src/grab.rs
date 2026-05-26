@@ -13,13 +13,37 @@ pub struct GrabResult {
     pub monitor_name: String,
 }
 
+fn select_monitor(monitor_id: Option<u32>) -> Result<Monitor> {
+    let mut monitors = Monitor::all()?;
+    if monitors.is_empty() {
+        return Err(crate::CaptureError::NoMonitors);
+    }
+
+    if let Some(id) = monitor_id {
+        if let Some(pos) = monitors
+            .iter()
+            .position(|m| m.id().unwrap_or(u32::MAX) == id)
+        {
+            return Ok(monitors.swap_remove(pos));
+        }
+        let index = id as usize;
+        if index < monitors.len() {
+            return Ok(monitors.swap_remove(index));
+        }
+    }
+
+    if let Some(pos) = monitors
+        .iter()
+        .position(|m| m.is_primary().unwrap_or(false))
+    {
+        return Ok(monitors.swap_remove(pos));
+    }
+
+    monitors.pop().ok_or(crate::CaptureError::NoMonitors)
+}
+
 pub fn grab_primary_monitor() -> Result<GrabResult> {
-    let monitors = Monitor::all()?;
-    let primary = monitors
-        .into_iter()
-        .find(|m| m.is_primary().unwrap_or(false))
-        .or_else(|| Monitor::all().ok().and_then(|mut v| v.pop()))
-        .ok_or(crate::CaptureError::NoMonitors)?;
+    let primary = select_monitor(None)?;
 
     let image = primary.capture_image()?;
     let (w, h) = (image.width(), image.height());
@@ -30,6 +54,21 @@ pub fn grab_primary_monitor() -> Result<GrabResult> {
 
     Ok(GrabResult {
         png_bytes: buf.into_inner(),
+        width: w,
+        height: h,
+        monitor_name: name,
+    })
+}
+
+pub fn grab_monitor(monitor_id: u32) -> Result<GrabResult> {
+    let monitor = select_monitor(Some(monitor_id))?;
+    let image = monitor.capture_image()?;
+    let (w, h) = (image.width(), image.height());
+    let name = monitor.name().unwrap_or_default();
+    let png_bytes = encode_rgba_to_png(image.as_raw(), w, h)?;
+
+    Ok(GrabResult {
+        png_bytes,
         width: w,
         height: h,
         monitor_name: name,
@@ -92,17 +131,7 @@ pub fn grab_window(window_id: u32) -> Result<GrabResult> {
 }
 
 pub fn grab_region(monitor_id: u32, x: u32, y: u32, w: u32, h: u32) -> Result<GrabResult> {
-    let monitors = Monitor::all()?;
-    let mon = monitors
-        .into_iter()
-        .find(|m| m.id().unwrap_or(0) == monitor_id)
-        .or_else(|| {
-            Monitor::all()
-                .ok()
-                .and_then(|v| v.into_iter().find(|m| m.is_primary().unwrap_or(false)))
-        })
-        .or_else(|| Monitor::all().ok().and_then(|mut v| v.pop()))
-        .ok_or(crate::CaptureError::NoMonitors)?;
+    let mon = select_monitor(Some(monitor_id))?;
 
     let monitor_name = mon.name().unwrap_or_default();
     let full_image = mon.capture_image()?;

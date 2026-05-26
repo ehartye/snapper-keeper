@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { availableMonitors, cursorPosition, getCurrentWindow } from '@tauri-apps/api/window';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 
 import { LibraryWindow } from './LibraryWindow';
@@ -84,16 +84,35 @@ describe('<LibraryWindow />', () => {
     });
 
     const overlayEmit = vi.fn().mockResolvedValue(undefined);
+    const overlaySetPosition = vi.fn().mockResolvedValue(undefined);
+    const overlaySetSize = vi.fn().mockResolvedValue(undefined);
     vi.mocked(WebviewWindow.getByLabel).mockImplementation(async (label: string) => {
       if (label === 'capture-overlay') {
         return {
           emit: overlayEmit,
+          setPosition: overlaySetPosition,
+          setSize: overlaySetSize,
           show: vi.fn().mockResolvedValue(undefined),
           setFocus: vi.fn().mockResolvedValue(undefined),
         } as unknown as WebviewWindow;
       }
       return null;
     });
+    vi.mocked(availableMonitors).mockResolvedValue([
+      {
+        name: 'Primary',
+        position: { x: 0, y: 0 },
+        size: { width: 1920, height: 1080 },
+        scaleFactor: 1,
+      },
+      {
+        name: 'Secondary',
+        position: { x: 1920, y: 0 },
+        size: { width: 2560, height: 1440 },
+        scaleFactor: 1.5,
+      },
+    ]);
+    vi.mocked(cursorPosition).mockResolvedValue({ x: 2100, y: 100 });
 
     mockedInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'plugin:snk-capture|grab_screen_preview') {
@@ -112,11 +131,19 @@ describe('<LibraryWindow />', () => {
 
     await act(async () => regionHandler!({ payload: undefined }));
     await waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith('plugin:snk-capture|grab_screen_preview');
+      expect(invoke).toHaveBeenCalledWith('plugin:snk-capture|grab_screen_preview', {
+        monitorId: 1,
+      });
       expect(WebviewWindow.getByLabel).toHaveBeenCalledWith('capture-overlay');
+      expect(overlaySetPosition).toHaveBeenCalledWith(expect.objectContaining({ x: 1920, y: 0 }));
+      expect(overlaySetSize).toHaveBeenCalledWith(
+        expect.objectContaining({ width: 2560, height: 1440 }),
+      );
       expect(overlayEmit).toHaveBeenCalledWith('overlay:preview', {
         path: '/tmp/p.png',
         token: 'tok-xyz',
+        monitorId: 1,
+        scaleFactor: 1.5,
       });
     });
   });

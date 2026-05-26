@@ -76,4 +76,11 @@ describe('@snk/capture bindings', () => {
     expect(p.token).toBe('tok-abc');
     expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-capture|grab_screen_preview');
   });
+
+  it('grabScreenPreview forwards an optional monitor id', async () => {
+    await grabScreenPreview(2);
+    expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-capture|grab_screen_preview', {
+      monitorId: 2,
+    });
+  });
 });
