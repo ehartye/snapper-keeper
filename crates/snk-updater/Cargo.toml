@@ -27,6 +27,7 @@ name = "snk_releaser"
 tauri-plugin = { workspace = true }
 
 [dependencies]
+snk-library = { path = "../snk-library" }
 tauri.workspace = true
 tauri-plugin-updater.workspace = true
 serde.workspace = true
@@ -35,3 +36,6 @@ thiserror.workspace = true
 tracing.workspace = true
 tokio.workspace = true
 chrono.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

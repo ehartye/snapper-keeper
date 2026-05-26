@@ -70,7 +70,7 @@ fn main() {
         )
         .init();
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         // Launch-at-login support. The plugin manages the platform-specific
         // bits (registry entry on Windows, LaunchAgent on macOS). The user
@@ -87,9 +87,15 @@ fn main() {
         .plugin(snk_capture::init())
         .plugin(snk_annotate::init())
         .plugin(snk_clipboard::init())
-        .plugin(snk_ocr::init())
+        .plugin(snk_ocr::init());
+    #[cfg(not(feature = "store-edition"))]
+    let builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(snk_releaser::init())
+        .plugin(snk_releaser::init());
+    #[cfg(feature = "store-edition")]
+    let builder = builder;
+
+    builder
         .invoke_handler(tauri::generate_handler![set_tray_theme])
         .setup(|app| {
             let capture_region = MenuItem::with_id(
@@ -136,7 +142,7 @@ fn main() {
                 app,
                 "tray:check-update",
                 "Check for updates",
-                true,
+                !cfg!(feature = "store-edition"),
                 None::<&str>,
             )?;
             let quit = MenuItem::with_id(app, "tray:quit", "Quit", true, None::<&str>)?;
@@ -191,10 +197,13 @@ fn main() {
                         }
                     }
                     "tray:check-update" => {
-                        let handle = app.app_handle().clone();
-                        tauri::async_runtime::spawn(async move {
-                            let _ = snk_releaser::plugin::check_for_update(handle).await;
-                        });
+                        #[cfg(not(feature = "store-edition"))]
+                        {
+                            let handle = app.app_handle().clone();
+                            tauri::async_runtime::spawn(async move {
+                                let _ = snk_releaser::plugin::check_for_update(handle).await;
+                            });
+                        }
                     }
                     "tray:quit" => app.exit(0),
                     _ => {}

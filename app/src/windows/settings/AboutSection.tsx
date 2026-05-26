@@ -17,6 +17,8 @@ import { SettingsSection } from '../../components/SettingsSection';
 import { SettingRow } from '../../components/SettingRow';
 import { Button } from '../../components/Button';
 import { useModal } from '../../components/Modal';
+import { isStoreEdition } from '../../lib/storeEdition';
+import { useSetting } from './useSetting';
 
 const PRIVACY_URL =
   'https://github.com/ehartye/snapper-keeper/blob/main/PRIVACY.md';
@@ -35,6 +37,10 @@ function formatStatus(s: UpdateStatus): string {
       return `Downloading ${Math.round(s.percent)}%`;
     case 'ready':
       return `Ready to install v${s.version}`;
+    case 'suppressed-by-policy':
+      return s.reason === 'user-disabled'
+        ? 'Update checks disabled in Settings'
+        : 'Updates are managed by Microsoft Store';
     case 'error':
       return `Error: ${s.detail}`;
     default: {
@@ -58,6 +64,8 @@ function formatRelative(ts: number | null): string {
 
 export function AboutSection() {
   const modal = useModal();
+  const storeEdition = isStoreEdition();
+  const [updaterEnabled] = useSetting('updater.enabled', true);
 
   const versionQ = useQuery({
     queryKey: ['app-version'],
@@ -77,6 +85,8 @@ export function AboutSection() {
   const [restartPrompted, setRestartPrompted] = useState(false);
 
   useEffect(() => {
+    if (storeEdition) return;
+
     let cancelled = false;
     void getUpdateStatus().then((s) => {
       if (!cancelled) setStatus(s);
@@ -97,25 +107,31 @@ export function AboutSection() {
       cancelled = true;
       void unlistenPromise.then((fn) => fn());
     };
-  }, []);
+  }, [storeEdition]);
+
+  const effectiveStatus: UpdateStatus = storeEdition
+    ? { kind: 'suppressed-by-policy', reason: 'store-edition' }
+    : !updaterEnabled
+      ? { kind: 'suppressed-by-policy', reason: 'user-disabled' }
+      : status;
 
   useEffect(() => {
-    if (status.kind === 'ready' && !restartPrompted) {
+    if (effectiveStatus.kind === 'ready' && !restartPrompted) {
       setRestartPrompted(true);
       modal.confirm({
         title: 'Update ready',
-        body: `Update v${status.version} is ready. Restart now to install?`,
+        body: `Update v${effectiveStatus.version} is ready. Restart now to install?`,
         confirmLabel: 'Restart',
         cancelLabel: 'Later',
         onConfirm: () => restart(),
       });
     }
-  }, [status, restartPrompted, modal]);
+  }, [effectiveStatus, restartPrompted, modal]);
 
   const isChecking =
-    status.kind === 'checking' || status.kind === 'downloading';
+    effectiveStatus.kind === 'checking' || effectiveStatus.kind === 'downloading';
   const sha = __GIT_SHA__;
-  const fingerprint = __UPDATER_FINGERPRINT__;
+  const fingerprint = storeEdition ? 'not bundled in store edition' : __UPDATER_FINGERPRINT__;
 
   return (
     <SettingsSection title="About">
@@ -156,9 +172,12 @@ export function AboutSection() {
           {formatRelative(lastCheck)}
         </span>
       </SettingRow>
-      <SettingRow label="Status" description={formatStatus(status)}>
-        <Button onClick={() => void checkForUpdate()} disabled={isChecking}>
-          Check Now
+      <SettingRow label="Status" description={formatStatus(effectiveStatus)}>
+        <Button
+          onClick={() => void checkForUpdate()}
+          disabled={isChecking || storeEdition || !updaterEnabled}
+        >
+          {storeEdition ? 'Managed by Store' : 'Check Now'}
         </Button>
       </SettingRow>
       <SettingRow label="Privacy">
