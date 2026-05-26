@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod logging;
+
 use std::{any::Any, panic::AssertUnwindSafe};
 
 use serde::Serialize;
@@ -12,7 +14,6 @@ use tauri::{
     AppHandle, Emitter, Manager, RunEvent, Runtime, Url, Webview, Window,
 };
 use tracing::{error, info, warn};
-use tracing_subscriber::EnvFilter;
 
 const TRAY_HOLO_PNG: &[u8] = include_bytes!("../icons/sk-holo.png");
 const TRAY_MEMPHIS_PNG: &[u8] = include_bytes!("../icons/sk-memphis.png");
@@ -176,12 +177,6 @@ fn set_tray_theme<R: tauri::Runtime>(
 }
 
 fn main() {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_env("SNK_LOG").unwrap_or_else(|_| EnvFilter::new("info,snk=debug")),
-        )
-        .init();
-
     tauri::Builder::default()
         .plugin(safe_setup(
             tauri_plugin_global_shortcut::Builder::new().build(),
@@ -208,6 +203,21 @@ fn main() {
         .plugin(safe_setup(snk_releaser::init()))
         .invoke_handler(tauri::generate_handler![set_tray_theme])
         .setup(|app| {
+            // Initialize file-based tracing (general + security logs +
+            // panic-dump hook) per crates/snk-library/src/logging.rs.
+            // The returned LoggingHandle holds tracing-appender's
+            // background worker guards; leaking it keeps the workers
+            // alive for the program's lifetime — the OS reaps them at
+            // exit. (Tauri's app.manage requires Send+Sync; WorkerGuard
+            // is Send but not Sync, so leak is simpler than wrapping.)
+            let log_dir = app
+                .path()
+                .app_log_dir()
+                .map_err(|e| std::io::Error::other(format!("resolve log dir: {e}")))?;
+            let logging_handle = logging::init(&log_dir)
+                .map_err(|e| std::io::Error::other(format!("init logging at {}: {e}", log_dir.display())))?;
+            std::mem::forget(logging_handle);
+
             let capture_region = MenuItem::with_id(
                 app,
                 "tray:capture-region",
