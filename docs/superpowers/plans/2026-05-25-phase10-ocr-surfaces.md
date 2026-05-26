@@ -2000,21 +2000,29 @@ git commit -m "feat(ocr): plugin wires backend selection, ocr:ready event, get_o
 
 ---
 
-### Task 11: TS bindings — `packages/snk-ocr` adds `ocr:ready` + `getOcrWords`
+### Task 11: TS bindings — `packages/snk-ocr` (CREATE) with `ocr:ready` + `getOcrWords`
 
 **Files:**
-- Modify: `packages/snk-ocr/src/index.ts` (or whatever the entry file is — check `packages/snk-ocr/package.json` "main"/"exports")
+- Create: `packages/snk-ocr/package.json` (mirror `packages/snk-capture/package.json` shape — name `@snk/ocr`)
+- Create: `packages/snk-ocr/tsconfig.json` (mirror `packages/snk-capture/tsconfig.json`)
+- Create: `packages/snk-ocr/vitest.config.ts` (mirror `packages/snk-capture/vitest.config.ts`)
+- Create: `packages/snk-ocr/src/index.ts` (the bindings — see Step 2)
+- Create: `packages/snk-ocr/src/index.test.ts` (mirror `packages/snk-capture/src/index.test.ts` pattern for basic mock-invoke shape verification)
+- Maybe: `pnpm-lock.yaml` if pnpm regenerates when the new workspace package registers
 
-**Step 1: Examine current bindings**
+Plan amendment 2026-05-26 (vision-mac during T11): `packages/snk-ocr/` was deleted by PR #129 (About panel cluster, closing issue #62 — "the unused `@snk/ocr` TS package, sole export was a stub binding to a stub Rust command"). T11 must CREATE the package, not modify it. The 4-file minimum + tests for consistency mirror `packages/snk-capture/`.
+
+**Step 1: Verify package doesn't exist**
 
 ```bash
-cat packages/snk-ocr/src/index.ts
-cat packages/snk-ocr/package.json
+ls packages/snk-ocr/   # expected: directory not present
 ```
 
-**Step 2: Add types + functions**
+Confirms the plan-amendment context (deleted by PR #129). Proceed to create from scratch using `packages/snk-capture/` as the structural template.
 
-Append to `packages/snk-ocr/src/index.ts`:
+**Step 2: Create `packages/snk-ocr/src/index.ts`**
+
+New file contents:
 
 ```typescript
 import { invoke } from '@tauri-apps/api/core';
@@ -2064,23 +2072,26 @@ pnpm -F @snk/ocr test  # if it has tests
 
 Expected: type-check clean.
 
-**Step 4: Permissions — register the new commands**
+**Step 4: Permissions — already handled by T10 follow-up**
 
-Open `app/src-tauri/capabilities/default.json`. Find the `snk-ocr` section. Add `get_ocr_words` to the allowed commands list (the existing `ocr_status` is already there).
+Plan amendment 2026-05-26: the original plan said to edit `app/src-tauri/capabilities/default.json` — wrong layer for this repo. `capabilities/default.json` references `snk-ocr:default` as a plugin-level alias; the actual permission enumeration lives in `crates/snk-ocr/permissions/default.toml`. Adding `allow-get-ocr-words` to that toml was bundled into winocr-pc's T10 follow-up commit `fix(ocr): expose get_ocr_words via build.rs COMMANDS + default capability`.
 
-```json
-{
-  "identifier": "snk-ocr:default",
-  "permissions": ["ocr_status", "get_ocr_words"]
-}
+Verification step before staging T11:
+
+```bash
+grep -F 'allow-get-ocr-words' crates/snk-ocr/permissions/default.toml
 ```
 
-(Exact structure varies — match the pattern used for other plugins.)
+Should return one match. If it doesn't, the T10 follow-up hasn't landed yet — coordinate with the team-lead before proceeding.
+
+**T11 stages NO permission files** — those are owned by the T10 follow-up commit.
 
 **Step 5: Commit**
 
 ```bash
-git add packages/snk-ocr/src/index.ts app/src-tauri/capabilities/default.json
+git add packages/snk-ocr/package.json packages/snk-ocr/tsconfig.json packages/snk-ocr/vitest.config.ts packages/snk-ocr/src/index.ts packages/snk-ocr/src/index.test.ts
+# Also pnpm-lock.yaml if pnpm regenerated it cleanly for the new workspace package:
+git add pnpm-lock.yaml   # only if `git diff --cached` shows only @snk/ocr-related additions; otherwise leave to whoever's deps work is in flight
 git diff --cached
 git commit -m "feat(ocr): TS bindings — getOcrWords, onOcrReady, OcrStatus"
 ```
