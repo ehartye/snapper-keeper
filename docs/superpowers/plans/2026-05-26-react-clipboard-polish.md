@@ -1,3 +1,101 @@
+# ClipboardSettings Polish (PR E) Implementation Plan
+
+> **For Claude:** REQUIRED SUB-SKILL: Use h-superpowers:team-driven-development to implement this plan.
+
+**Goal:** Polish `ClipboardSettings.tsx` for design-system consistency and modal keyboard handling. Closes #95.
+
+**Two related items:**
+1. **Header styling normalization** — current `<h2>` uses `text-sm font-display uppercase tracking-wider text-fg-muted mb-2`; match the rest of Settings (`font-display text-sm mb-3` per `SettingsSection`).
+2. **Modal keyboard shortcuts via shared `Modal`** — migrate inline `AddAppModal` and `ConfirmFrontmostModal` to `useModal().custom({...})` from PR A. Free Esc-to-close, focus trap, focus return.
+
+**Architecture:** Use `modal.custom()` for both modals (vs `.confirm`) because `AddAppModal` has a form and `ConfirmFrontmostModal` has a dup-check disabled state — both need more control than `.confirm` exposes. The current inner `AddAppModal` and `ConfirmFrontmostModal` functions are renamed to `AddAppForm` and `ConfirmFrontmostBody`, the outer `<div className="fixed inset-0 bg-black/40 …">` backdrop is removed (Modal provides that), and the open/close state moves from `useState` to the modal API.
+
+**Tech Stack:** React 18, TypeScript strict, shared `Modal` + `useModal` from PR A.
+
+**Spec:** #95 (design-system unification + modal keyboard shortcuts; preserve 6 existing vitest cases).
+
+**Worktree:** `C:/Users/ehart/repos/snapper-keeper-worktrees/feat-react-clipboard-polish/`
+**Branch:** `feat/react-clipboard-polish` (off origin/main after PRs A/B/C merged)
+**Baseline:** 265 TS tests passing (227 app + 38 packages).
+
+---
+
+## Conventions
+
+- `refactor(settings):` scope (no semantic change, only structure + styling).
+- Stage explicit paths, NEVER `git add .` or `-A`.
+- One task = one commit.
+- No comments unless WHY is non-obvious.
+
+## Dependency graph
+
+```
+T1 (ClipboardSettings refactor) → T2 (verify)
+```
+
+Single implementer. Linear.
+
+---
+
+## Task 1: ClipboardSettings refactor
+
+**Files:**
+- Modify: `app/src/windows/settings/ClipboardSettings.tsx`
+- Modify: `app/src/windows/settings/ClipboardSettings.test.tsx`
+
+**Context:**
+- PR A's `<ModalProvider>` is already wired at `app/src/main.tsx` (PR B verified this) — runtime is fine.
+- ClipboardSettings is rendered inside SettingsWindow, which is rendered inside `<ModalProvider>` (PR B already added the wrap to SettingsWindow.test.tsx for the same reason).
+- ClipboardSettings tests render `<ClipboardSettings />` directly via `renderWithQuery`. Once `useModal()` is called inside, these tests need a `<ModalProvider>` wrapper too.
+- `ClipboardSettings.readEntries.test.ts` is a pure-fn test on `readEntries` — no component render — needs no change.
+
+**Step 1: Update existing tests to wrap with ModalProvider + add modal-root setup**
+
+Modify `app/src/windows/settings/ClipboardSettings.test.tsx`. At top, add the import:
+
+```tsx
+import { ModalProvider } from '../../components/Modal';
+```
+
+Find the existing `beforeEach` (or add one if absent) and ensure it includes a `modal-root` div:
+
+```tsx
+beforeEach(() => {
+  mockedInvoke.mockReset();
+  mockedInvoke.mockResolvedValue(null);
+
+  const existing = document.getElementById('modal-root');
+  if (existing) existing.remove();
+  const root = document.createElement('div');
+  root.id = 'modal-root';
+  document.body.appendChild(root);
+});
+```
+
+(Keep any other reset logic already present.)
+
+Replace each `renderWithQuery(<ClipboardSettings />)` (all occurrences) with:
+
+```tsx
+renderWithQuery(<ModalProvider><ClipboardSettings /></ModalProvider>);
+```
+
+The 6 existing test bodies stay otherwise unchanged — they assert on the rendered list and the persistence calls, both of which remain after the refactor.
+
+**Step 2: Run existing tests, verify they still pass (regression baseline)**
+
+```bash
+cd C:/Users/ehart/repos/snapper-keeper-worktrees/feat-react-clipboard-polish
+pnpm --filter @snk/app test -- --run src/windows/settings/ClipboardSettings.test.tsx src/windows/settings/ClipboardSettings.readEntries.test.ts
+```
+
+Expected: 6 + 10 = 16 tests passing. (They pass with just the wrap added because the refactor in Step 3 hasn't happened yet; the inline modals still exist and the open/close state still works the old way.)
+
+**Step 3: Refactor `ClipboardSettings.tsx`**
+
+Replace the entire contents of `app/src/windows/settings/ClipboardSettings.tsx` with:
+
+```tsx
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 
@@ -144,6 +242,9 @@ export function ClipboardSettings() {
 }
 
 interface AddAppFormProps {
+  // Getter (not array) so the dup check reads the freshest entries at
+  // submit time. The render closure captures props at modal.custom()
+  // invocation time, so a static array prop would be stale.
   getExisting: () => BlocklistEntry[];
   onAdd: (entry: BlocklistEntry) => void;
   onCancel: () => void;
@@ -161,9 +262,7 @@ function AddAppForm({ getExisting, onAdd, onCancel }: AddAppFormProps) {
       setError('Identifier is required.');
       return;
     }
-    const dup = getExisting().find(
-      (e) => e.identifier === id && e.kind === kind,
-    );
+    const dup = getExisting().find((e) => e.identifier === id && e.kind === kind);
     if (dup) {
       setError('Already in the list.');
       return;
@@ -219,6 +318,7 @@ function AddAppForm({ getExisting, onAdd, onCancel }: AddAppFormProps) {
 
 interface ConfirmFrontmostBodyProps {
   app: SourceApp;
+  // Same staleness rationale as AddAppForm.
   getExisting: () => BlocklistEntry[];
   onConfirm: (entry: BlocklistEntry) => void;
   onCancel: () => void;
@@ -264,3 +364,85 @@ function ConfirmFrontmostBody({
     </div>
   );
 }
+```
+
+**Step 4: Re-run the tests (now using shared Modal)**
+
+```bash
+cd C:/Users/ehart/repos/snapper-keeper-worktrees/feat-react-clipboard-polish
+pnpm --filter @snk/app test -- --run src/windows/settings/ClipboardSettings.test.tsx src/windows/settings/ClipboardSettings.readEntries.test.ts
+```
+
+Expected: 6 + 10 = 16 tests passing. The 6 component tests already exercise add-app and confirm-frontmost flows; they continue to work because:
+- Both buttons still exist with the same labels (`+ Add app…`, `+ Add from frontmost app`)
+- The form fields inside `AddAppForm` are the same as inside the old inline `AddAppModal`
+- The "Add" / "Cancel" buttons exist in both forms
+- Clicking the form's "Add" button still calls `onAdd` which calls `persist` which calls `set_setting`
+
+Tests use `getByRole('button', { name: 'Add' })` or `screen.getByText('Add')` to find the submit button. Both still match.
+
+**Step 5: Run lint + typecheck**
+
+```bash
+cd C:/Users/ehart/repos/snapper-keeper-worktrees/feat-react-clipboard-polish
+pnpm --filter @snk/app lint
+pnpm --filter @snk/app typecheck
+```
+
+Expected: both clean.
+
+**Step 6: Commit**
+
+```bash
+git add app/src/windows/settings/ClipboardSettings.tsx app/src/windows/settings/ClipboardSettings.test.tsx
+git commit -m "refactor(settings): polish ClipboardSettings — shared Modal + design-system header (closes #95)"
+```
+
+---
+
+## Task 2: Final verification
+
+**Files:** None modified. Verification only.
+
+**Step 1: Full TS suite**
+
+```bash
+cd C:/Users/ehart/repos/snapper-keeper-worktrees/feat-react-clipboard-polish
+pnpm -r --filter "@snk/*" --filter @snk/app test
+```
+
+Expected: 265 tests still passing (no test count change — same 6 component + 10 readEntries tests).
+
+**Step 2: Lint + typecheck**
+
+```bash
+cd C:/Users/ehart/repos/snapper-keeper-worktrees/feat-react-clipboard-polish
+pnpm --filter @snk/app lint
+pnpm --filter @snk/app typecheck
+```
+
+Expected: both clean.
+
+**Step 3: Vite build**
+
+```bash
+cd C:/Users/ehart/repos/snapper-keeper-worktrees/feat-react-clipboard-polish
+pnpm --filter @snk/app build
+```
+
+Expected: succeeds.
+
+**Step 4: Hand off** — report all-green to spec-auditor + quality-sentinel.
+
+---
+
+## Self-review notes
+
+1. **Spec coverage:** #95 item 1 (design-system unification) → `h2` styling normalized to `font-display text-sm mb-3`. #95 item 2 (modal keyboard shortcuts) → both modals migrated to shared Modal, which provides Esc + focus trap. AddAppForm's `<form onSubmit>` provides Enter-to-submit. Acceptance: 6 existing component tests + 10 readEntries tests still pass.
+2. **Placeholders:** none.
+3. **Naming consistency:** `AddAppForm` and `ConfirmFrontmostBody` replace `AddAppModal` and `ConfirmFrontmostModal` — they're now form/body content, not the full modal chrome.
+4. **Buildability:** Single implementer; one refactor file + one test file edit; no shared infrastructure changes.
+
+## Plan-as-source-of-truth reminder
+
+Real bugs → SendMessage `team-lead` BEFORE applying. Per memory `[[feedback_plan_as_source_of_truth]]`.
