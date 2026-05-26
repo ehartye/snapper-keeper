@@ -66,11 +66,24 @@ echo "build-local: OS=$OS  TARGET=$TARGET  BUNDLES=$BUNDLES"
 # we don't bundle anything pre-build either.
 
 # --- Build ---
+#
+# Run from the app workspace via a subshell. We previously used
+# `pnpm --filter @snk/app tauri build ...` and it produced a working
+# bundle on Windows but then bash emitted
+# `script: line N: @snk/app: No such file or directory` post-build —
+# pnpm's --filter forwarding interacts with our multi-line bash command
+# in a way that leaks the filter argument back into bash's command stream
+# on at least one shell setup. Using `(cd app && pnpm exec tauri ...)`
+# avoids --filter entirely and matches the conceptual model of "build
+# from within the app workspace."
 echo "build-local: invoking pnpm tauri build"
-pnpm --filter @snk/app tauri build \
-  --target "$TARGET" \
-  --bundles "$BUNDLES" \
-  --config '{"bundle":{"createUpdaterArtifacts":false}}'
+(
+  cd app
+  pnpm exec tauri build \
+    --target "$TARGET" \
+    --bundles "$BUNDLES" \
+    --config '{"bundle":{"createUpdaterArtifacts":false}}'
+)
 
 # --- Post-build summary ---
 
