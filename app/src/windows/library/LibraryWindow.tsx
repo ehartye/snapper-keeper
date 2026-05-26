@@ -243,16 +243,34 @@ export function LibraryWindow() {
   }, []);
 
   useEffect(() => {
-    const unlisteners: (() => void)[] = [];
+    // `listen()` is async; the previous synchronous-cleanup version
+    // races React StrictMode's setup→cleanup→setup pattern in dev,
+    // ending up with TWO active listeners per event after StrictMode
+    // settles. The `cancelled` flag lets a late-arriving setup
+    // self-clean when it discovers the effect has already been torn
+    // down. Without this, every Ctrl+Shift+4 fires handleRegion
+    // twice in dev.
+    let cancelled = false;
+    let unlisteners: (() => void)[] = [];
     const setup = async () => {
-      unlisteners.push(await listen(CAPTURE_FULL_SCREEN_EVENT, handleFullScreen));
-      unlisteners.push(await listen(CAPTURE_REGION_EVENT, handleRegion));
-      unlisteners.push(await listen(CAPTURE_WINDOW_EVENT, handleWindow));
-      unlisteners.push(await listen(CAPTURE_TIMED_EVENT, handleTimed));
-      unlisteners.push(await listen(CLIPBOARD_HISTORY_EVENT, handleClipboardHistory));
+      const fns = [
+        await listen(CAPTURE_FULL_SCREEN_EVENT, handleFullScreen),
+        await listen(CAPTURE_REGION_EVENT, handleRegion),
+        await listen(CAPTURE_WINDOW_EVENT, handleWindow),
+        await listen(CAPTURE_TIMED_EVENT, handleTimed),
+        await listen(CLIPBOARD_HISTORY_EVENT, handleClipboardHistory),
+      ];
+      if (cancelled) {
+        fns.forEach((fn) => fn());
+      } else {
+        unlisteners = fns;
+      }
     };
     setup().catch((e) => console.error('listen setup failed', e));
-    return () => unlisteners.forEach((fn) => fn());
+    return () => {
+      cancelled = true;
+      unlisteners.forEach((fn) => fn());
+    };
   }, [handleFullScreen, handleRegion, handleWindow, handleTimed, handleClipboardHistory]);
 
   return (

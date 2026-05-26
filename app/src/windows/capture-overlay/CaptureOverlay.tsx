@@ -118,18 +118,26 @@ export function CaptureOverlay() {
   return (
     <div
       className="fixed inset-0 cursor-crosshair select-none"
-      style={{
-        backgroundColor: '#000',
-        backgroundImage: previewSrc ? `url(${previewSrc})` : undefined,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-      }}
+      style={{ backgroundColor: '#000' }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
     >
+      {/* Backdrop as <img>, not CSS background-image. The rest of the
+          codebase consumes asset:// URLs via <img> (CaptureGrid →
+          Thumbnail, AnnotateWindow → AnnotateCanvas). CSS
+          background-image of asset:// URLs does not render in this
+          Tauri 2 / WebView2 environment — `<img>` does. */}
+      {previewSrc && (
+        <img
+          src={previewSrc}
+          alt=""
+          className="fixed inset-0 w-full h-full object-cover pointer-events-none"
+          draggable={false}
+        />
+      )}
       {/* Dark tint over the screenshot */}
-      <div className="fixed inset-0" style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)' }} />
+      <div className="fixed inset-0 pointer-events-none" style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)' }} />
       {rect && dragging && (
         <div
           className="absolute border-2 border-blue-400"

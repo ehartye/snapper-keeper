@@ -14,10 +14,13 @@ const HIDE_OWN_WINDOWS_KEY: &str = "capture.hide_own_windows";
 /// racing the frontend's existing hide.
 const EXCLUDE_LABELS: &[&str] = &["capture-overlay"];
 /// Delay between hiding our windows and grabbing pixels. Lets the
-/// compositor unmap the windows before the screen capture API reads
-/// the framebuffer. 50ms matches what we've seen reliable in the
-/// existing overlay self-hide path.
-const HIDE_SETTLE_DELAY: Duration = Duration::from_millis(50);
+/// compositor unmap the windows before xcap reads the framebuffer.
+/// 50ms left captured windows ghosting on real hardware — the hide
+/// had returned but the OS compositor hadn't finished re-painting
+/// the underlying content. 150ms matches the proven-reliable
+/// self-hide delay the overlay uses in `CaptureOverlay.tsx` and
+/// stops the ghost reliably.
+const HIDE_SETTLE_DELAY: Duration = Duration::from_millis(150);
 
 fn should_hide_own_windows(db: &snk_library::Db) -> bool {
     snk_library::settings::get(db, HIDE_OWN_WINDOWS_KEY)
@@ -111,14 +114,21 @@ pub struct ScreenPreview {
 
 #[tauri::command]
 pub fn grab_screen_preview<R: Runtime>(
+    state: State<'_, LibraryState>,
     app: tauri::AppHandle<R>,
     monitor_id: Option<u32>,
 ) -> Result<ScreenPreview> {
-    let result = if let Some(monitor_id) = monitor_id {
-        crate::grab::grab_monitor(monitor_id)?
-    } else {
-        crate::grab::grab_primary_monitor()?
-    };
+    // Hide own windows around the grab — same pattern as the three
+    // capture commands above. Without this the preview backdrop the
+    // region overlay shows would include the library/settings/etc.,
+    // making it impossible to draw a region over content underneath.
+    let result = with_hidden_own_windows(&app, &state.db, || {
+        if let Some(monitor_id) = monitor_id {
+            crate::grab::grab_monitor(monitor_id)
+        } else {
+            crate::grab::grab_primary_monitor()
+        }
+    })?;
     // Preview file lives under `captures/` so it falls inside the
     // assetProtocol allow scope (`$APPDATA/captures/**`). Tightening the
     // scope in #84 broke the previous root-of-app-data location: the
