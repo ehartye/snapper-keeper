@@ -57,6 +57,14 @@ esac
 
 echo "build-local: OS=$OS  TARGET=$TARGET  BUNDLES=$BUNDLES"
 
-# TODO(task-3): macOS build invocation
-# TODO(task-4): Windows pre-build + build invocation
+# --- Pre-build (Windows only — task 4) ---
+# TODO(task-4): Tesseract resolver + copy + EXIT trap
+
+# --- Build ---
+echo "build-local: invoking pnpm tauri build"
+pnpm --filter @snk/app tauri build \
+  --target "$TARGET" \
+  --bundles "$BUNDLES" \
+  --config '{"bundle":{"createUpdaterArtifacts":false}}'
+
 # TODO(task-5): post-build summary
