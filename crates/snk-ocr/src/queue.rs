@@ -80,7 +80,9 @@ async fn worker(
                     backend.name(),
                     &backend.engine_version(),
                 ) {
-                    on_error(OcrError::Recognize { detail: format!("persist: {e}") });
+                    on_error(OcrError::Recognize {
+                        detail: format!("persist: {e}"),
+                    });
                     error!(capture_id = %cap_id, error = %e, "persist ocr failed");
                     continue;
                 }
@@ -92,7 +94,9 @@ async fn worker(
                 error!(capture_id = %cap_id, error = ?e, "backend recognize failed");
             }
             Err(e) => {
-                on_error(OcrError::Recognize { detail: format!("task panicked: {e}") });
+                on_error(OcrError::Recognize {
+                    detail: format!("task panicked: {e}"),
+                });
                 error!(capture_id = %cap_id, error = %e, "ocr task panicked");
             }
         }

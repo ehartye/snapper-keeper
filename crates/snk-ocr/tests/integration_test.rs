@@ -14,7 +14,9 @@ use snk_ocr::backend::OcrBackend;
 
 #[cfg(target_os = "macos")]
 fn make_backend() -> Option<Box<dyn OcrBackend>> {
-    Some(Box::new(snk_ocr::vision::VisionBackend::new().expect("Vision backend should construct")))
+    Some(Box::new(
+        snk_ocr::vision::VisionBackend::new().expect("Vision backend should construct"),
+    ))
 }
 
 #[cfg(target_os = "windows")]

@@ -33,7 +33,10 @@ fn recognize_kebab_case() {
 
 #[test]
 fn image_load_kebab_case() {
-    let e = OcrError::ImageLoad { path: "x".into(), detail: "y".into() };
+    let e = OcrError::ImageLoad {
+        path: "x".into(),
+        detail: "y".into(),
+    };
     assert_eq!(
         serde_json::to_value(&e).unwrap(),
         json!({"kind": "image-load", "path": "x", "detail": "y"})
