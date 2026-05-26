@@ -55,9 +55,11 @@ pub fn upsert_full(
     let words_json = if words.is_empty() {
         None
     } else {
-        Some(serde_json::to_string(words).map_err(|e| crate::LibraryError::Persist {
-            detail: format!("serialize words_json: {e}"),
-        })?)
+        Some(
+            serde_json::to_string(words).map_err(|e| crate::LibraryError::Persist {
+                detail: format!("serialize words_json: {e}"),
+            })?,
+        )
     };
     db.with_conn(|conn| {
         conn.execute(
@@ -219,7 +221,10 @@ mod tests {
         let cap_id = insert_capture(&db);
         upsert(&db, &cap_id, "legacy text", "eng", 0.8).unwrap();
         let row = get(&db, &cap_id).unwrap().unwrap();
-        assert!(row.words.is_none(), "legacy upsert must leave words_json NULL");
+        assert!(
+            row.words.is_none(),
+            "legacy upsert must leave words_json NULL"
+        );
         assert_eq!(row.engine, "");
     }
 }
