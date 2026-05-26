@@ -350,13 +350,22 @@ Delete `vision-spike` afterward. Do NOT commit it.
 
 > **For the implementer:** edit this section in place with the spike results before starting T1. This becomes the authoritative record of what's known about the underlying APIs.
 
-- **WinOcr engine construction from plain `.exe` bundle:** _<Spike A outcome A or B>_
-- **WinOcr per-word `Confidence` API:** _<available with type X | line-only>_
-- **WinOcr bounding-rect coordinate space:** _<confirmed pixels, top-left origin | other>_
-- **`objc2-vision` resolved version:** _<e.g. `0.3.2`>_
-- **`objc2` family versions in workspace:** _<from `cargo tree`>_
-- **Vision per-word bounds API verified:** _<yes via `boundingBoxForRange_error` | other path>_
-- **Any plan amendments triggered by findings:** _<none | list>_
+- **WinOcr engine construction from plain `.exe` bundle:** ✅ **Outcome A.** `OcrEngine::TryCreateFromUserProfileLanguages()` succeeds from a plain `.exe` (no MSIX package identity, no manifest). Verified on Windows 11 with only `en-US` language pack installed; returned recognizer language tag `en-US`. `AvailableRecognizerLanguages()` enumerates installed packs; `MaxImageDimension()` returns 10000 px. No MSIX work required — NSIS bundle is fine.
+- **WinOcr per-word `Confidence` API:** ❌ **NOT exposed at any level.** The `OcrWord` class surface in `windows = "0.62"` exposes ONLY `Text()` and `BoundingRect()`. The `OcrLine` class surface exposes ONLY `Text()` and `Words()`. There is no `Confidence()` accessor anywhere in `Windows.Media.Ocr` (confirmed by reading `windows-0.62.2/src/Windows/Media/Ocr/mod.rs:230-244` and lines 159-174). T8 must use a heuristic line confidence (per-plan: 0.85) broadcast to every word — this is the documented asymmetry vs Vision.
+- **WinOcr bounding-rect coordinate space:** ✅ **Confirmed pixels, top-left origin.** Probe on 600×200 PNG with text drawn at Y=30 and Y=90 returned word bboxes at Y≈42 and Y≈102 in raw pixel units; bottom-right of words remained within the image bounds. T8 will divide by `decoder.PixelWidth()/PixelHeight()` to produce the normalized `BBox` the schema expects.
+- **`windows` crate version:** The workspace already pulls `windows = "0.61.3"` and `windows = "0.62.2"` transitively (via `tao`/`wry`/`tauri`-stack). The plan's suggested `0.58` is stale. Spike used `0.62` and built clean. T8 should pin `0.62` (not `0.58`) to align with the workspace and minimize duplicate-major bloat.
+- **windows-rs 0.62 async API change:** `IAsyncOperation::get()` was REMOVED in this version. Use the inherent method `.join()` instead (e.g. `StorageFile::GetFileFromPathAsync(&path)?.join()?`). It is a public method on each of the four async types (`IAsyncAction`, `IAsyncOperation<T>`, `IAsyncActionWithProgress<P>`, `IAsyncOperationWithProgress<T,P>`); no `windows-future` dep or trait import needed. The plan T8 code block uses `.and_then(|op| op.get())` — must be rewritten to `.and_then(|op| op.join())`.
+- **Windows UNC path gotcha for StorageFile:** `Path::canonicalize()` on Windows returns paths prefixed with `\\?\` (extended-length namespace). `StorageFile::GetFileFromPathAsync` REJECTS that prefix with HRESULT 0x800700A1 ("path is too long"). The implementation must strip the `\\?\` prefix before constructing the `HSTRING`. Trivial 5-line fix; required.
+- **`objc2-vision` resolved version:** _<to be filled by vision-mac>_
+- **`objc2` family versions in workspace:** _<to be filled by vision-mac>_
+- **Vision per-word bounds API verified:** _<to be filled by vision-mac>_
+- **Plan amendments triggered by Spike A findings (proposed; awaiting team-lead approval per plan-as-source-of-truth protocol):**
+    1. **T6 + T8** — pin `windows = "0.62"` (not `0.58`). Plus drop `Foundation_Collections` feature only if unused; spike confirms `Foundation_Collections` is NOT required for the core OCR call path (we never instantiate a generic vector; the API returns `IVectorView<OcrLine>` whose interface is exported by `Media_Ocr`).
+    2. **T8 `WinOcrBackend::recognize`** — three diffs vs the plan's pasted code block:
+        - Replace every `.and_then(|op| op.get())` with `.and_then(|op| op.join())` (4 call sites).
+        - After `image_path.canonicalize()`, strip a leading `\\?\` prefix before building the `HSTRING`.
+        - Delete the `line_confidence` helper and the `total_conf`/`avg` computation; hard-code line-broadcast confidence at `0.85` and store `confidence = 0.85` on the `OcrResult` too. Document in a single comment why (no API).
+    3. **T6 `Cargo.toml`** — leave `windows` features as planned (`Media_Ocr, Globalization, Graphics_Imaging, Storage, Storage_Streams, Foundation`). No need to add `windows-future` because `.join()` is an inherent method on the async types.
 
 ---
 
