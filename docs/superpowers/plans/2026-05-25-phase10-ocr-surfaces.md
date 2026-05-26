@@ -1269,10 +1269,12 @@ If the build fails because `which` or `serial_test` is removed from `[dependenci
 **Step 3: Commit**
 
 ```bash
-git add crates/snk-ocr/Cargo.toml
+git add crates/snk-ocr/Cargo.toml Cargo.lock
 git diff --cached
 git commit -m "chore(ocr): swap deps — drop Tesseract sidecar crates, add objc2-vision + windows"
 ```
+
+Plan amendment 2026-05-26 (vision-mac during T6): `Cargo.lock` MUST be staged alongside dep changes in this repo. Repo precedent (`git log --grep='^chore(deps)'`) shows every prior dep-touching commit bundles the lockfile. Omitting it desyncs every other agent's checkout. The plan's original single-file `git add` was local-only thinking missing multi-agent impact.
 
 ---
 
