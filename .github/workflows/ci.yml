@@ -83,6 +83,10 @@ jobs:
       - run: cargo fmt -- --check
       - run: cargo clippy --workspace --exclude snapper-keeper-app -- -D warnings
       - run: cargo test --workspace --exclude snapper-keeper-app
+      - name: Verify generated TS bindings from Rust types
+        run: bash scripts/verify-ts-bindings.sh
+      - name: Verify Result<_, String> allowlist
+        run: bash scripts/verify-string-result-allowlist.sh
 
       # Cross-plugin internals are off-limits — consumers must use the
       # public re-exports from `snk_library::*`, not `snk_library::plugin::*`.

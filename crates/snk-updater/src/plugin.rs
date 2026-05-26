@@ -5,7 +5,22 @@ use serde::{Deserialize, Serialize};
 use tauri::plugin::{Builder, TauriPlugin};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tauri_plugin_updater::UpdaterExt;
+use thiserror::Error;
 use tracing::{error, info, warn};
+use ts_rs::TS;
+
+#[derive(Debug, Error, Serialize, TS)]
+#[ts(
+    export,
+    export_to = "../../../packages/snk-updater/src/generated/errors.ts"
+)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum UpdaterError {
+    #[error("updater init failed: {detail}")]
+    Init { detail: String },
+}
+
+pub type Result<T> = std::result::Result<T, UpdaterError>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
@@ -56,7 +71,7 @@ impl UpdaterState {
 }
 
 #[tauri::command]
-pub async fn check_for_update<R: Runtime>(app: AppHandle<R>) -> Result<UpdateStatus, String> {
+pub async fn check_for_update<R: Runtime>(app: AppHandle<R>) -> Result<UpdateStatus> {
     do_update_check(app).await
 }
 
@@ -75,13 +90,15 @@ pub fn restart_app<R: Runtime>(app: AppHandle<R>) {
     app.restart();
 }
 
-async fn do_update_check<R: Runtime>(app: AppHandle<R>) -> Result<UpdateStatus, String> {
+async fn do_update_check<R: Runtime>(app: AppHandle<R>) -> Result<UpdateStatus> {
     let state = app.state::<UpdaterState>();
     state.set_status(UpdateStatus::Checking);
     state.set_last_check_at(chrono::Utc::now().timestamp_millis());
     let _ = app.emit("updater:status-changed", UpdateStatus::Checking);
 
-    let updater = app.updater().map_err(|e| format!("updater init: {e}"))?;
+    let updater = app.updater().map_err(|e| UpdaterError::Init {
+        detail: e.to_string(),
+    })?;
 
     match updater.check().await {
         Ok(Some(update)) => {

@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type { Capture, ListCapturesQuery, SearchResult, Tag } from './types';
 
 export * from './types';
+export * from './generated/errors';
 
 export function listCaptures(query?: ListCapturesQuery): Promise<Capture[]> {
   return invoke<Capture[]>('plugin:snk-library|list_captures', { query });

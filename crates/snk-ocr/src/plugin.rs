@@ -8,7 +8,7 @@ use snk_library::LibraryState;
 
 use crate::backend::OcrBackend;
 use crate::queue::OcrQueue;
-use crate::OcrError;
+use crate::{OcrError, Result};
 
 pub struct OcrState {
     pub queue: OcrQueue,
@@ -18,9 +18,18 @@ pub struct OcrState {
 }
 
 #[tauri::command]
-pub fn ocr_status<R: Runtime>(app: tauri::AppHandle<R>) -> Result<serde_json::Value, String> {
-    let state = app.try_state::<OcrState>().ok_or("ocr state missing")?;
-    let last_err = state.last_error.lock().map_err(|e| e.to_string())?;
+pub fn ocr_status<R: Runtime>(app: tauri::AppHandle<R>) -> Result<serde_json::Value> {
+    let state = app
+        .try_state::<OcrState>()
+        .ok_or_else(|| OcrError::StateUnavailable {
+            reason: "ocr state missing".into(),
+        })?;
+    let last_err = state
+        .last_error
+        .lock()
+        .map_err(|e| OcrError::StateUnavailable {
+            reason: e.to_string(),
+        })?;
     Ok(serde_json::json!({
         "backend": state.backend_name,
         "version": state.backend_version,
@@ -32,13 +41,15 @@ pub fn ocr_status<R: Runtime>(app: tauri::AppHandle<R>) -> Result<serde_json::Va
 pub fn get_ocr_words<R: Runtime>(
     app: tauri::AppHandle<R>,
     capture_id: String,
-) -> Result<Vec<OcrWord>, String> {
+) -> Result<Vec<OcrWord>> {
     let lib = app.state::<LibraryState>();
-    let row = snk_library::ocr::get(&lib.db, &capture_id).map_err(|e| e.to_string())?;
+    let row = snk_library::ocr::get(&lib.db, &capture_id).map_err(|e| OcrError::Library {
+        detail: e.to_string(),
+    })?;
     Ok(row.and_then(|r| r.words).unwrap_or_default())
 }
 
-fn build_backend() -> Result<Arc<dyn OcrBackend>, OcrError> {
+fn build_backend() -> Result<Arc<dyn OcrBackend>> {
     #[cfg(target_os = "macos")]
     {
         let b = crate::vision::VisionBackend::new()?;
