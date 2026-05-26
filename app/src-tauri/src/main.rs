@@ -2,13 +2,18 @@
 
 mod logging;
 
+use std::{any::Any, panic::AssertUnwindSafe};
+
+use serde::Serialize;
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
+    plugin::Plugin,
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Emitter, Manager,
+    webview::PageLoadPayload,
+    AppHandle, Emitter, Manager, RunEvent, Runtime, Url, Webview, Window,
 };
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 const TRAY_HOLO_PNG: &[u8] = include_bytes!("../icons/sk-holo.png");
 const TRAY_MEMPHIS_PNG: &[u8] = include_bytes!("../icons/sk-memphis.png");
@@ -18,6 +23,113 @@ const TRAY_WABI_SABI_PNG: &[u8] = include_bytes!("../icons/sk-wabi-sabi.png");
 const TRAY_RISO_PNG: &[u8] = include_bytes!("../icons/sk-riso.png");
 const TRAY_CONSTRUCTIVIST_PNG: &[u8] = include_bytes!("../icons/sk-constructivist.png");
 const TRAY_ATOMIC_PNG: &[u8] = include_bytes!("../icons/sk-atomic.png");
+const PLUGIN_SETUP_FAILED_EVENT: &str = "plugin:setup-failed";
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PluginSetupFailedPayload {
+    plugin_name: String,
+    panic_message: String,
+    diagnostics_markdown: String,
+}
+
+struct SafeSetupPlugin<P> {
+    inner: P,
+}
+
+fn safe_setup<P>(plugin: P) -> SafeSetupPlugin<P> {
+    SafeSetupPlugin { inner: plugin }
+}
+
+fn panic_message(payload: &(dyn Any + Send)) -> String {
+    if let Some(message) = payload.downcast_ref::<&'static str>() {
+        (*message).to_string()
+    } else if let Some(message) = payload.downcast_ref::<String>() {
+        message.clone()
+    } else {
+        "unknown panic payload".to_string()
+    }
+}
+
+fn diagnostics_markdown(plugin_name: &str, panic: &str) -> String {
+    format!(
+        "## Plugin setup panic\n- Plugin: `{plugin_name}`\n- Panic: `{panic}`\n\n## Action\n- Plugin `{plugin_name}` failed to start during app bootstrap.\n- Please file a bug and include this diagnostics blob."
+    )
+}
+
+fn emit_plugin_setup_failed<R: Runtime>(app: &AppHandle<R>, plugin_name: &str, panic: &str) {
+    let payload = PluginSetupFailedPayload {
+        plugin_name: plugin_name.to_string(),
+        panic_message: panic.to_string(),
+        diagnostics_markdown: diagnostics_markdown(plugin_name, panic),
+    };
+    if let Err(err) = app.emit(PLUGIN_SETUP_FAILED_EVENT, payload) {
+        warn!(
+            plugin = plugin_name,
+            error = %err,
+            "failed to emit plugin:setup-failed"
+        );
+    }
+}
+
+impl<R, P> Plugin<R> for SafeSetupPlugin<P>
+where
+    R: Runtime,
+    P: Plugin<R>,
+{
+    fn name(&self) -> &'static str {
+        self.inner.name()
+    }
+
+    fn initialize(
+        &mut self,
+        app: &AppHandle<R>,
+        config: serde_json::Value,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let name = self.inner.name();
+        match std::panic::catch_unwind(AssertUnwindSafe(|| self.inner.initialize(app, config))) {
+            Ok(result) => result,
+            Err(payload) => {
+                let panic = panic_message(payload.as_ref());
+                error!(
+                    plugin = name,
+                    panic = %panic,
+                    "plugin setup panicked"
+                );
+                emit_plugin_setup_failed(app, name, &panic);
+                Ok(())
+            }
+        }
+    }
+
+    fn initialization_script(&self) -> Option<String> {
+        self.inner.initialization_script()
+    }
+
+    fn window_created(&mut self, window: Window<R>) {
+        self.inner.window_created(window);
+    }
+
+    fn webview_created(&mut self, webview: Webview<R>) {
+        self.inner.webview_created(webview);
+    }
+
+    fn on_navigation(&mut self, webview: &Webview<R>, url: &Url) -> bool {
+        self.inner.on_navigation(webview, url)
+    }
+
+    fn on_page_load(&mut self, webview: &Webview<R>, payload: &PageLoadPayload<'_>) {
+        self.inner.on_page_load(webview, payload);
+    }
+
+    fn on_event(&mut self, app: &AppHandle<R>, event: &RunEvent) {
+        self.inner.on_event(app, event);
+    }
+
+    fn extend_api(&mut self, invoke: tauri::ipc::Invoke<R>) -> bool {
+        self.inner.extend_api(invoke)
+    }
+}
 
 fn tray_icon_for(family: &str) -> Image<'static> {
     let bytes = match family {
@@ -66,25 +178,29 @@ fn set_tray_theme<R: tauri::Runtime>(
 
 fn main() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(safe_setup(
+            tauri_plugin_global_shortcut::Builder::new().build(),
+        ))
         // Launch-at-login support. The plugin manages the platform-specific
         // bits (registry entry on Windows, LaunchAgent on macOS). The user
         // toggles it from Settings → Startup.
-        .plugin(tauri_plugin_autostart::init(
+        .plugin(safe_setup(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             // No extra args — the app reads its own state to decide whether
             // to start hidden or focused.
             None,
+        )))
+        .plugin(safe_setup(tauri_plugin_opener::init()))
+        .plugin(safe_setup(snk_library::init()))
+        .plugin(safe_setup(snk_hotkeys::init()))
+        .plugin(safe_setup(snk_capture::init()))
+        .plugin(safe_setup(snk_annotate::init()))
+        .plugin(safe_setup(snk_clipboard::init()))
+        .plugin(safe_setup(snk_ocr::init()))
+        .plugin(safe_setup(
+            tauri_plugin_updater::Builder::new().build(),
         ))
-        .plugin(tauri_plugin_opener::init())
-        .plugin(snk_library::init())
-        .plugin(snk_hotkeys::init())
-        .plugin(snk_capture::init())
-        .plugin(snk_annotate::init())
-        .plugin(snk_clipboard::init())
-        .plugin(snk_ocr::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(snk_releaser::init())
+        .plugin(safe_setup(snk_releaser::init()))
         .invoke_handler(tauri::generate_handler![set_tray_theme])
         .setup(|app| {
             // Initialize file-based tracing (general + security logs +
