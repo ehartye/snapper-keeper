@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { invoke } from '@tauri-apps/api/core';
 
+import { ModalProvider } from '../../components/Modal';
 import { SettingsWindow } from './SettingsWindow';
 import { renderWithQuery } from '../../test/renderWithQuery';
 
@@ -10,20 +11,43 @@ const mockedInvoke = vi.mocked(invoke);
 describe('<SettingsWindow />', () => {
   beforeEach(() => {
     mockedInvoke.mockReset();
-    mockedInvoke.mockResolvedValue(null);
+    mockedInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'plugin:snk-updater|get_update_status')
+        return Promise.resolve({ kind: 'idle' });
+      if (cmd === 'plugin:snk-updater|get_last_check_at')
+        return Promise.resolve(null);
+      return Promise.resolve(null);
+    });
+
+    const existing = document.getElementById('modal-root');
+    if (existing) existing.remove();
+    const root = document.createElement('div');
+    root.id = 'modal-root';
+    document.body.appendChild(root);
   });
 
-  it('renders the Settings header and Appearance + Capture + Clipboard + OCR sections', async () => {
-    renderWithQuery(<SettingsWindow />);
+  it('renders Settings header + Appearance + Capture + Clipboard + OCR + About sections', async () => {
+    renderWithQuery(
+      <ModalProvider>
+        <SettingsWindow />
+      </ModalProvider>,
+    );
     expect(screen.getByText('Settings')).toBeInTheDocument();
     expect(screen.getByText('Appearance')).toBeInTheDocument();
     expect(screen.getByText('Capture')).toBeInTheDocument();
     expect(screen.getByText('Clipboard')).toBeInTheDocument();
     expect(screen.getByText('OCR')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'About', level: 2 }),
+    ).toBeInTheDocument();
   });
 
   it('lists all 8 theme cards', async () => {
-    renderWithQuery(<SettingsWindow />);
+    renderWithQuery(
+      <ModalProvider>
+        <SettingsWindow />
+      </ModalProvider>,
+    );
     // Each ThemeCard's label is the family name (first chunk before — )
     for (const label of [
       'Holographic Dreamcore',
@@ -36,7 +60,11 @@ describe('<SettingsWindow />', () => {
   });
 
   it('clicking a theme card persists the new theme and applies it', async () => {
-    renderWithQuery(<SettingsWindow />);
+    renderWithQuery(
+      <ModalProvider>
+        <SettingsWindow />
+      </ModalProvider>,
+    );
     const cards = await screen.findAllByText('Memphis Machine');
     fireEvent.click(cards[0]!);
     await waitFor(() => {
@@ -48,7 +76,11 @@ describe('<SettingsWindow />', () => {
   });
 
   it('changing the capture format calls setSetting', async () => {
-    renderWithQuery(<SettingsWindow />);
+    renderWithQuery(
+      <ModalProvider>
+        <SettingsWindow />
+      </ModalProvider>,
+    );
     const select = await screen.findByDisplayValue(/png/i);
     await act(async () => {
       fireEvent.change(select, { target: { value: 'jpg' } });
@@ -68,9 +100,17 @@ describe('<SettingsWindow />', () => {
         if (key === 'capture.auto_copy') return Promise.resolve(true);
         return Promise.resolve(null);
       }
+      if (cmd === 'plugin:snk-updater|get_update_status')
+        return Promise.resolve({ kind: 'idle' });
+      if (cmd === 'plugin:snk-updater|get_last_check_at')
+        return Promise.resolve(null);
       return Promise.resolve(undefined);
     });
-    renderWithQuery(<SettingsWindow />);
+    renderWithQuery(
+      <ModalProvider>
+        <SettingsWindow />
+      </ModalProvider>,
+    );
     // Wait for the initial query so the toggle reflects 'true'.
     await waitFor(() => expect(mockedInvoke).toHaveBeenCalled());
 

@@ -2,7 +2,9 @@ import { useState, type ReactNode } from 'react';
 
 import { setSetting } from '@snk/library';
 
-type Step = 'welcome' | 'hotkeys' | 'library' | 'done';
+import { THEME_FAMILIES, useTheme, type ThemeFamily, type ThemeId } from '../../lib/theme';
+
+type Step = 'welcome' | 'theme' | 'hotkeys' | 'library' | 'done';
 
 const DEFAULT_HOTKEYS = [
   { action: 'Capture region', chord: 'Ctrl+Shift+4' },
@@ -30,6 +32,8 @@ function PrimaryButton({ onClick, children }: { onClick: () => void; children: R
 
 export function FirstRunWizard({ onComplete }: Props) {
   const [step, setStep] = useState<Step>('welcome');
+  const { theme, setTheme } = useTheme();
+  const currentFamily = theme.replace(/-(light|dark)$/, '') as ThemeFamily;
 
   const finish = async () => {
     await setSetting('firstrun.completed', true);
@@ -51,7 +55,56 @@ export function FirstRunWizard({ onComplete }: Props) {
               Let&apos;s get you set up.
             </p>
             <div className="pt-2">
-              <PrimaryButton onClick={() => setStep('hotkeys')}>get started</PrimaryButton>
+              <PrimaryButton onClick={() => setStep('theme')}>get started</PrimaryButton>
+            </div>
+          </div>
+        )}
+
+        {step === 'theme' && (
+          <div className="space-y-5">
+            <h2 className="font-display text-xl">🎨 pick a theme</h2>
+            <p className="text-sm text-fg-muted">
+              Choose one — you can change it anytime in Settings.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              {(Object.keys(THEME_FAMILIES) as ThemeFamily[]).map((family) => {
+                const def = THEME_FAMILIES[family];
+                const id = `${family}-dark` as ThemeId;
+                const active = currentFamily === family;
+                return (
+                  <button
+                    key={family}
+                    data-testid="theme-card"
+                    onClick={() => setTheme(id)}
+                    className={`text-left p-3 rounded-xl border-2 transition-transform hover:-translate-y-0.5 ${
+                      active ? 'border-primary ring-2 ring-primary' : 'border-border'
+                    }`}
+                    style={{ background: def.preview.bgDark }}
+                  >
+                    <div
+                      className="text-sm"
+                      style={{ fontFamily: def.preview.displayFont, color: def.preview.fgDark }}
+                    >
+                      {def.label}
+                    </div>
+                    <div
+                      className="text-[10px] mt-1 italic"
+                      style={{ fontFamily: def.preview.bodyFont, color: def.preview.mutedDark }}
+                    >
+                      {def.tagline}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex justify-between items-center">
+              <button
+                className="text-sm text-fg-muted hover:text-fg"
+                onClick={() => setStep('welcome')}
+              >
+                ← back
+              </button>
+              <PrimaryButton onClick={() => setStep('hotkeys')}>next</PrimaryButton>
             </div>
           </div>
         )}
@@ -75,7 +128,7 @@ export function FirstRunWizard({ onComplete }: Props) {
             <div className="flex justify-between items-center">
               <button
                 className="text-sm text-fg-muted hover:text-fg"
-                onClick={() => setStep('welcome')}
+                onClick={() => setStep('theme')}
               >
                 ← back
               </button>

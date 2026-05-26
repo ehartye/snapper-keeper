@@ -6,11 +6,12 @@ use tauri::{Runtime, State};
 use tracing::info;
 
 use snk_library::clipboard;
-use snk_library::plugin::LibraryState;
+use snk_library::LibraryState;
 
 use crate::caret;
 use crate::paste;
-use crate::watcher;
+use crate::skip_set;
+use crate::source_app::{self, SourceApp};
 use crate::{ClipboardError, Result};
 
 /// Wait between writing to the clipboard and synthesizing Ctrl/Cmd+V so the
@@ -35,7 +36,10 @@ pub fn paste_item<R: Runtime>(
     })?;
 
     let mut clip = Clipboard::new()?;
-    watcher::mark_skip_next();
+    // Mark this content as self-emitted so the watcher's skip_set
+    // recognizes the next observed event with this hash and ignores
+    // it (within SKIP_TTL). Replaces the old SKIP_NEXT AtomicBool.
+    skip_set::mark_emitted(skip_set::hash_content(text.as_bytes()));
     clip.set_text(text)?;
 
     thread::sleep(PASTE_SETTLE);
@@ -50,4 +54,9 @@ pub fn paste_item<R: Runtime>(
 #[tauri::command]
 pub fn show_popup<R: Runtime>(_app: tauri::AppHandle<R>) -> Result<crate::caret::CaretPosition> {
     Ok(caret::resolve_popup_position())
+}
+
+#[tauri::command]
+pub fn detect_frontmost_app<R: Runtime>(_app: tauri::AppHandle<R>) -> Option<SourceApp> {
+    source_app::current()
 }

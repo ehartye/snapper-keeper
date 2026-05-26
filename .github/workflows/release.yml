@@ -13,7 +13,22 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-and-release:
+  verify-pubkey:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install minisign + jq
+        run: sudo apt-get update && sudo apt-get install -y minisign jq
+      - name: Verify TAURI_SIGNING_PRIVATE_KEY matches tauri.conf.json pubkey
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: ./scripts/verify-pubkey.sh
+
+  build:
+    needs: verify-pubkey
     strategy:
       fail-fast: false
       matrix:
@@ -21,42 +36,40 @@ jobs:
           - os: macos-latest          # Apple Silicon, native arm64 build
             target: aarch64-apple-darwin
             label: macOS-arm64
+            bundles: 'app'
           - os: macos-15-intel        # native Intel runner — no cross-compile, no Rosetta
             target: x86_64-apple-darwin
             label: macOS-x64
+            bundles: 'app'
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             label: Windows-x64
+            bundles: 'nsis'
 
     runs-on: ${{ matrix.os }}
     permissions:
-      contents: write
+      contents: read
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - uses: pnpm/action-setup@v3
-        with:
-          version: 9
+      - uses: pnpm/action-setup@d15e628ca66d93ee5f352c71671a7bc6a97af5c9 # v6.0.8
+        # version not specified here — pnpm/action-setup v6+ errors when
+        # both `with: version:` AND `packageManager` in package.json
+        # are present. We let packageManager drive the version.
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: 20
           cache: pnpm
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           targets: ${{ matrix.target }}
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           key: ${{ matrix.target }}
-
-      - name: Install Linux deps
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libxdo-dev libssl-dev libpipewire-0.3-dev libgbm-dev libegl1-mesa-dev libwayland-dev libdrm-dev
 
       - run: pnpm install --frozen-lockfile
 
@@ -66,84 +79,160 @@ jobs:
       - name: Bundle Tesseract (Windows)
         if: runner.os == 'Windows'
         shell: powershell
+        env:
+          TESSERACT_VERSION: '5.5.0.20241111'
+          TESSERACT_SHA256: 'F3FC4236425B690C8BE756F35793F77394EE004BE0A6460A440C754D892F68BC'
         run: |
-          choco install tesseract -y --no-progress
+          choco install tesseract --version=$env:TESSERACT_VERSION --no-progress --confirm --requirechecksums
+          # Tesseract's chocolatey package bundles an NSIS .exe (not .msi).
+          $installer = (Get-ChildItem "$env:ChocolateyInstall\lib\tesseract" -Filter '*.exe' -Recurse | Select-Object -First 1).FullName
+          if (-not $installer) { Write-Error "Tesseract installer .exe not found"; exit 1 }
+          $actual = (Get-FileHash -Algorithm SHA256 $installer).Hash
+          if ($actual -ne $env:TESSERACT_SHA256) {
+            Write-Error "Tesseract installer SHA256 mismatch. Expected: $env:TESSERACT_SHA256. Got: $actual."
+            exit 1
+          }
           $src = 'C:\Program Files\Tesseract-OCR'
           $dest = 'app\src-tauri\resources\tesseract'
           New-Item -ItemType Directory -Force -Path $dest | Out-Null
           Copy-Item -Path "$src\*" -Destination $dest -Recurse -Force
-          Write-Host "Bundled tesseract:"
-          Get-ChildItem $dest | Format-Table Name, Length
 
-      # Windows signing: install .NET SDK + the dotnet `sign` CLI tool so
-      # Tauri's bundler can invoke it via TAURI_WINDOWS_SIGN_COMMAND below.
-      - name: Setup .NET (Windows signing)
+      # Windows: delete bundle.windows.signCommand from tauri.conf.json
+      # before building. The build job is secrets-free, so it cannot
+      # invoke `dotnet sign` (no Azure creds). Attempts to disable the
+      # signCommand via --config overlay don't work:
+      #   - `signCommand: ""` -> Tauri tries to exec the empty command
+      #     and fails with "program path has no file name".
+      #   - `signCommand: null` -> unverified at time of writing; jq -d
+      #     is the robust fix that just removes the field entirely.
+      # The sign-win-x64 job runs `dotnet sign` against the unsigned
+      # installer instead.
+      - name: Strip signCommand from tauri.conf.json (Windows build)
         if: runner.os == 'Windows'
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '9.x'
-
-      - name: Install dotnet sign tool (Windows)
-        if: runner.os == 'Windows'
-        shell: powershell
+        shell: bash
         run: |
-          dotnet tool install --global --prerelease sign
-          # `dotnet tool install --global` puts tools in
-          # %USERPROFILE%\.dotnet\tools but doesn't add that dir to PATH
-          # for subsequent workflow steps. Append it to GITHUB_PATH so
-          # Tauri's bundler can find `sign.exe` when it invokes the
-          # `bundle.windows.signCommand` from tauri.conf.json.
-          $toolsPath = "$env:USERPROFILE\.dotnet\tools"
-          $toolsPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          Write-Host "Added to GITHUB_PATH: $toolsPath"
+          jq 'del(.bundle.windows.signCommand)' app/src-tauri/tauri.conf.json > /tmp/conf.json
+          mv /tmp/conf.json app/src-tauri/tauri.conf.json
+          echo "windows.signCommand after patch:"
+          jq '.bundle.windows.signCommand // "(absent)"' app/src-tauri/tauri.conf.json
 
-      - name: Verify sign tool is on PATH (Windows)
-        if: runner.os == 'Windows'
-        shell: powershell
+      # Build with NO signing secrets in env.
+      #
+      # `createUpdaterArtifacts: false` is critical here. An earlier attempt
+      # overrode `plugins.updater.pubkey` to "" hoping Tauri would interpret
+      # that as "no pubkey, skip updater minisign". It does not: Tauri sees
+      # ANY pubkey value (including "") as "pubkey configured", then errors
+      # with "A public key has been found, but no private key. Make sure to
+      # set TAURI_SIGNING_PRIVATE_KEY environment variable." — exactly
+      # because we INTENTIONALLY haven't set that env var. Setting
+      # createUpdaterArtifacts: false skips the updater bundler entirely,
+      # which is what we want: the sign jobs recreate the updater payload
+      # (tar of signed .app + minisign on macOS; minisign on signed installer
+      # on Windows) from the platform-signed artifacts.
+      #
+      # `shell: bash` is required: on windows-latest the default shell is
+      # PowerShell, which tokenizes the inline JSON --config argument
+      # differently and breaks the bundler. Git Bash is preinstalled on
+      # Windows runners.
+      - name: Build Tauri app (unsigned)
+        shell: bash
         run: |
-          $signPath = (Get-Command sign -ErrorAction SilentlyContinue).Source
-          if (-not $signPath) {
-            Write-Error "sign tool NOT found on PATH"
-            exit 1
-          }
-          Write-Host "sign tool located at: $signPath"
-          sign --version
+          pnpm tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} \
+            --config '{"bundle":{"createUpdaterArtifacts":false}}'
 
-      # Smoke-test the sign command directly so any auth / syntax / network
-      # error surfaces here with a real stderr instead of Tauri's opaque
-      # "failed to run sign". Sign a copy of cmd.exe (already Microsoft-
-      # signed; re-signing it as a test is harmless because we never
-      # distribute it). The resulting Authenticode block proves the SP
-      # credentials work end-to-end against Azure Artifact Signing.
-      - name: Smoke-test sign tool against Azure Artifact Signing (Windows)
-        if: runner.os == 'Windows'
-        shell: powershell
-        env:
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-        run: |
-          Copy-Item -Path "C:\Windows\System32\cmd.exe" -Destination ".\sign-smoke-test.exe"
-          Write-Host "Invoking sign against .\sign-smoke-test.exe ..."
-          sign code artifact-signing `
-            -ase https://eus.codesigning.azure.net `
-            -asa HartyeTech `
-            -ascp snapper-keeper `
-            -v Information `
-            ".\sign-smoke-test.exe"
-          $exit = $LASTEXITCODE
-          Write-Host "sign exit code: $exit"
-          if ($exit -ne 0) {
-            Write-Error "sign tool failed against Azure Artifact Signing (exit $exit)"
-            exit $exit
-          }
-          Write-Host "Sign succeeded. Verifying Authenticode signature on test file:"
-          Get-AuthenticodeSignature ".\sign-smoke-test.exe" | Format-List Status, StatusMessage, SignerCertificate
-          Remove-Item ".\sign-smoke-test.exe"
-
-      # macOS: import signing certificate
-      - name: Import Apple certificate
+      # macOS: upload the .app directory. The sign job will codesign the .app,
+      # then rebuild .dmg from the signed .app, tar the signed .app to make
+      # .app.tar.gz, then minisign the tar.
+      #
+      # Path glob is `macos/**` rather than `macos/Snapper Keeper.app/**`:
+      # upload-artifact uses the common ancestor of matched files as the
+      # archive root. With `.app/**` the common ancestor is the .app
+      # directory itself, which strips `Snapper Keeper.app/` from the
+      # archive paths — the sign job would then need to reconstruct it.
+      # Uploading from `macos/**` preserves `Snapper Keeper.app/...` as a
+      # subdirectory in the archive (and incidentally also picks up the
+      # unsigned .app.tar.gz that the bundler emits for the updater; the
+      # sign job ignores that and recreates it post-codesign).
+      - name: Upload unsigned macOS artifacts
         if: runner.os == 'macOS'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: unsigned-artifacts-${{ matrix.label }}
+          path: |
+            target/${{ matrix.target }}/release/bundle/macos/**
+          if-no-files-found: error
+
+      - name: Upload unsigned Windows artifacts
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: unsigned-artifacts-${{ matrix.label }}
+          path: |
+            target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+
+  artifact-verify:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Download all unsigned artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: artifacts
+          pattern: unsigned-artifacts-*
+
+      - name: Summarize artifacts
+        run: |
+          echo "## Unsigned build artifacts" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Platform | File | Size (bytes) | SHA-256 |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---:|---:|---|" >> "$GITHUB_STEP_SUMMARY"
+
+          find artifacts -type f | sort | while read -r f; do
+            # Skip Mac .app directory contents inside Info.plist etc.; report
+            # only top-level installer-shaped files.
+            case "$f" in
+              *.exe|*.dmg|*.app.tar.gz|*.app/Contents/MacOS/*) ;;
+              *) continue ;;
+            esac
+            platform=$(echo "$f" | awk -F/ '{print $2}' | sed 's/^unsigned-artifacts-//')
+            name=$(basename "$f")
+            size=$(stat -c%s "$f")
+            sha=$(sha256sum "$f" | awk '{print $1}')
+            printf "| %s | %s | %s | %s |\n" "$platform" "$name" "$size" "$sha" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Review this table before approving the production-release environment gate." >> "$GITHUB_STEP_SUMMARY"
+
+  sign-mac-arm:
+    needs: artifact-verify
+    runs-on: macos-latest
+    environment: production-release
+    permissions:
+      contents: read
+    env:
+      LABEL: macOS-arm64
+      ARCH: aarch64
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Install minisign, jq, create-dmg
+        run: brew install minisign jq create-dmg
+
+      - name: Download unsigned artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: unsigned-artifacts-${{ env.LABEL }}
+          path: artifacts/unsigned
+
+      - name: Import Apple certificate
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -152,105 +241,328 @@ jobs:
           security create-keychain -p actions build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p actions build.keychain
-          # Extend the keychain idle-lock timeout to 2 hours so it doesn't
-          # auto-lock during long Rust compiles. Default macOS timeout is
-          # 300s, which leaves codesign hanging forever waiting for an
-          # interactive password prompt when the build exceeds 5 min — the
-          # exact failure mode of v0.0.0-test5 macOS-x64 (10min compile,
-          # codesign hung 49min then cancelled).
+          # 2-hour keychain idle timeout — default 300s causes codesign to
+          # hang waiting for password prompt when build exceeds 5 min.
           security set-keychain-settings -t 7200 build.keychain
           security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions build.keychain
           rm certificate.p12
 
-      # Build with Tauri CLI — handles signing, bundling, and updater artifacts.
-      # Windows signing uses Azure Artifact Signing via the `sign` CLI, which
-      # is wired in through `bundle.windows.signCommand` in tauri.conf.json
-      # (Tauri 2 ignores the old TAURI_WINDOWS_SIGN_COMMAND env var from
-      # Tauri 1). The CLI reads AZURE_TENANT_ID/CLIENT_ID/CLIENT_SECRET from
-      # env via DefaultAzureCredential.
-      - name: Build Tauri app
+      - name: Smoke-test signing toolchain
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # macOS signing
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          # Windows signing via Azure Artifact Signing
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-        run: |
-          pnpm tauri build --target ${{ matrix.target }}
+        run: ./scripts/smoke-sign-roundtrip.sh macos
 
-      # macOS: Tauri's updater bundler emits `Snapper Keeper.app.tar.gz` with
-      # no arch in the filename, so both arm64 and x64 jobs collide on the same
-      # release asset. Rename per-arch before upload so they survive separately.
-      - name: Rename macOS updater payload per arch
-        if: runner.os == 'macOS'
+      - name: Codesign .app
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
-          ARCH=$(echo "${{ matrix.target }}" | cut -d'-' -f1)
-          cd "target/${{ matrix.target }}/release/bundle/macos"
-          if [ -f "Snapper Keeper.app.tar.gz" ]; then
-            mv "Snapper Keeper.app.tar.gz" "Snapper.Keeper_${ARCH}.app.tar.gz"
-          fi
-          if [ -f "Snapper Keeper.app.tar.gz.sig" ]; then
-            mv "Snapper Keeper.app.tar.gz.sig" "Snapper.Keeper_${ARCH}.app.tar.gz.sig"
-          fi
-          ls -la
+          APP_PATH="artifacts/unsigned/Snapper Keeper.app"
+          codesign --sign "$APPLE_SIGNING_IDENTITY" --options runtime --timestamp --deep "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
-      # macOS: notarize the .app bundle
-      - name: Notarize macOS app
-        if: runner.os == 'macOS'
+      - name: Rebuild .dmg from signed .app
+        run: |
+          mkdir -p artifacts/signed
+          create-dmg \
+            --volname "Snapper Keeper" \
+            --window-size 600 400 \
+            --icon-size 100 \
+            "artifacts/signed/Snapper Keeper.dmg" \
+            "artifacts/unsigned/Snapper Keeper.app"
+
+      - name: Notarize .dmg
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          DMG_PATH=$(find target/${{ matrix.target }}/release/bundle/dmg -name "*.dmg" | head -1)
-          if [ -n "$DMG_PATH" ]; then
-            xcrun notarytool submit "$DMG_PATH" \
-              --apple-id "$APPLE_ID" \
-              --password "$APPLE_PASSWORD" \
-              --team-id "$APPLE_TEAM_ID" \
-              --wait
-            xcrun stapler staple "$DMG_PATH"
-          fi
+          DMG="artifacts/signed/Snapper Keeper.dmg"
+          xcrun notarytool submit "$DMG" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+          xcrun stapler staple "$DMG"
 
-      # Upload artifacts for the release job. The Cargo workspace puts the
-      # build output at `target/` (workspace root), not under app/src-tauri/.
-      # Tauri 2 attaches Windows updater signatures directly to the installer
-      # as `*-setup.exe.sig` (no separate .nsis.zip like Tauri 1 used).
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+      - name: Tar signed .app for updater payload
+        run: |
+          cd artifacts/unsigned
+          tar -czf "../signed/Snapper.Keeper_${{ env.ARCH }}.app.tar.gz" "Snapper Keeper.app"
+
+      - name: Minisign the updater payload
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          WORK=$(mktemp -d)
+          # tr -d '\r' before base64 -d: portable defense against CR
+          # mangling (Git Bash on Windows surfaces secret env vars with
+          # spurious CRs). No-op on Linux/macOS.
+          echo "$TAURI_SIGNING_PRIVATE_KEY" | tr -d '\r' | base64 -d > "$WORK/priv.key"
+          echo "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" | minisign -S -s "$WORK/priv.key" \
+            -m "artifacts/signed/Snapper.Keeper_${{ env.ARCH }}.app.tar.gz" \
+            -x "artifacts/signed/Snapper.Keeper_${{ env.ARCH }}.app.tar.gz.sig"
+          rm -rf "$WORK"
+
+      - name: Rename .dmg per-arch
+        run: |
+          cd artifacts/signed
+          mv "Snapper Keeper.dmg" "Snapper.Keeper_${{ env.ARCH }}.dmg"
+
+      - name: Upload signed artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: artifacts-${{ matrix.label }}
+          name: signed-artifacts-${{ env.LABEL }}
           path: |
-            target/${{ matrix.target }}/release/bundle/dmg/*.dmg
-            target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz
-            target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz.sig
-            target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe
-            target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe.sig
+            artifacts/signed/*.dmg
+            artifacts/signed/*.app.tar.gz
+            artifacts/signed/*.app.tar.gz.sig
           if-no-files-found: error
 
       - name: Clean up certificates
         if: always()
-        shell: bash
+        run: rm -f certificate.p12
+
+  sign-mac-x64:
+    needs: artifact-verify
+    runs-on: macos-15-intel
+    environment: production-release
+    permissions:
+      contents: read
+    env:
+      LABEL: macOS-x64
+      ARCH: x86_64
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          targets: x86_64-apple-darwin
+
+      - name: Install minisign, jq, create-dmg
+        run: brew install minisign jq create-dmg
+
+      - name: Download unsigned artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: unsigned-artifacts-${{ env.LABEL }}
+          path: artifacts/unsigned
+
+      - name: Import Apple certificate
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
-          rm -f certificate.p12
+          echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
+          security create-keychain -p actions build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p actions build.keychain
+          security set-keychain-settings -t 7200 build.keychain
+          security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions build.keychain
+          rm certificate.p12
+
+      - name: Smoke-test signing toolchain
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: ./scripts/smoke-sign-roundtrip.sh macos
+
+      - name: Codesign .app
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          APP_PATH="artifacts/unsigned/Snapper Keeper.app"
+          codesign --sign "$APPLE_SIGNING_IDENTITY" --options runtime --timestamp --deep "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
+      - name: Rebuild .dmg from signed .app
+        run: |
+          mkdir -p artifacts/signed
+          create-dmg \
+            --volname "Snapper Keeper" \
+            --window-size 600 400 \
+            --icon-size 100 \
+            "artifacts/signed/Snapper Keeper.dmg" \
+            "artifacts/unsigned/Snapper Keeper.app"
+
+      - name: Notarize .dmg
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          DMG="artifacts/signed/Snapper Keeper.dmg"
+          xcrun notarytool submit "$DMG" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+          xcrun stapler staple "$DMG"
+
+      - name: Tar signed .app for updater payload
+        run: |
+          cd artifacts/unsigned
+          tar -czf "../signed/Snapper.Keeper_${{ env.ARCH }}.app.tar.gz" "Snapper Keeper.app"
+
+      - name: Minisign the updater payload
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          WORK=$(mktemp -d)
+          # tr -d '\r' before base64 -d: portable defense against CR
+          # mangling (Git Bash on Windows surfaces secret env vars with
+          # spurious CRs). No-op on Linux/macOS.
+          echo "$TAURI_SIGNING_PRIVATE_KEY" | tr -d '\r' | base64 -d > "$WORK/priv.key"
+          echo "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" | minisign -S -s "$WORK/priv.key" \
+            -m "artifacts/signed/Snapper.Keeper_${{ env.ARCH }}.app.tar.gz" \
+            -x "artifacts/signed/Snapper.Keeper_${{ env.ARCH }}.app.tar.gz.sig"
+          rm -rf "$WORK"
+
+      - name: Rename .dmg per-arch
+        run: |
+          cd artifacts/signed
+          mv "Snapper Keeper.dmg" "Snapper.Keeper_${{ env.ARCH }}.dmg"
+
+      - name: Upload signed artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: signed-artifacts-${{ env.LABEL }}
+          path: |
+            artifacts/signed/*.dmg
+            artifacts/signed/*.app.tar.gz
+            artifacts/signed/*.app.tar.gz.sig
+          if-no-files-found: error
+
+      - name: Clean up certificates
+        if: always()
+        run: rm -f certificate.p12
+
+  sign-win-x64:
+    needs: artifact-verify
+    runs-on: windows-latest
+    environment: production-release
+    permissions:
+      contents: read
+    env:
+      LABEL: Windows-x64
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+        with:
+          dotnet-version: '9.x'
+
+      - name: Install dotnet sign tool
+        shell: powershell
+        run: |
+          # Pinned Microsoft prerelease — see PR #90 for the package-id
+          # collision post-mortem (Sign 1.x by Rafal Jasica vs Microsoft's
+          # 0.9.1-beta.* tool under the same NuGet id).
+          dotnet tool install --global sign --version 0.9.1-beta.26227.3
+          $toolsPath = "$env:USERPROFILE\.dotnet\tools"
+          $toolsPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Install minisign
+        shell: powershell
+        run: choco install minisign --no-progress --confirm
+
+      - name: Download unsigned artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: unsigned-artifacts-${{ env.LABEL }}
+          path: artifacts/unsigned
+
+      - name: Smoke-test signing toolchain
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: ./scripts/smoke-sign-roundtrip.sh windows
+
+      - name: Authenticode-sign the installer
+        shell: powershell
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: |
+          $exe = (Get-ChildItem artifacts/unsigned -Filter '*-setup.exe' | Select-Object -First 1).FullName
+          if (-not $exe) { Write-Error "No -setup.exe found"; exit 1 }
+          New-Item -ItemType Directory -Force -Path artifacts/signed | Out-Null
+          $signed = Join-Path 'artifacts/signed' (Split-Path -Leaf $exe)
+          Copy-Item $exe $signed
+          sign code artifact-signing `
+            -ase https://eus.codesigning.azure.net `
+            -asa HartyeTech `
+            -ascp snapper-keeper `
+            -v Information `
+            $signed
+          # Use PowerShell's native Get-AuthenticodeSignature instead of
+          # signtool.exe. signtool ships with the Windows SDK but is not
+          # on PATH for default PowerShell sessions on windows-latest
+          # runners (it lives at C:\Program Files (x86)\Windows Kits\10
+          # \bin\<ver>\x64\signtool.exe). Get-AuthenticodeSignature is
+          # built into PowerShell and gives equivalent verification.
+          $sig = Get-AuthenticodeSignature $signed
+          if ($sig.Status -ne 'Valid') {
+            Write-Error "Authenticode verify failed: $($sig.Status) - $($sig.StatusMessage)"
+            exit 1
+          }
+          Write-Host "Authenticode verify: $($sig.Status) (signer: $($sig.SignerCertificate.Subject))"
+
+      - name: Minisign the installer
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          EXE=$(find artifacts/signed -name '*-setup.exe' | head -1)
+          WORK=$(mktemp -d)
+          # tr -d '\r' strips CR that Git Bash on Windows can inject when
+          # reading GitHub Actions secrets from env. Portable across GNU
+          # base64 (Linux) and BSD base64 (macOS) — can't use `-i` /
+          # --ignore-garbage since BSD reuses `-i` for input-file.
+          echo "$TAURI_SIGNING_PRIVATE_KEY" | tr -d '\r' | base64 -d > "$WORK/priv.key"
+          echo "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" | minisign -S -s "$WORK/priv.key" \
+            -m "$EXE" -x "$EXE.sig"
+          rm -rf "$WORK"
+
+      - name: Upload signed artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: signed-artifacts-${{ env.LABEL }}
+          path: |
+            artifacts/signed/*-setup.exe
+            artifacts/signed/*-setup.exe.sig
+          if-no-files-found: error
 
   publish-release:
-    needs: build-and-release
+    needs: [sign-mac-arm, sign-mac-x64, sign-win-x64]
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      - name: Download all signed artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: artifacts
+          pattern: signed-artifacts-*
           merge-multiple: true
 
       - name: List artifacts
@@ -306,15 +618,85 @@ jobs:
           cat latest.json
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-          files: |
-            artifacts/**/*.dmg
-            artifacts/**/*.app.tar.gz
-            artifacts/**/*.app.tar.gz.sig
-            artifacts/**/*-setup.exe
-            artifacts/**/*-setup.exe.sig
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # GitHub Actions runs scripts in non-interactive bash where ** is
+          # treated as * (single segment) by default. shopt -s globstar
+          # enables recursive ** so the patterns below match whether the
+          # artifacts are flat (merge-multiple: true puts them at
+          # artifacts/X.dmg) or nested under a subdirectory.
+          shopt -s globstar nullglob
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            artifacts/**/*.dmg \
+            artifacts/**/*.app.tar.gz \
+            artifacts/**/*.app.tar.gz.sig \
+            artifacts/**/*-setup.exe \
+            artifacts/**/*-setup.exe.sig \
             latest.json
+
+      # --- CycloneDX SBOM generation (#46) ---
+      # Generates a merged Rust + npm SBOM and attaches it to the release
+      # as sbom.cdx.json. Tooling is installed inline since publish-release
+      # didn't previously need rust/node setup.
+
+      - uses: pnpm/action-setup@d15e628ca66d93ee5f352c71671a7bc6a97af5c9 # v6.0.8
+        # version not specified here — pnpm/action-setup v6+ errors when
+        # both `with: version:` AND `packageManager` in package.json
+        # are present. We let packageManager drive the version.
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install cyclonedx-cli
+        env:
+          CDX_CLI_VERSION: '0.32.0'
+        run: |
+          # cyclonedx-cli is a .NET binary distributed on GitHub releases
+          # (NOT npm). Used for merge + validate.
+          curl -fsSL "https://github.com/CycloneDX/cyclonedx-cli/releases/download/v${CDX_CLI_VERSION}/cyclonedx-linux-x64" -o /tmp/cyclonedx
+          chmod +x /tmp/cyclonedx
+          sudo mv /tmp/cyclonedx /usr/local/bin/cyclonedx
+          cyclonedx --version
+
+      - name: Generate Rust SBOM (from Cargo.lock)
+        run: |
+          # cdxgen -t cargo reads Cargo.lock directly — works for any
+          # workspace layout, no cargo install required. Earlier attempts
+          # used cargo-cyclonedx but `--all --override-filename` produced
+          # no findable output (probably because the workspace root has
+          # no [package] section). cdxgen sidesteps that.
+          pnpm dlx @cyclonedx/cdxgen@12.4.3 -t cargo -o ./bom-rust.cdx.json .
+          echo "Rust SBOM:"
+          ls -la ./bom-rust.cdx.json
+
+      - name: Generate npm SBOM
+        run: |
+          # cdxgen -t pnpm reads pnpm-lock.yaml directly. cyclonedx-npm
+          # runs `npm ls` internally and fails on pnpm's symlinked
+          # node_modules layout.
+          pnpm dlx @cyclonedx/cdxgen@12.4.3 -t pnpm -o ./bom-npm.cdx.json .
+          echo "npm SBOM:"
+          ls -la ./bom-npm.cdx.json
+
+      - name: Merge SBOMs
+        run: |
+          cyclonedx merge \
+            --input-files ./bom-rust.cdx.json ./bom-npm.cdx.json \
+            --output-file ./sbom.cdx.json
+          echo "Merged SBOM:"
+          ls -la ./sbom.cdx.json
+
+      - name: Validate SBOM
+        run: cyclonedx validate --input-file ./sbom.cdx.json
+
+      - name: Attach SBOM to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" ./sbom.cdx.json --clobber

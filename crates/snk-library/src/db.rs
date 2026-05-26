@@ -11,9 +11,14 @@ pub struct Db {
 }
 
 impl Db {
+    // VERIFIED: privacy-md/local-only-storage
+    // All persistence is to a local SQLite file. No remote DB, no network
+    // synchronization. This function takes a local path and opens it
+    // in-process; there is no code path that uploads, syncs, or shares
+    // the resulting database.
     pub fn open(path: &Path) -> Result<Self> {
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
+            std::fs::create_dir_all(parent).map_err(|e| crate::LibraryError::io(parent, e))?;
         }
         let mut conn = Connection::open(path)?;
         // WAL gives us concurrent readers + a writer without DB-level locks fighting us.

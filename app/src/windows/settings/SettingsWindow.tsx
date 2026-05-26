@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
@@ -11,46 +11,11 @@ import { getSetting, setSetting } from '@snk/library';
 
 import { queryKeys } from '../../lib/queryKeys';
 import { THEMES, THEME_FAMILIES, familyOf, useTheme, type ThemeId } from '../../lib/theme';
-
-interface SettingRowProps {
-  label: string;
-  description?: string;
-  children: ReactNode;
-}
-
-function SettingRow({ label, description, children }: SettingRowProps) {
-  return (
-    <div className="flex items-start justify-between gap-4 py-3">
-      <div className="min-w-0">
-        <div className="text-sm text-fg">{label}</div>
-        {description && (
-          <div className="text-[11px] text-fg-muted mt-0.5">{description}</div>
-        )}
-      </div>
-      <div className="shrink-0">{children}</div>
-    </div>
-  );
-}
-
-function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
-  // Pill: 44×22 (w-11 h-[22px] → wider so the thumb has clean travel)
-  // Thumb: 16×16 (w-4 h-4)
-  // Off: thumb sits at x=3 (3px gap). On: x=25 (3px gap on the right).
-  return (
-    <button
-      type="button"
-      className={`w-11 h-[22px] rounded-full relative transition-colors border border-border ${
-        value ? 'bg-primary' : 'bg-surface-2'
-      }`}
-      onClick={() => onChange(!value)}
-    >
-      <span
-        className="absolute top-[2px] w-4 h-4 rounded-full bg-bg transition-[left] duration-150"
-        style={{ left: value ? 'calc(100% - 18px)' : '2px' }}
-      />
-    </button>
-  );
-}
+import { AboutSection } from './AboutSection';
+import { ClipboardSettings } from './ClipboardSettings';
+import { SettingRow } from '../../components/SettingRow';
+import { SettingsSection } from '../../components/SettingsSection';
+import { Toggle } from '../../components/Toggle';
 
 function useSetting<T>(key: string, defaultValue: T): [T, (v: T) => void, boolean] {
   const queryClient = useQueryClient();
@@ -251,95 +216,89 @@ export function SettingsWindow() {
           </div>
         </section>
 
-        <section>
-          <h2 className="font-display text-sm mb-3">Capture</h2>
-          <div className="bg-surface rounded-xl border border-border px-4 divide-y divide-border">
-            <SettingRow label="Format">
-              <select
-                className="bg-surface-2 text-sm text-fg px-2 py-1 rounded border border-border"
-                value={captureFormat as string}
-                onChange={(e) => setCaptureFormat(e.target.value)}
-              >
-                <option value="png">PNG</option>
-                <option value="jpg">JPG</option>
-                <option value="webp">WebP</option>
-              </select>
-            </SettingRow>
-            <SettingRow
-              label="Auto-copy to clipboard"
-              description="Copy capture to clipboard immediately after capture"
+        <SettingsSection title="Capture">
+          <SettingRow label="Format">
+            <select
+              className="bg-surface-2 text-sm text-fg px-2 py-1 rounded border border-border"
+              value={captureFormat as string}
+              onChange={(e) => setCaptureFormat(e.target.value)}
             >
-              <Toggle value={autoCopy as boolean} onChange={setAutoCopy} />
-            </SettingRow>
-            {captureFormat === 'jpg' && (
-              <SettingRow label="JPG quality" description="1–100">
-                <input
-                  type="number"
-                  className="bg-surface-2 text-sm text-fg w-16 px-2 py-1 rounded border border-border"
-                  min={1}
-                  max={100}
-                  value={jpgQuality as number}
-                  onChange={(e) => setJpgQuality(Number(e.target.value))}
-                />
-              </SettingRow>
-            )}
-          </div>
-        </section>
-
-        <section>
-          <h2 className="font-display text-sm mb-3">Clipboard</h2>
-          <div className="bg-surface rounded-xl border border-border px-4 divide-y divide-border">
-            <SettingRow
-              label="History size"
-              description="Maximum number of clipboard items to keep"
-            >
+              <option value="png">PNG</option>
+              <option value="jpg">JPG</option>
+              <option value="webp">WebP</option>
+            </select>
+          </SettingRow>
+          <SettingRow
+            label="Auto-copy to clipboard"
+            description="Copy capture to clipboard immediately after capture"
+          >
+            <Toggle value={autoCopy as boolean} onChange={setAutoCopy} />
+          </SettingRow>
+          {captureFormat === 'jpg' && (
+            <SettingRow label="JPG quality" description="1–100">
               <input
                 type="number"
-                className="bg-surface-2 text-sm text-fg w-20 px-2 py-1 rounded border border-border"
-                min={10}
-                max={1000}
-                value={historySize as number}
-                onChange={(e) => setHistorySize(Number(e.target.value))}
+                className="bg-surface-2 text-sm text-fg w-16 px-2 py-1 rounded border border-border"
+                min={1}
+                max={100}
+                value={jpgQuality as number}
+                onChange={(e) => setJpgQuality(Number(e.target.value))}
               />
             </SettingRow>
-            <SettingRow
-              label="Track images"
-              description="Store copied images in clipboard history"
-            >
-              <Toggle value={trackImages as boolean} onChange={setTrackImages} />
-            </SettingRow>
-            <SettingRow
-              label="Track files"
-              description="Store copied file references in clipboard history"
-            >
-              <Toggle value={trackFiles as boolean} onChange={setTrackFiles} />
-            </SettingRow>
-          </div>
-        </section>
+          )}
+        </SettingsSection>
+
+        <SettingsSection title="Clipboard">
+          <SettingRow
+            label="History size"
+            description="Maximum number of clipboard items to keep"
+          >
+            <input
+              type="number"
+              className="bg-surface-2 text-sm text-fg w-20 px-2 py-1 rounded border border-border"
+              min={10}
+              max={1000}
+              value={historySize as number}
+              onChange={(e) => setHistorySize(Number(e.target.value))}
+            />
+          </SettingRow>
+          <SettingRow
+            label="Track images"
+            description="Store copied images in clipboard history"
+          >
+            <Toggle value={trackImages as boolean} onChange={setTrackImages} />
+          </SettingRow>
+          <SettingRow
+            label="Track files"
+            description="Store copied file references in clipboard history"
+          >
+            <Toggle value={trackFiles as boolean} onChange={setTrackFiles} />
+          </SettingRow>
+        </SettingsSection>
 
         <section>
-          <h2 className="font-display text-sm mb-3">OCR</h2>
-          <div className="bg-surface rounded-xl border border-border px-4 divide-y divide-border">
-            <SettingRow
-              label="Enable OCR"
-              description="Automatically extract text from captures using Tesseract"
-            >
-              <Toggle value={ocrEnabled as boolean} onChange={setOcrEnabled} />
-            </SettingRow>
-          </div>
+          <ClipboardSettings />
         </section>
 
-        <section>
-          <h2 className="font-display text-sm mb-3">Startup</h2>
-          <div className="bg-surface rounded-xl border border-border px-4 divide-y divide-border">
-            <SettingRow
-              label="Launch at login"
-              description="Start snapper-keeper automatically when you sign in"
-            >
-              <Toggle value={autostart} onChange={setAutostart} />
-            </SettingRow>
-          </div>
-        </section>
+        <SettingsSection title="OCR">
+          <SettingRow
+            label="Enable OCR"
+            description="Automatically extract text from captures using Tesseract"
+          >
+            <Toggle value={ocrEnabled as boolean} onChange={setOcrEnabled} />
+          </SettingRow>
+        </SettingsSection>
+
+        <SettingsSection title="Startup">
+          <SettingRow
+            label="Launch at login"
+            description="Start snapper-keeper automatically when you sign in"
+          >
+            <Toggle value={autostart} onChange={setAutostart} />
+          </SettingRow>
+        </SettingsSection>
+
+        <AboutSection />
       </div>
     </main>
   );

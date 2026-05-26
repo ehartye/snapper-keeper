@@ -30,7 +30,7 @@ pub fn clipboard_image_relative_path(id: &Uuid) -> PathBuf {
 pub fn write_atomic(library_root: &Path, relative: &Path, bytes: &[u8]) -> Result<PathBuf> {
     let full = library_root.join(relative);
     if let Some(parent) = full.parent() {
-        std::fs::create_dir_all(parent)?;
+        std::fs::create_dir_all(parent).map_err(|e| crate::LibraryError::io(parent, e))?;
     }
     let tmp = full.with_extension(format!(
         "{}.tmp",
@@ -38,11 +38,12 @@ pub fn write_atomic(library_root: &Path, relative: &Path, bytes: &[u8]) -> Resul
     ));
     {
         use std::io::Write;
-        let mut f = std::fs::File::create(&tmp)?;
-        f.write_all(bytes)?;
-        f.sync_all()?;
+        let mut f = std::fs::File::create(&tmp).map_err(|e| crate::LibraryError::io(&tmp, e))?;
+        f.write_all(bytes)
+            .map_err(|e| crate::LibraryError::io(&tmp, e))?;
+        f.sync_all().map_err(|e| crate::LibraryError::io(&tmp, e))?;
     }
-    std::fs::rename(&tmp, &full)?;
+    std::fs::rename(&tmp, &full).map_err(|e| crate::LibraryError::io(&full, e))?;
     Ok(full)
 }
 

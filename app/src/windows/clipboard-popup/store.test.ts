@@ -8,7 +8,6 @@ const item = (i: number) => ({
   text_content: `t${i}`,
   file_path: null,
   source_window_title: null,
-  sensitive: false,
   content_hash: `${i}`,
   source_app: null,
   pinned: false,

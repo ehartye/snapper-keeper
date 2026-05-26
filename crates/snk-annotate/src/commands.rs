@@ -1,8 +1,8 @@
 use tauri::{Emitter, Runtime, State};
 
-use snk_library::plugin::LibraryState;
-use snk_library::{captures, files, Capture, NewCapture};
+use snk_library::{captures, files, Capture, LibraryState, NewCapture};
 
+use crate::validation::{validate_annotation_state, validate_png_payload};
 use crate::Result;
 
 #[tauri::command]
@@ -13,6 +13,11 @@ pub fn save_annotation<R: Runtime>(
     png_data: Vec<u8>,
     state_json: String,
 ) -> Result<Capture> {
+    // Validate inputs BEFORE any DB lookup or disk write — cheap guard
+    // against malformed/oversized payloads.
+    validate_png_payload(&png_data)?;
+    validate_annotation_state(&state_json)?;
+
     let capture = captures::get(&state.db, &capture_id)?;
 
     let annotated_relative = captures::annotated_relative_path(&capture.file_path);
@@ -46,6 +51,11 @@ pub fn derive_capture<R: Runtime>(
     height: u32,
     state_json: String,
 ) -> Result<Capture> {
+    // Validate inputs BEFORE any DB lookup or disk write — cheap guard
+    // against malformed/oversized payloads.
+    validate_png_payload(&png_data)?;
+    validate_annotation_state(&state_json)?;
+
     let parent = captures::get(&state.db, &parent_id)?;
 
     // Pre-generate the uuid so the on-disk filename matches the DB row.

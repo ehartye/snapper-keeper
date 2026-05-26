@@ -1,3 +1,3 @@
 [default]
-description = "Default permissions for snk-clipboard: allows paste and popup."
-permissions = ["allow-paste-item", "allow-show-popup"]
+description = "Default permissions for snk-clipboard: allows paste, popup, and frontmost-app detection."
+permissions = ["allow-paste-item", "allow-show-popup", "allow-detect-frontmost-app"]

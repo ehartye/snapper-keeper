@@ -91,7 +91,38 @@ Don't let plan and code drift. The audit trail "plan was fixed because X" is muc
 | 5 | OCR + FTS5 search | Done |
 | 6 | Library polish (sidebar, tags, settings, first-run wizard) | Done |
 | 7 | Signing, notarization, auto-updater, release pipeline | Done |
+| 7+ | Release pipeline hardening: SHA pins, build/sign split, env gate, nightly audit, per-release SBOM | Done |
 
 **Known limitation:** Smoke tests on Windows require an interactive desktop session. SSH-only environments can build and lint but can't smoke. CI's `build-app` job verifies the compile across all three OSes; runtime verification is manual.
+
+## Release pipeline (post-hardening)
+
+The release pipeline is split into 7 jobs gated on a `production-release` GitHub environment:
+
+```
+tag (v*) → verify-pubkey → build (matrix, NO secrets) → artifact-verify
+       → environment gate (production-release, ehartye approves)
+       → sign-mac-arm / sign-mac-x64 / sign-win-x64 (each gets only its platform's secrets)
+       → publish-release (gh release create + CycloneDX SBOM upload)
+```
+
+Plus a scheduled `audit.yml` (daily at 06:17 UTC; also `workflow_dispatch`) that runs `cargo-audit` + `pnpm audit` and manages per-advisory issues via `.github/scripts/sync-audit-issues.js`.
+
+**To approve a tag-triggered release deployment:**
+```bash
+# Pending deployments for the run
+pending="$(gh api repos/ehartye/snapper-keeper/actions/runs/<RUN_ID>/pending_deployments)"
+echo "$pending"
+
+# Approve the production-release environment for this run
+env_id="$(echo "$pending" | jq -r '.[] | select(.environment.name == "production-release") | .environment.id')"
+echo "{\"environment_ids\":[${env_id}],\"state\":\"approved\",\"comment\":\"...\"}" \
+  | gh api -X POST repos/ehartye/snapper-keeper/actions/runs/<RUN_ID>/pending_deployments --input -
+```
+
+**Source-of-truth docs:**
+- Design: `docs/superpowers/specs/2026-05-24-release-pipeline-hardening-design.md`
+- Plan: `docs/superpowers/plans/2026-05-24-release-pipeline-hardening.md` (kept up-to-date with execution lessons)
+- Cluster PRs: #90 (SHA pins), #92 (build/sign split + env gate), #98 (audit + SBOM)
 
 Each phase gets its own plan document in `docs/superpowers/plans/`.

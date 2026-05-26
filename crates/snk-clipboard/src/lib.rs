@@ -1,11 +1,17 @@
 //! snk-clipboard — clipboard watcher, dedup, paste synthesis, caret resolution.
 
+pub mod blocklist;
 pub mod caret;
 pub mod commands;
 pub mod error;
 pub mod hasher;
 pub mod paste;
+mod platform;
+pub mod platform_watcher;
 pub mod plugin;
+pub mod sensitivity;
+pub mod skip_set;
+pub mod source_app;
 pub mod watcher;
 
 pub use error::{ClipboardError, Result};

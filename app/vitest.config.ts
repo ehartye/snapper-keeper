@@ -1,6 +1,10 @@
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  define: {
+    __GIT_SHA__: JSON.stringify('test'),
+    __UPDATER_FINGERPRINT__: JSON.stringify('testfingerprint'),
+  },
   test: {
     environment: 'happy-dom',
     globals: true,
@@ -38,7 +42,6 @@ export default defineConfig({
       '@snk/capture': new URL('../packages/snk-capture/src/index.ts', import.meta.url).pathname,
       '@snk/clipboard': new URL('../packages/snk-clipboard/src/index.ts', import.meta.url).pathname,
       '@snk/annotate': new URL('../packages/snk-annotate/src/index.ts', import.meta.url).pathname,
-      '@snk/ocr': new URL('../packages/snk-ocr/src/index.ts', import.meta.url).pathname,
       '@snk/updater': new URL('../packages/snk-updater/src/index.ts', import.meta.url).pathname,
     },
   },

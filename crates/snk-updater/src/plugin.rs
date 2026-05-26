@@ -20,12 +20,14 @@ pub enum UpdateStatus {
 
 pub struct UpdaterState {
     status: Mutex<UpdateStatus>,
+    last_check_at: Mutex<Option<i64>>,
 }
 
 impl UpdaterState {
     fn new() -> Self {
         Self {
             status: Mutex::new(UpdateStatus::Idle),
+            last_check_at: Mutex::new(None),
         }
     }
 
@@ -41,6 +43,16 @@ impl UpdaterState {
             .map(|s| s.clone())
             .unwrap_or(UpdateStatus::Idle)
     }
+
+    fn set_last_check_at(&self, ts: i64) {
+        if let Ok(mut lock) = self.last_check_at.lock() {
+            *lock = Some(ts);
+        }
+    }
+
+    fn get_last_check_at(&self) -> Option<i64> {
+        self.last_check_at.lock().ok().and_then(|l| *l)
+    }
 }
 
 #[tauri::command]
@@ -53,9 +65,20 @@ pub fn get_update_status<R: Runtime>(app: AppHandle<R>) -> UpdateStatus {
     app.state::<UpdaterState>().get_status()
 }
 
+#[tauri::command]
+pub fn get_last_check_at<R: Runtime>(app: AppHandle<R>) -> Option<i64> {
+    app.state::<UpdaterState>().get_last_check_at()
+}
+
+#[tauri::command]
+pub fn restart_app<R: Runtime>(app: AppHandle<R>) {
+    app.restart();
+}
+
 async fn do_update_check<R: Runtime>(app: AppHandle<R>) -> Result<UpdateStatus, String> {
     let state = app.state::<UpdaterState>();
     state.set_status(UpdateStatus::Checking);
+    state.set_last_check_at(chrono::Utc::now().timestamp_millis());
     let _ = app.emit("updater:status-changed", UpdateStatus::Checking);
 
     let updater = app.updater().map_err(|e| format!("updater init: {e}"))?;
@@ -137,19 +160,28 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::<R>::new("snk-updater")
         .invoke_handler(tauri::generate_handler![
             check_for_update,
-            get_update_status
+            get_update_status,
+            get_last_check_at,
+            restart_app
         ])
         .setup(|app, _api| {
             app.manage(UpdaterState::new());
 
             let handle = app.app_handle().clone();
             tauri::async_runtime::spawn(async move {
+                // Initial check ~5s after launch, then once every 24h.
                 tokio::time::sleep(Duration::from_secs(5)).await;
                 if let Err(e) = do_update_check(handle.clone()).await {
                     warn!(error = %e, "startup update check failed");
                 }
 
+                // `Delay` (vs default `Burst`) means a stretch of suspend
+                // / sleep / sluggish runtime won't replay multiple missed
+                // ticks in rapid succession when the runtime resumes.
                 let mut interval = tokio::time::interval(Duration::from_secs(24 * 60 * 60));
+                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+                // First tick fires immediately; the startup check above
+                // already covered it, so consume it and skip.
                 interval.tick().await;
                 loop {
                     interval.tick().await;
@@ -261,5 +293,18 @@ mod tests {
         assert!(json.contains("\"version\":\"3.0.0\""));
         let parsed: UpdateStatus = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, available);
+    }
+
+    #[test]
+    fn updater_state_last_check_at_starts_none() {
+        let state = UpdaterState::new();
+        assert!(state.get_last_check_at().is_none());
+    }
+
+    #[test]
+    fn updater_state_records_last_check_at() {
+        let state = UpdaterState::new();
+        state.set_last_check_at(1716662400000);
+        assert_eq!(state.get_last_check_at(), Some(1716662400000));
     }
 }
