@@ -1032,3 +1032,13 @@ When you reach the end of Task 9, before merging, sanity-check:
 2. **No placeholder commits:** every task has a real code or doc change. ✓
 3. **Commit messages are Conventional Commits** with correct scopes (`refactor(release)`, `chore(scripts)`, `feat(build)`, `docs(readme)`, `docs(release-signing)`). ✓
 4. **Each commit leaves the repo in a working state:** Task 1 standalone doesn't break CI (proven by `build-app` running on the feature branch). Tasks 2–6 build the script incrementally; the script is only used (via `pnpm build:local`) after Task 6. Tasks 7–8 are doc-only.
+
+---
+
+## Out-of-band change: enable `devtools` Tauri feature for release builds
+
+**Context:** During implementation of this plan, a separate commit (`build(app): enable Tauri devtools feature for release builds`, `app/src-tauri/Cargo.toml`) was added to enable Tauri's `devtools` feature for release builds. This change is outside the original spec scope but was bundled in the same PR.
+
+**Rationale:** Tauri automatically enables devtools in debug builds but gates it behind the `devtools` Cargo feature for release builds. Snapper Keeper is an open-source, dev-facing desktop utility where end users may need to inspect WebView contents for bug reporting. Enabling `devtools` in release builds allows the right-click → Inspect workflow on the frontend UI. This is a deliberate choice — if the project ever ships to non-developer audiences, this feature should be toggled off by removing `devtools` from the `features` list in `app/src-tauri/Cargo.toml`.
+
+**Security consideration:** DevTools access is limited to the local machine running the app (no remote debugging). For a local-first, open-source utility, this is an acceptable trade-off. The explicit comment in `Cargo.toml` documents the intent and exit path for future maintainers.

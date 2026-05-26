@@ -25,7 +25,7 @@ Goals:
 
 - One command — `pnpm build:local` — that produces an unsigned but otherwise production-fidelity installer on the contributor's native OS / architecture.
 - Serve both audiences equally: maintainer smoke-testing what end users will receive before tagging a release, and external contributors validating PR changes against a real installer.
-- Bundle parity with production: same target triples, same `--bundles` selections, same Tesseract bundling on Windows. Only signing differs.
+- Bundle parity with production: same target triples, same `--bundles` selections, no pre-build bundling step on either OS (Phase 10 removed Tesseract in favour of native OS OCR — Apple Vision on macOS, Windows.Media.Ocr on Windows). Only signing differs.
 - Refactor away the dead-weight `signCommand` field in the base config, since the actual signing step in CI invokes `sign code` directly rather than through Tauri's hook.
 
 ## Non-goals
@@ -33,7 +33,6 @@ Goals:
 - A signed local build path. If a maintainer wants to sign locally, they can set the right env vars and invoke `pnpm tauri build` directly with their own overlay — `build:local` is explicitly the unsigned path.
 - Linux installers. Production targets Windows + macOS only; the script aborts on Linux with a directive to use `pnpm tauri dev` for development.
 - Cross-compilation. Each contributor builds for their machine's native arch only (matches CI, where each runner builds one triple).
-- Auto-installation of Tesseract on Windows. The script fails with an actionable error if Tesseract is not already installed via the methods documented in the README.
 - Producing the macOS updater payload (`.app.tar.gz` + minisign `.sig`). Requires `TAURI_SIGNING_PRIVATE_KEY`.
 
 ## Approach
@@ -47,12 +46,12 @@ A single bash script `scripts/build-local.sh` is the entry point. It runs native
 
 ## Per-OS behavior
 
-| OS            | Target triple              | `--bundles` | Tesseract bundling                                                   | Output                            |
-|---------------|----------------------------|-------------|----------------------------------------------------------------------|-----------------------------------|
-| Windows x64   | `x86_64-pc-windows-msvc`   | `nsis`      | Copy from contributor's existing install into `app/src-tauri/resources/tesseract/` | `*-setup.exe`                     |
-| macOS arm64   | `aarch64-apple-darwin`     | `app,dmg`   | None (production parity — macOS installers don't ship Tesseract)     | `Snapper Keeper.app` + `.dmg`     |
-| macOS x86_64  | `x86_64-apple-darwin`      | `app,dmg`   | None                                                                 | same                              |
-| Linux         | n/a                        | n/a         | n/a — script exits with directive to use `pnpm tauri dev`            | n/a                               |
+| OS            | Target triple              | `--bundles` | Pre-build step | Output                            |
+|---------------|----------------------------|-------------|----------------|-----------------------------------|
+| Windows x64   | `x86_64-pc-windows-msvc`   | `nsis`      | None (Windows.Media.Ocr is a native OS API; no bundling required) | `*-setup.exe`                     |
+| macOS arm64   | `aarch64-apple-darwin`     | `app,dmg`   | None (Apple Vision is a native OS API; no bundling required)       | `Snapper Keeper.app` + `.dmg`     |
+| macOS x86_64  | `x86_64-apple-darwin`      | `app,dmg`   | None                                                                | same                              |
+| Linux         | n/a                        | n/a         | n/a — script exits with directive to use `pnpm tauri dev`          | n/a                               |
 
 ### macOS DMG generator
 
@@ -64,24 +63,14 @@ The script uses Tauri's built-in DMG bundler (`--bundles app,dmg`) rather than H
 
 ### Preamble (all OSes)
 
-- `set -euo pipefail`; `ERR` trap prints the failing line number; `EXIT` trap cleans up the copied Tesseract files on Windows (preserving `.placeholder` — see Windows pre-build step 4).
+- `set -Eeuo pipefail`; `ERR` trap prints the failing line number (the `-E` / `errtrace` flag ensures the trap fires for failures inside functions too).
 - Resolve repo root via `git rev-parse --show-toplevel` so the script works from any subdirectory.
 - Detect OS + arch via `uname -s` / `uname -m`. Compute target triple + bundles per the table above.
 - Linux → exit 1 with `"Local installer build is supported on Windows + macOS only (matches production targets). Run 'pnpm tauri dev' to develop on Linux."`
 
-### Windows pre-build
+### Pre-build (both OSes)
 
-1. Resolve a Tesseract source directory in this order, mirroring `snk-ocr/sidecar.rs`'s runtime resolver:
-   - `$SNK_TESSERACT_PATH` (directory containing `tesseract.exe`)
-   - `where.exe tesseract`
-   - `C:\Program Files\Tesseract-OCR\tesseract.exe`
-2. If not found → exit 1 with `"Tesseract not found. Install via 'winget install UB-Mannheim.TesseractOCR' or 'choco install tesseract' (see README → Prerequisites). Set SNK_TESSERACT_PATH to override."`
-3. `cp -r <tesseract-dir>/* app/src-tauri/resources/tesseract/`. This path is the one already declared as a bundle resource in `tauri.conf.json:120` and already gitignored at `.gitignore:23-24` (a checked-in `.placeholder` file keeps the directory present so the bundler's resource glob matches in dev).
-4. The `EXIT` trap deletes everything in `app/src-tauri/resources/tesseract/` **except** `.placeholder`, on success or failure. Preserving `.placeholder` is mandatory — if it is removed, subsequent `pnpm tauri dev` / `pnpm tauri build` runs fail because the resource glob `resources/tesseract/**/*` matches nothing. Implementation: `find app/src-tauri/resources/tesseract -mindepth 1 ! -name '.placeholder' -delete` (or equivalent).
-
-### macOS pre-build
-
-Nothing.
+Nothing. Phase 10 removed Tesseract from production and replaced it with Apple Vision (macOS) and Windows.Media.Ocr (Windows) — both are native OS APIs requiring no bundling. Production-parity for unsigned local builds means no pre-build step on either OS.
 
 ### Build invocation (both OSes)
 
@@ -114,8 +103,8 @@ The inline `--config` overlay disables updater-artifact generation, which would 
 ### Error model
 
 - `pipefail` + `set -e` make any failed step abort the script.
-- `ERR` trap prints the failing line number for fast diagnosis. No stack traces.
-- Each pre-build failure (missing Tesseract, unsupported OS) exits with a one-line actionable message.
+- `ERR` trap prints the failing line number for fast diagnosis (the `-E` / `errtrace` flag ensures the trap fires for failures inside functions, not just top-level code). No stack traces.
+- Unsupported OS or architecture exits with a one-line actionable message.
 - No retries on transient failures — let the user re-run.
 
 ## Files modified
@@ -178,15 +167,13 @@ The CI behavior change must be proven a no-op before the next real release tag, 
 ### Pre-merge
 
 1. **Local script — Windows.** Run `pnpm build:local` on the interactive Win11 desktop session (per CLAUDE.md, Windows builds require an interactive station). Confirm:
-   - Tesseract resolver finds the existing install.
    - `*-setup.exe` lands under `target/x86_64-pc-windows-msvc/release/bundle/nsis/`.
    - SHA-256 + size are printed.
-   - Copied Tesseract files in `app/src-tauri/resources/tesseract/` are removed after the script exits; only `.placeholder` remains.
-   - Installing + running the produced installer launches Snapper Keeper, captures a screen, OCR returns text (proves bundled Tesseract works).
+   - Installing + running the produced installer launches Snapper Keeper, captures a screen, OCR returns text (Windows.Media.Ocr).
 2. **Local script — macOS.** Run `pnpm build:local` on macOS. Confirm:
    - `.app` + `.dmg` land under `target/<triple>/release/bundle/{macos,dmg}/`.
    - Opening the `.dmg`, dragging `.app` to Applications, right-click → Open clears Gatekeeper.
-   - Launched app works (OCR via brew-installed tesseract).
+   - Launched app works (OCR via Apple Vision).
    - SHA-256 + size are printed for both artifacts.
 3. **Local script — Linux.** Run on Linux or WSL. Confirm clean exit with the supported-platforms message.
 4. **CI green path.** Push the branch; verify `build-app` (`.github/workflows/ci.yml`) still passes on all three OSes.
@@ -205,9 +192,7 @@ When cutting the next real release tag, watch the `sign-win-x64` job's `Authenti
 ## Risks
 
 - **Tauri overlay precedence.** The inline `--config '{"bundle":{"createUpdaterArtifacts":false}}'` overlay is already proven by the CI build job; reusing it locally is low risk.
-- **Tesseract resolver missing a contributor's install.** Mitigated by `SNK_TESSERACT_PATH` override and an actionable error message pointing at the README.
 - **Removing `bundle.windows.signCommand` breaks Windows signing in CI.** Mitigated by the dry-run prerelease tag step in the validation plan, and by the fact that the actual `sign code` invocation in `sign-win-x64` does not reference `signCommand`. Revert is one line if it ever fails.
-- **Working-tree pollution on Windows if the script is killed before its EXIT trap runs.** The bundled Tesseract files are already gitignored at `.gitignore:23-24`, so `git status` stays clean. A subsequent re-run of `pnpm build:local` overwrites whatever is there. The `.placeholder` file is robust to this because the script never deletes it.
 
 ## Open questions
 

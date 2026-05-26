@@ -97,9 +97,9 @@ fn main() {
             let log_dir = app
                 .path()
                 .app_log_dir()
-                .map_err(|e| format!("resolve log dir: {e}"))?;
+                .map_err(|e| std::io::Error::other(format!("resolve log dir: {e}")))?;
             let logging_handle = logging::init(&log_dir)
-                .map_err(|e| format!("init logging at {}: {e}", log_dir.display()))?;
+                .map_err(|e| std::io::Error::other(format!("init logging at {}: {e}", log_dir.display())))?;
             std::mem::forget(logging_handle);
 
             let capture_region = MenuItem::with_id(
