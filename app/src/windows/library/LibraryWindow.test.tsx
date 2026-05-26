@@ -2,28 +2,42 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { availableMonitors, cursorPosition, getCurrentWindow } from '@tauri-apps/api/window';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 
+import { ModalProvider } from '../../components/Modal';
 import { LibraryWindow } from './LibraryWindow';
 import { renderWithQuery } from '../../test/renderWithQuery';
 
 const mockedInvoke = vi.mocked(invoke);
 
 describe('<LibraryWindow />', () => {
+  const renderLibraryWindow = () =>
+    renderWithQuery(
+      <ModalProvider>
+        <LibraryWindow />
+      </ModalProvider>,
+    );
+
   beforeEach(() => {
     mockedInvoke.mockReset().mockResolvedValue([]);
+    const existing = document.getElementById('modal-root');
+    if (!existing) {
+      const root = document.createElement('div');
+      root.id = 'modal-root';
+      document.body.appendChild(root);
+    }
   });
 
   it('renders the header logotype and capture button', async () => {
-    renderWithQuery(<LibraryWindow />);
+    renderLibraryWindow();
     expect(screen.getByText('snapper')).toBeInTheDocument();
     expect(screen.getByText('keeper')).toBeInTheDocument();
     expect(screen.getByText(/Snap!/i)).toBeInTheDocument();
   });
 
   it('registers an onCloseRequested listener for hide-to-tray', async () => {
-    renderWithQuery(<LibraryWindow />);
+    renderLibraryWindow();
     await waitFor(() => {
       expect(getCurrentWindow().onCloseRequested).toHaveBeenCalled();
     });
@@ -49,7 +63,7 @@ describe('<LibraryWindow />', () => {
       return Promise.resolve([]);
     });
 
-    renderWithQuery(<LibraryWindow />);
+    renderLibraryWindow();
     await act(async () => {
       fireEvent.click(screen.getByText(/Snap!/i));
     });
@@ -59,7 +73,7 @@ describe('<LibraryWindow />', () => {
   });
 
   it('subscribes to the capture and clipboard hotkey events', async () => {
-    renderWithQuery(<LibraryWindow />);
+    renderLibraryWindow();
     await waitFor(() => {
       const calls = vi.mocked(listen).mock.calls.map((c) => c[0]);
       for (const event of [
@@ -84,16 +98,35 @@ describe('<LibraryWindow />', () => {
     });
 
     const overlayEmit = vi.fn().mockResolvedValue(undefined);
+    const overlaySetPosition = vi.fn().mockResolvedValue(undefined);
+    const overlaySetSize = vi.fn().mockResolvedValue(undefined);
     vi.mocked(WebviewWindow.getByLabel).mockImplementation(async (label: string) => {
       if (label === 'capture-overlay') {
         return {
           emit: overlayEmit,
+          setPosition: overlaySetPosition,
+          setSize: overlaySetSize,
           show: vi.fn().mockResolvedValue(undefined),
           setFocus: vi.fn().mockResolvedValue(undefined),
         } as unknown as WebviewWindow;
       }
       return null;
     });
+    vi.mocked(availableMonitors).mockResolvedValue([
+      {
+        name: 'Primary',
+        position: { x: 0, y: 0 },
+        size: { width: 1920, height: 1080 },
+        scaleFactor: 1,
+      },
+      {
+        name: 'Secondary',
+        position: { x: 1920, y: 0 },
+        size: { width: 2560, height: 1440 },
+        scaleFactor: 1.5,
+      },
+    ]);
+    vi.mocked(cursorPosition).mockResolvedValue({ x: 2100, y: 100 });
 
     mockedInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'plugin:snk-capture|grab_screen_preview') {
@@ -107,17 +140,55 @@ describe('<LibraryWindow />', () => {
       return Promise.resolve([]);
     });
 
-    renderWithQuery(<LibraryWindow />);
+    renderLibraryWindow();
     await waitFor(() => expect(regionHandler).not.toBeNull());
 
     await act(async () => regionHandler!({ payload: undefined }));
     await waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith('plugin:snk-capture|grab_screen_preview');
+      expect(invoke).toHaveBeenCalledWith('plugin:snk-capture|grab_screen_preview', {
+        monitorId: 1,
+      });
       expect(WebviewWindow.getByLabel).toHaveBeenCalledWith('capture-overlay');
+      expect(overlaySetPosition).toHaveBeenCalledWith(expect.objectContaining({ x: 1920, y: 0 }));
+      expect(overlaySetSize).toHaveBeenCalledWith(
+        expect.objectContaining({ width: 2560, height: 1440 }),
+      );
       expect(overlayEmit).toHaveBeenCalledWith('overlay:preview', {
         path: '/tmp/p.png',
         token: 'tok-xyz',
+        monitorId: 1,
+        scaleFactor: 1.5,
       });
     });
+  });
+
+  it('shows a plugin startup failure modal with copy diagnostics action', async () => {
+    let pluginSetupFailedHandler: ((e: { payload: unknown }) => void) | null = null;
+    vi.mocked(listen).mockImplementation((event, handler) => {
+      if (event === 'plugin:setup-failed') {
+        pluginSetupFailedHandler = handler as typeof pluginSetupFailedHandler;
+      }
+      return Promise.resolve(() => {});
+    });
+
+    renderLibraryWindow();
+    await waitFor(() => expect(pluginSetupFailedHandler).not.toBeNull());
+
+    await act(async () => {
+      pluginSetupFailedHandler!({
+        payload: {
+          pluginName: 'snk-library',
+          panicMessage: 'simulated setup panic',
+          diagnosticsMarkdown:
+            '## Plugin setup panic\n- Plugin: `snk-library`\n- Panic: `simulated setup panic`',
+        },
+      });
+    });
+
+    expect(screen.getByText('Plugin "snk-library" failed to start')).toBeInTheDocument();
+    expect(
+      screen.getByText('Plugin snk-library failed to start — please file a bug.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy diagnostics' })).toBeInTheDocument();
   });
 });

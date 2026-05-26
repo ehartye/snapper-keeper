@@ -24,6 +24,19 @@
     "snk-clipboard:default",
     "snk-ocr:default",
     "snk-updater:default",
-    "autostart:default"
+    "autostart:default",
+    "opener:default",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [
+        { "path": "$APPDATA" },
+        { "path": "$APPDATA/**" },
+        { "path": "$APPLOCALDATA" },
+        { "path": "$APPLOCALDATA/**" },
+        { "path": "$APPLOG" },
+        { "path": "$APPLOG/**" }
+      ]
+    },
+    "opener:allow-open-url"
   ]
 }

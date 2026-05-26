@@ -2,8 +2,8 @@ import { useEffect, useCallback, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { LogicalPosition } from '@tauri-apps/api/dpi';
-import { availableMonitors, getCurrentWindow } from '@tauri-apps/api/window';
+import { LogicalPosition, PhysicalPosition, PhysicalSize } from '@tauri-apps/api/dpi';
+import { availableMonitors, cursorPosition, getCurrentWindow } from '@tauri-apps/api/window';
 
 import {
   CAPTURE_FULL_SCREEN_EVENT,
@@ -16,6 +16,7 @@ import {
 import { CLIPBOARD_HISTORY_EVENT, CLIPBOARD_POPUP_SHOW_EVENT, showPopup } from '@snk/clipboard';
 import { getSetting } from '@snk/library';
 
+import { useModal } from '../../components/Modal';
 import { queryKeys } from '../../lib/queryKeys';
 import { CaptureGrid } from './CaptureGrid';
 import { ClipboardList } from './ClipboardList';
@@ -24,8 +25,15 @@ import { SearchBar } from './SearchBar';
 import { Sidebar } from './Sidebar';
 import type { SidebarSelection } from './Sidebar';
 
+interface PluginSetupFailedPayload {
+  pluginName: string;
+  panicMessage: string;
+  diagnosticsMarkdown: string;
+}
+
 export function LibraryWindow() {
   const queryClient = useQueryClient();
+  const modal = useModal();
   const [selection, setSelection] = useState<SidebarSelection>({
     type: 'captures',
     label: 'All',
@@ -79,6 +87,56 @@ export function LibraryWindow() {
     return () => unlisten?.();
   }, [refreshCaptures]);
 
+  useEffect(() => {
+    let cancelled = false;
+    let unlisteners: (() => void)[] = [];
+    const setup = async () => {
+      const fn = await listen<PluginSetupFailedPayload>('plugin:setup-failed', ({ payload }) => {
+        modal.custom({
+          title: `Plugin "${payload.pluginName}" failed to start`,
+          render: ({ close }) => (
+            <div className="space-y-4">
+              <p className="text-sm text-fg">
+                Plugin {payload.pluginName} failed to start — please file a bug.
+              </p>
+              <pre className="text-xs whitespace-pre-wrap break-words p-2 bg-surface border border-border">
+                {payload.panicMessage}
+              </pre>
+              <div className="flex justify-end gap-2">
+                <button
+                  className="font-display text-[11px] uppercase tracking-widest px-3 py-1.5 border-2 border-border bg-surface hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_0_var(--border)] transition-transform"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(payload.diagnosticsMarkdown).catch((e) => {
+                      console.error('copy diagnostics failed', e);
+                    });
+                  }}
+                >
+                  Copy diagnostics
+                </button>
+                <button
+                  className="font-display text-[11px] uppercase tracking-widest px-3 py-1.5 border-2 border-border bg-primary text-bg hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_0_var(--border)] transition-transform"
+                  onClick={close}
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          ),
+        });
+      });
+      if (cancelled) {
+        fn();
+      } else {
+        unlisteners = [fn];
+      }
+    };
+    setup().catch((e) => console.error('library plugin:setup-failed listener failed', e));
+    return () => {
+      cancelled = true;
+      unlisteners.forEach((fn) => fn());
+    };
+  }, [modal]);
+
   const showToolbar = useCallback(async (captureId: string) => {
     const toolbar = await WebviewWindow.getByLabel('capture-toolbar');
     if (toolbar) {
@@ -100,12 +158,36 @@ export function LibraryWindow() {
 
   const handleRegion = useCallback(async () => {
     try {
-      const preview = await grabScreenPreview();
+      const monitors = await availableMonitors();
+      const fallback = monitors[0];
+      if (!fallback) {
+        console.warn('no monitors available for region overlay');
+        return;
+      }
+      const cursor = await cursorPosition();
+      const monitorIndex = Math.max(
+        monitors.findIndex(
+          (m) =>
+            cursor.x >= m.position.x &&
+            cursor.x < m.position.x + m.size.width &&
+            cursor.y >= m.position.y &&
+            cursor.y < m.position.y + m.size.height,
+        ),
+        0,
+      );
+      const monitor = monitors[monitorIndex] ?? fallback;
+      const preview = await grabScreenPreview(monitorIndex);
       const overlay = await WebviewWindow.getByLabel('capture-overlay');
       if (overlay) {
+        await overlay.setPosition(
+          new PhysicalPosition(monitor.position.x, monitor.position.y),
+        );
+        await overlay.setSize(new PhysicalSize(monitor.size.width, monitor.size.height));
         await overlay.emit('overlay:preview', {
           path: preview.path,
           token: preview.token,
+          monitorId: monitorIndex,
+          scaleFactor: monitor.scaleFactor,
         });
         await overlay.show();
         await overlay.setFocus();
@@ -219,16 +301,34 @@ export function LibraryWindow() {
   }, []);
 
   useEffect(() => {
-    const unlisteners: (() => void)[] = [];
+    // `listen()` is async; the previous synchronous-cleanup version
+    // races React StrictMode's setup→cleanup→setup pattern in dev,
+    // ending up with TWO active listeners per event after StrictMode
+    // settles. The `cancelled` flag lets a late-arriving setup
+    // self-clean when it discovers the effect has already been torn
+    // down. Without this, every Ctrl+Shift+4 fires handleRegion
+    // twice in dev.
+    let cancelled = false;
+    let unlisteners: (() => void)[] = [];
     const setup = async () => {
-      unlisteners.push(await listen(CAPTURE_FULL_SCREEN_EVENT, handleFullScreen));
-      unlisteners.push(await listen(CAPTURE_REGION_EVENT, handleRegion));
-      unlisteners.push(await listen(CAPTURE_WINDOW_EVENT, handleWindow));
-      unlisteners.push(await listen(CAPTURE_TIMED_EVENT, handleTimed));
-      unlisteners.push(await listen(CLIPBOARD_HISTORY_EVENT, handleClipboardHistory));
+      const fns = [
+        await listen(CAPTURE_FULL_SCREEN_EVENT, handleFullScreen),
+        await listen(CAPTURE_REGION_EVENT, handleRegion),
+        await listen(CAPTURE_WINDOW_EVENT, handleWindow),
+        await listen(CAPTURE_TIMED_EVENT, handleTimed),
+        await listen(CLIPBOARD_HISTORY_EVENT, handleClipboardHistory),
+      ];
+      if (cancelled) {
+        fns.forEach((fn) => fn());
+      } else {
+        unlisteners = fns;
+      }
     };
     setup().catch((e) => console.error('listen setup failed', e));
-    return () => unlisteners.forEach((fn) => fn());
+    return () => {
+      cancelled = true;
+      unlisteners.forEach((fn) => fn());
+    };
   }, [handleFullScreen, handleRegion, handleWindow, handleTimed, handleClipboardHistory]);
 
   return (

@@ -19,6 +19,7 @@ uuid.workspace = true
 chrono.workspace = true
 tokio.workspace = true
 anyhow.workspace = true
+ts-rs.workspace = true
 
 [build-dependencies]
 tauri-plugin = { workspace = true }

@@ -83,6 +83,21 @@ fn not_found_variant_wire_shape() {
 }
 
 #[test]
+fn persist_variant_wire_shape() {
+    let e = LibraryError::Persist {
+        detail: "serialize words_json: invalid utf-8".into(),
+    };
+    let actual = serde_json::to_value(&e).expect("serialize");
+    assert_eq!(
+        actual,
+        json!({
+            "kind": "persist",
+            "detail": "serialize words_json: invalid utf-8",
+        })
+    );
+}
+
+#[test]
 fn discriminator_uses_kebab_case() {
     // Sanity for the wrapper enums: they all use the same discriminator
     // name. If this ever changes, every wrapper-crate snapshot test in

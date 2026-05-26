@@ -279,6 +279,8 @@ mod tests {
         let c = cap(&db);
         let _ = insert(&db, span_for(&c, "a@x.com")).unwrap();
         let _ = insert(&db, span_for(&c, "b@x.com")).unwrap();
+        // `captures::delete` doesn't exist; per plan fallback we drop via raw SQL.
+        // ON DELETE CASCADE on pii_spans.capture_id should sweep the rows.
         db.with_conn(|conn| {
             conn.execute("DELETE FROM captures WHERE id = ?1", [&c])?;
             Ok(())

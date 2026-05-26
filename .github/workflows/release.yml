@@ -73,49 +73,6 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Bundle Tesseract OCR + tessdata so the installed app doesn't need a
-      # system tesseract. The resolver in snk-ocr/sidecar.rs prefers the
-      # bundled location before falling back to PATH/system installs.
-      - name: Bundle Tesseract (Windows)
-        if: runner.os == 'Windows'
-        shell: powershell
-        env:
-          TESSERACT_VERSION: '5.5.0.20241111'
-          TESSERACT_SHA256: 'F3FC4236425B690C8BE756F35793F77394EE004BE0A6460A440C754D892F68BC'
-        run: |
-          choco install tesseract --version=$env:TESSERACT_VERSION --no-progress --confirm --requirechecksums
-          # Tesseract's chocolatey package bundles an NSIS .exe (not .msi).
-          $installer = (Get-ChildItem "$env:ChocolateyInstall\lib\tesseract" -Filter '*.exe' -Recurse | Select-Object -First 1).FullName
-          if (-not $installer) { Write-Error "Tesseract installer .exe not found"; exit 1 }
-          $actual = (Get-FileHash -Algorithm SHA256 $installer).Hash
-          if ($actual -ne $env:TESSERACT_SHA256) {
-            Write-Error "Tesseract installer SHA256 mismatch. Expected: $env:TESSERACT_SHA256. Got: $actual."
-            exit 1
-          }
-          $src = 'C:\Program Files\Tesseract-OCR'
-          $dest = 'app\src-tauri\resources\tesseract'
-          New-Item -ItemType Directory -Force -Path $dest | Out-Null
-          Copy-Item -Path "$src\*" -Destination $dest -Recurse -Force
-
-      # Windows: delete bundle.windows.signCommand from tauri.conf.json
-      # before building. The build job is secrets-free, so it cannot
-      # invoke `dotnet sign` (no Azure creds). Attempts to disable the
-      # signCommand via --config overlay don't work:
-      #   - `signCommand: ""` -> Tauri tries to exec the empty command
-      #     and fails with "program path has no file name".
-      #   - `signCommand: null` -> unverified at time of writing; jq -d
-      #     is the robust fix that just removes the field entirely.
-      # The sign-win-x64 job runs `dotnet sign` against the unsigned
-      # installer instead.
-      - name: Strip signCommand from tauri.conf.json (Windows build)
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          jq 'del(.bundle.windows.signCommand)' app/src-tauri/tauri.conf.json > /tmp/conf.json
-          mv /tmp/conf.json app/src-tauri/tauri.conf.json
-          echo "windows.signCommand after patch:"
-          jq '.bundle.windows.signCommand // "(absent)"' app/src-tauri/tauri.conf.json
-
       # Build with NO signing secrets in env.
       #
       # `createUpdaterArtifacts: false` is critical here. An earlier attempt

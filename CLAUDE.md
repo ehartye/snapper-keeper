@@ -2,7 +2,7 @@
 
 This file gives Claude project-specific context. Read it before you start anything substantive. The user-level `~/.claude/CLAUDE.md` already covers Eric's general working preferences; this file covers what's true *here*.
 
-**Dev environment setup (toolchain versions, Tesseract install, per-OS prerequisites, `pnpm tauri dev`):** [`README.md`](README.md) is canonical. This file documents *project conventions and gotchas* — not setup steps.
+**Dev environment setup (toolchain versions, per-OS prerequisites, `pnpm tauri dev`):** [`README.md`](README.md) is canonical. This file documents *project conventions and gotchas* — not setup steps.
 
 ## What this repo is
 
@@ -44,6 +44,8 @@ These bit us in phase 1. Avoid repeating.
 - **`core:asset:default` is NOT a valid Tauri 2 permission.** The asset protocol is gated entirely by the `protocol-asset` Cargo feature + `assetProtocol` scope in `tauri.conf.json`; there's no separate per-capability permission. The frontend needs `core:path:default` to call `path.appDataDir()`.
 - **Windows OpenSSH sessions are non-interactive window stations.** `RegisterHotKey` and `WebView2` will fail with cryptic errors (error 1459, "Invalid window handle") if you try to run `tauri dev` from SSH. Must be an interactive desktop (RDP, console, GUI terminal).
 - **Windows UAC installer detection heuristic flags binaries with "update", "setup", or "install" in the filename.** A binary named `snk_updater-*.exe` (or any test/example exe matching this pattern) triggers UAC elevation on launch, which breaks unattended `cargo test` / `cargo run --example` runs. Name test binaries to avoid these substrings (e.g. `updater_smoke` not `snk_updater_test`), or embed a manifest declaring `asInvoker` requestedExecutionLevel.
+- **WebView2 packaged builds use `http://` for `asset.localhost` and `ipc.localhost`; dev mode hides the CSP enforcement gap.** Tauri 2 + WebView2 in production routes the asset and IPC protocols through `http://asset.localhost` / `http://ipc.localhost`, not `https://`. Dev mode (Vite-served HTML) skips CSP enforcement entirely, so a CSP listing only one scheme passes silently in dev and breaks in installer builds — captures render as black (asset URLs blocked), IPC custom-protocol falls back to postMessage. The CSP in `tauri.conf.json` must allow BOTH http and https variants for these loopback hosts. `scripts/verify-csp.sh` (wired into CI as `verify-csp`) guards against regressions. Surfaced first via `pnpm build:local` smoke testing — the package-build path is otherwise CI-invisible per the SSH-non-interactive note above.
+- **Tauri 2 plugin commands need three coordinated entries to be callable:** (a) the `invoke_handler!` in the plugin's `init()`, (b) the `COMMANDS` array in `build.rs` (drives autogen of per-command permission TOMLs), and (c) the plugin's `permissions/default.toml` `permissions` list (or a capability-level grant). Skipping (b) or (c) yields runtime `not allowed by ACL` errors that are invisible to `cargo test` because the ACL only enforces under a real Tauri runtime. PR #141 and Phase 10 both hit cousins of this; treat any new plugin command as a three-file edit.
 
 ## Worktree convention
 
@@ -92,6 +94,7 @@ Don't let plan and code drift. The audit trail "plan was fixed because X" is muc
 | 6 | Library polish (sidebar, tags, settings, first-run wizard) | Done |
 | 7 | Signing, notarization, auto-updater, release pipeline | Done |
 | 7+ | Release pipeline hardening: SHA pins, build/sign split, env gate, nightly audit, per-release SBOM | Done |
+| 10 | OCR surfaces: Vision + WinOcr + PII redact + Text Actions; full bundled-engine removal | In progress |
 
 **Known limitation:** Smoke tests on Windows require an interactive desktop session. SSH-only environments can build and lint but can't smoke. CI's `build-app` job verifies the compile across all three OSes; runtime verification is manual.
 

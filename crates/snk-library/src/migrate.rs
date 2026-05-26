@@ -203,6 +203,61 @@ mod tests {
     }
 
     #[test]
+    fn v006_adds_words_json_and_engine_to_ocr_text() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate(&mut conn).expect("apply migrations");
+
+        let cols: Vec<String> = conn
+            .prepare("PRAGMA table_info(ocr_text)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert!(
+            cols.contains(&"words_json".into()),
+            "words_json column missing; got {cols:?}"
+        );
+        assert!(
+            cols.contains(&"engine".into()),
+            "engine column missing; got {cols:?}"
+        );
+    }
+
+    #[test]
+    fn v006_creates_pii_spans_table_with_indexes() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate(&mut conn).expect("apply migrations");
+
+        let cnt: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='pii_spans'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(cnt, 1);
+
+        let idx_full: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_pii_spans_capture'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(idx_full, 1);
+
+        let idx_pending: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_pii_spans_pending'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(idx_pending, 1);
+    }
+
+    #[test]
     fn v004_to_v005_preserves_clipboard_rows() {
         use rusqlite::params;
 

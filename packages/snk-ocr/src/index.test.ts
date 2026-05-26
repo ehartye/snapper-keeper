@@ -28,43 +28,57 @@ describe('@snk/ocr event constants', () => {
   });
 });
 
-describe('@snk/ocr getOcrWords', () => {
-  beforeEach(() => mockedInvoke.mockReset().mockResolvedValue([]));
+describe('@snk/ocr bindings', () => {
+  beforeEach(() => {
+    mockedInvoke.mockReset().mockResolvedValue(undefined);
+    mockedListen.mockReset().mockResolvedValue(() => {});
+  });
 
-  it('invokes the correct command with captureId', async () => {
-    const words: OcrWord[] = [
-      { text: 'hello', bbox: { x: 0, y: 0, w: 10, h: 10 }, confidence: 0.99, line: 0 },
+  it('getOcrWords camelCases the capture id and returns words', async () => {
+    const sample: OcrWord[] = [
+      { text: 'hello', bbox: { x: 0.1, y: 0.05, w: 0.08, h: 0.04 }, confidence: 0.97, line: 0 },
     ];
-    mockedInvoke.mockResolvedValue(words);
-    const result = await getOcrWords('cap-123');
+    mockedInvoke.mockResolvedValue(sample);
+    const out = await getOcrWords('cap-abc');
     expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-ocr|get_ocr_words', {
-      captureId: 'cap-123',
+      captureId: 'cap-abc',
     });
-    expect(result).toEqual(words);
+    expect(out).toEqual(sample);
   });
-});
 
-describe('@snk/ocr ocrStatus', () => {
-  beforeEach(() => mockedInvoke.mockReset());
-
-  it('invokes the correct command and returns status', async () => {
-    const status: OcrStatus = { backend: 'vision', version: '1.0', last_error: null };
+  it('ocrStatus takes no args and returns backend metadata', async () => {
+    const status: OcrStatus = {
+      backend: 'Vision',
+      version: 'Vision (macOS 15.2.0)',
+      last_error: null,
+    };
     mockedInvoke.mockResolvedValue(status);
-    const result = await ocrStatus();
+    const s = await ocrStatus();
     expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-ocr|ocr_status');
-    expect(result).toEqual(status);
+    expect(s.backend).toBe('Vision');
+    expect(s.last_error).toBeNull();
   });
-});
 
-describe('@snk/ocr onOcrReady', () => {
-  beforeEach(() => mockedListen.mockReset().mockResolvedValue(() => {}));
+  it('ocrStatus surfaces last_error with typed kind discriminator', async () => {
+    const status: OcrStatus = {
+      backend: 'none',
+      version: 'unavailable',
+      last_error: { kind: 'backend-unavailable', reason: 'no recognizer language' },
+    };
+    mockedInvoke.mockResolvedValue(status);
+    const s = await ocrStatus();
+    expect(s.last_error?.kind).toBe('backend-unavailable');
+    expect(s.last_error?.reason).toBe('no recognizer language');
+  });
 
-  it('listens on the correct event and passes payload to handler', async () => {
-    let captured: string | undefined;
-    const unlisten = await onOcrReady((id) => {
-      captured = id;
-    });
-    expect(mockedListen).toHaveBeenCalledWith(OCR_READY_EVENT, expect.any(Function));
-    expect(typeof unlisten).toBe('function');
+  it('onOcrReady subscribes to ocr:ready and forwards payload', async () => {
+    const handler = vi.fn();
+    await onOcrReady(handler);
+    expect(mockedListen).toHaveBeenCalledWith('ocr:ready', expect.any(Function));
+
+    const tauriCallback = mockedListen.mock.calls[0]?.[1] as ((e: { payload: string }) => void) | undefined;
+    expect(tauriCallback).toBeDefined();
+    tauriCallback?.({ payload: 'cap-xyz' });
+    expect(handler).toHaveBeenCalledWith('cap-xyz');
   });
 });

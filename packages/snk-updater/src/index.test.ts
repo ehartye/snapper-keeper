@@ -5,7 +5,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 
 import { invoke } from '@tauri-apps/api/core';
-import { checkForUpdate, getUpdateStatus } from './index';
+import { checkForUpdate, getUpdateStatus, lastCheckedAt, restart } from './index';
 
 const mockedInvoke = vi.mocked(invoke);
 
@@ -20,9 +20,35 @@ describe('@snk/updater bindings', () => {
   });
 
   it('getUpdateStatus returns the status struct', async () => {
-    mockedInvoke.mockResolvedValue({ kind: 'available', version: '1.2.3' });
+    mockedInvoke.mockResolvedValue({
+      kind: 'available',
+      version: '1.2.3',
+      urgency: 'normal',
+    });
     const s = await getUpdateStatus();
-    expect(s).toEqual({ kind: 'available', version: '1.2.3' });
+    expect(s).toEqual({
+      kind: 'available',
+      version: '1.2.3',
+      urgency: 'normal',
+    });
     expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-updater|get_update_status');
+  });
+});
+
+describe('@snk/updater extended bindings', () => {
+  beforeEach(() => mockedInvoke.mockReset().mockResolvedValue(undefined));
+
+  it('lastCheckedAt returns the epoch-ms or null', async () => {
+    mockedInvoke.mockResolvedValue(1716662400000);
+    expect(await lastCheckedAt()).toBe(1716662400000);
+    expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-updater|get_last_check_at');
+
+    mockedInvoke.mockResolvedValue(null);
+    expect(await lastCheckedAt()).toBeNull();
+  });
+
+  it('restart invokes plugin:snk-updater|restart_app', async () => {
+    await restart();
+    expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-updater|restart_app');
   });
 });

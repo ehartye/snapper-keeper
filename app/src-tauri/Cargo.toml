@@ -1,6 +1,6 @@
 [package]
 name = "snapper-keeper-app"
-version = "0.1.1"
+version = "0.1.2"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -10,10 +10,15 @@ publish.workspace = true
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon", "protocol-asset"] }
+# `devtools` is intentionally enabled for release builds too: open-source
+# dev-facing app — end users may need to inspect issues for bug reports.
+# (Tauri auto-enables devtools in debug; the feature flag is required for
+# release.) Toggle off here if shipping to non-developer audiences.
+tauri = { version = "2", features = ["tray-icon", "protocol-asset", "devtools"] }
 tauri-plugin-global-shortcut.workspace = true
 tauri-plugin-updater.workspace = true
 tauri-plugin-autostart.workspace = true
+tauri-plugin-opener.workspace = true
 snk-library = { path = "../../crates/snk-library" }
 snk-hotkeys = { path = "../../crates/snk-hotkeys" }
 snk-capture = { path = "../../crates/snk-capture" }
