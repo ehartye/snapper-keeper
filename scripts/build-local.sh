@@ -105,4 +105,86 @@ pnpm --filter @snk/app tauri build \
   --bundles "$BUNDLES" \
   --config '{"bundle":{"createUpdaterArtifacts":false}}'
 
-# TODO(task-5): post-build summary
+# --- Post-build summary ---
+
+# Portable SHA-256: prefer sha256sum (Linux + Git Bash on Windows), fall back
+# to shasum -a 256 (macOS). Both emit "<hash>  <path>"; we grab the first field.
+sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
+# Portable byte count via wc -c (BSD + GNU both support reading from stdin
+# this way, which avoids the BSD-stat / GNU-stat divergence).
+bytes_of() {
+  wc -c < "$1" | tr -d '[:space:]'
+}
+
+# Format bytes as MB with one decimal place (no external deps).
+mb_of() {
+  awk -v b="$1" 'BEGIN { printf "%.1f MB", b/1024/1024 }'
+}
+
+print_artifact() {
+  local label="$1" path="$2"
+  if [[ ! -e "$path" ]]; then
+    echo "build-local: WARNING: expected artifact not found: $path" >&2
+    return
+  fi
+  local size_bytes size_mb sha
+  size_bytes="$(bytes_of "$path")"
+  size_mb="$(mb_of "$size_bytes")"
+  sha="$(sha256_of "$path")"
+  printf '\n%s\n' "$label"
+  printf '  Path:   %s\n' "$path"
+  printf '  Size:   %s (%s bytes)\n' "$size_mb" "$size_bytes"
+  printf '  SHA256: %s\n' "$sha"
+}
+
+echo ""
+echo "================================================================"
+echo "  Build complete (UNSIGNED)"
+echo "================================================================"
+
+if [[ "$OS" == "macos" ]]; then
+  # .app is a directory; size_of doesn't apply. Print path only for .app;
+  # full summary for the .dmg (the actual installable).
+  APP_PATH="target/$TARGET/release/bundle/macos/Snapper Keeper.app"
+  if [[ -d "$APP_PATH" ]]; then
+    echo ""
+    echo "App bundle:"
+    echo "  Path: $APP_PATH"
+  fi
+  # Glob the .dmg (filename includes version + arch).
+  DMG_PATH=""
+  for f in "target/$TARGET/release/bundle/dmg/"*.dmg; do
+    [[ -e "$f" ]] && DMG_PATH="$f" && break
+  done
+  if [[ -n "$DMG_PATH" ]]; then
+    print_artifact "Installer (.dmg):" "$DMG_PATH"
+  fi
+  echo ""
+  echo "To install:"
+  echo "  - Open the .dmg, drag the .app to /Applications"
+  echo "  - First launch: right-click the .app -> 'Open' -> 'Open anyway'"
+  echo "  - OR run: xattr -d com.apple.quarantine '/Applications/Snapper Keeper.app'"
+fi
+
+if [[ "$OS" == "windows" ]]; then
+  EXE_PATH=""
+  for f in "target/$TARGET/release/bundle/nsis/"*-setup.exe; do
+    [[ -e "$f" ]] && EXE_PATH="$f" && break
+  done
+  if [[ -n "$EXE_PATH" ]]; then
+    print_artifact "Installer (.exe):" "$EXE_PATH"
+  fi
+  echo ""
+  echo "To install:"
+  echo "  - Run the .exe"
+  echo "  - SmartScreen will warn: click 'More info' -> 'Run anyway'"
+fi
+
+echo ""
