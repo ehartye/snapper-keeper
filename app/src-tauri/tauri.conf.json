@@ -116,8 +116,8 @@
     "targets": "all",
     "createUpdaterArtifacts": true,
     "icon": ["icons/icon.ico", "icons/icon.png"],
-    "resources": {
-      "resources/tesseract/**/*": "tesseract/"
+    "macOS": {
+      "minimumSystemVersion": "14.0"
     }
   },
   "plugins": {

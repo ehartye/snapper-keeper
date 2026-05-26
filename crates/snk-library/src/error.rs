@@ -21,6 +21,9 @@ pub enum LibraryError {
 
     #[error("not found: {what}")]
     NotFound { what: String },
+
+    #[error("persist error: {detail}")]
+    Persist { detail: String },
 }
 
 impl LibraryError {

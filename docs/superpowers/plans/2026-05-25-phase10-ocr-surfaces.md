@@ -124,7 +124,9 @@ Edit `Cargo.toml`:
 
 ```toml
 [dependencies]
-windows = { version = "0.58", features = [
+# Plan amendment (Spike A finding): workspace transitively pulls windows 0.61/0.62
+# via tao/wry/tauri. Pin 0.62 to align — see Findings entry "windows crate version".
+windows = { version = "0.62", features = [
   "Media_Ocr",
   "Globalization",
   "Graphics_Imaging",
@@ -235,7 +237,16 @@ Edit `Cargo.toml`:
 [dependencies]
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSString", "NSURL", "NSData"] }
-objc2-vision = { version = "0.3", features = ["VNRequest", "VNImageRequestHandler", "VNRecognizeTextRequest", "VNRecognizedTextObservation"] }
+objc2-vision = { version = "0.3", features = [
+  # Plan amendment (Spike B finding): "VNImageRequestHandler" and "VNRecognizedTextObservation"
+  # are CLASS names, not feature names. Actual features are the parent module names.
+  "VNRequest",
+  "VNRequestHandler",           # provides VNImageRequestHandler
+  "VNRecognizeTextRequest",
+  "VNObservation",              # provides VNRecognizedTextObservation
+  "VNGeometry",                 # provides VNRectangleObservation (boundingBoxForRange return)
+  "objc2-core-foundation",      # gates CGRect on VNDetectedObjectObservation::boundingBox()
+] }
 objc2-core-image = { version = "0.3", features = ["CIImage"] }
 ```
 
@@ -350,13 +361,37 @@ Delete `vision-spike` afterward. Do NOT commit it.
 
 > **For the implementer:** edit this section in place with the spike results before starting T1. This becomes the authoritative record of what's known about the underlying APIs.
 
-- **WinOcr engine construction from plain `.exe` bundle:** _<Spike A outcome A or B>_
-- **WinOcr per-word `Confidence` API:** _<available with type X | line-only>_
-- **WinOcr bounding-rect coordinate space:** _<confirmed pixels, top-left origin | other>_
-- **`objc2-vision` resolved version:** _<e.g. `0.3.2`>_
-- **`objc2` family versions in workspace:** _<from `cargo tree`>_
-- **Vision per-word bounds API verified:** _<yes via `boundingBoxForRange_error` | other path>_
-- **Any plan amendments triggered by findings:** _<none | list>_
+- **WinOcr engine construction from plain `.exe` bundle:** ✅ **Outcome A.** `OcrEngine::TryCreateFromUserProfileLanguages()` succeeds from a plain `.exe` (no MSIX package identity, no manifest). Verified on Windows 11 with only `en-US` language pack installed; returned recognizer language tag `en-US`. `AvailableRecognizerLanguages()` enumerates installed packs; `MaxImageDimension()` returns 10000 px. No MSIX work required — NSIS bundle is fine.
+- **WinOcr per-word `Confidence` API:** ❌ **NOT exposed at any level.** The `OcrWord` class surface in `windows = "0.62"` exposes ONLY `Text()` and `BoundingRect()`. The `OcrLine` class surface exposes ONLY `Text()` and `Words()`. There is no `Confidence()` accessor anywhere in `Windows.Media.Ocr` (confirmed by reading `windows-0.62.2/src/Windows/Media/Ocr/mod.rs:230-244` and lines 159-174). T8 must use a heuristic line confidence (per-plan: 0.85) broadcast to every word — this is the documented asymmetry vs Vision.
+- **WinOcr bounding-rect coordinate space:** ✅ **Confirmed pixels, top-left origin.** Probe on 600×200 PNG with text drawn at Y=30 and Y=90 returned word bboxes at Y≈42 and Y≈102 in raw pixel units; bottom-right of words remained within the image bounds. T8 will divide by `decoder.PixelWidth()/PixelHeight()` to produce the normalized `BBox` the schema expects.
+- **`windows` crate version:** The workspace already pulls `windows = "0.61.3"` and `windows = "0.62.2"` transitively (via `tao`/`wry`/`tauri`-stack). The plan's suggested `0.58` is stale. Spike used `0.62` and built clean. T8 should pin `0.62` (not `0.58`) to align with the workspace and minimize duplicate-major bloat.
+- **windows-rs 0.62 async API change:** `IAsyncOperation::get()` was REMOVED in this version. Use the inherent method `.join()` instead (e.g. `StorageFile::GetFileFromPathAsync(&path)?.join()?`). It is a public method on each of the four async types (`IAsyncAction`, `IAsyncOperation<T>`, `IAsyncActionWithProgress<P>`, `IAsyncOperationWithProgress<T,P>`); no `windows-future` dep or trait import needed. The plan T8 code block uses `.and_then(|op| op.get())` — must be rewritten to `.and_then(|op| op.join())`.
+- **Windows UNC path gotcha for StorageFile:** `Path::canonicalize()` on Windows returns paths prefixed with `\\?\` (extended-length namespace). `StorageFile::GetFileFromPathAsync` REJECTS that prefix with HRESULT 0x800700A1 ("path is too long"). The implementation must strip the `\\?\` prefix before constructing the `HSTRING`. Trivial 5-line fix; required.
+- **`objc2-vision` resolved version:** ✅ `0.3.2`. `cargo check --target aarch64-apple-darwin` builds clean against a throwaway probe with the corrected feature set. Runtime FFI smoke (`performRequests` against a real Vision framework + verifying observations + per-word bbox extraction) is **DEFERRED TO MAC CI** — Spike B was executed from a Windows host where the framework is unreachable. PR-2's Mac CI build job validates runtime on PR-2 open.
+- **`objc2` family versions in workspace:** ✅ All aligned at the same major. `objc2 0.6.4`, `objc2-foundation 0.3.2`, `objc2-app-kit 0.3.2` (all transitive via arboard/global-hotkey/muda); `objc2-vision 0.3.2` (new). No parallel runtime trains; objc2 workspace-dedupe check passes (per memory `reference_objc2_workspace_dedupe.md`).
+- **Vision per-word bounds API verified:** ✅ Source-confirmed (runtime deferred). `VNRecognizedText::boundingBoxForRange_error(NSRange) -> Result<Retained<VNRectangleObservation>, Retained<NSError>>` exists in `objc2-vision 0.3.2`'s hand-written `src/observation.rs` (gated on `VNObservation` feature). `VNRectangleObservation::boundingBox() -> CGRect` exists on superclass `VNDetectedObjectObservation` (gated on `objc2-core-foundation` feature). T7's `recognize()` implementation matches the API surface; selectors verified by reading the crate source at `~/.cargo/registry/src/.../objc2-vision-0.3.2/`.
+- **Plan amendments triggered by Spike B findings (approved 2026-05-26 — already applied in place):**
+    1. **T6 Mac dep block** — replaced non-existent feature names `VNImageRequestHandler` / `VNRecognizedTextObservation` (class names, not features) with `VNRequestHandler` / `VNObservation`; added `VNGeometry`, `objc2-core-foundation`, and `NSProcessInfo` (on `objc2-foundation`). See inline plan amendment comment in §T6 Step 1.
+    2. **§PR-1 Spike B Step 2** — same dep-block correction so the spike code in the plan compiles if re-run on a Mac.
+- **⚠️ Spike B caveat — Windows-host verification does NOT compile Mac code** (added 2026-05-26 post-Mac-CI catch):
+    Spike B's "resolution check on Windows host" is fundamentally insufficient for verifying Mac-only objc2 code compiles. The build.rs chain (`objc2-exception-helper` → `try_catch.m`) requires a `cc` toolchain for `aarch64-apple-darwin` that doesn't exist on Windows. Cargo silently fails at the build-script step before rustc proper runs.
+
+    **What Windows-host verification DOES prove:** Cargo.toml feature names resolve, dep versions are compatible, crate metadata is valid.
+
+    **What it does NOT prove:** any line of `vision.rs` actually compiles.
+
+    Implementers writing Mac-only objc2/Vision code from a Windows host must treat Mac CI on PR open as the FIRST real compile. Expect at least one iteration of "push, watch Mac CI fail, fix trait imports, push again." Budget for this in time estimates.
+
+    Mitigation in this codebase: spec §6's "Vision per-word bounds API verified via `boundingBoxForRange_error`" remains valid (verified by reading crate source), but the broader "objc2-vision FFI smoke" claim in Spike B must include "compile-verified on Mac" before it can be called done.
+
+    Historical record — PR-2's first Mac CI run (PR #135) caught 3 trait-import errors not surfaced by any Windows-host check: `VNImageRequestHandler::alloc()` needed `use objc2::AnyThread;`; `ProtocolObject::from_ref(...).cast()` was the wrong abstraction (VNRequest is a class, not a protocol) — replaced with `request.as_super().as_super()` via `use objc2::ClassType;`; `Retained::cast()` is deprecated in objc2 0.6 — replaced with `Retained::cast_unchecked`. Fixed in commit `85f034e`.
+- **Plan amendments triggered by Spike A findings (proposed; awaiting team-lead approval per plan-as-source-of-truth protocol):**
+    1. **T6 + T8** — pin `windows = "0.62"` (not `0.58`). Plus drop `Foundation_Collections` feature only if unused; spike confirms `Foundation_Collections` is NOT required for the core OCR call path (we never instantiate a generic vector; the API returns `IVectorView<OcrLine>` whose interface is exported by `Media_Ocr`).
+    2. **T8 `WinOcrBackend::recognize`** — three diffs vs the plan's pasted code block:
+        - Replace every `.and_then(|op| op.get())` with `.and_then(|op| op.join())` (4 call sites).
+        - After `image_path.canonicalize()`, strip a leading `\\?\` prefix before building the `HSTRING`.
+        - Delete the `line_confidence` helper and the `total_conf`/`avg` computation; hard-code line-broadcast confidence at `0.85` and store `confidence = 0.85` on the `OcrResult` too. Document in a single comment why (no API).
+    3. **T6 `Cargo.toml`** — leave `windows` features as planned (`Media_Ocr, Globalization, Graphics_Imaging, Storage, Storage_Streams, Foundation`). No need to add `windows-future` because `.join()` is an inherent method on the async types.
 
 ---
 
@@ -720,7 +755,9 @@ pub fn get(db: &Db, capture_id: &str) -> Result<Option<OcrText>> {
 }
 ```
 
-If `LibraryError::Persist` doesn't exist yet, check `crates/snk-library/src/lib.rs` for the existing error variants and add `Persist { detail: String }` to the enum if needed, marked with the same serde tags as the others.
+If `LibraryError::Persist` doesn't exist yet, add `Persist { detail: String }` to the enum in `crates/snk-library/src/error.rs` (the file where `LibraryError` actually lives — `lib.rs` only re-exports it), marked with the same serde tags as the others.
+
+Plan amendment 2026-05-26: also append a snapshot entry for the new `Persist` variant to `crates/snk-library/tests/library_error_wire_shape.rs`, matching the existing per-variant pattern. The test file's header explicitly states "failing here is intentional; update snapshot when contract changes" — adding a new variant IS a contract change.
 
 **Step 4: Run tests — confirm they pass**
 
@@ -741,7 +778,7 @@ Expected: full suite passes. If anything else (search, fts) breaks, it's likely 
 **Step 6: Commit**
 
 ```bash
-git add crates/snk-library/src/ocr.rs crates/snk-library/src/lib.rs
+git add crates/snk-library/src/ocr.rs crates/snk-library/src/error.rs crates/snk-library/tests/library_error_wire_shape.rs
 git diff --cached
 git commit -m "feat(library): OcrText words_json + engine; OcrWord/BBox types"
 ```
@@ -1044,6 +1081,7 @@ git commit -m "feat(library): pii module — PiiSpan, PiiCategory, CRUD"
 - Create: `crates/snk-ocr/src/backend.rs`
 - Create: `crates/snk-ocr/src/error.rs`
 - Modify: `crates/snk-ocr/src/lib.rs`
+- Modify: `crates/snk-ocr/tests/integration_test.rs` — gate the body behind `#![cfg(any())]` until T12 rewrites (plan amendment 2026-05-26 — downgrading sidecar to private breaks the existing test's `snk_ocr::sidecar::run_tesseract` calls from outside the crate; gating keeps `cargo test --workspace` green through the T5→T12 window)
 
 **Step 1: Write trait + types + error**
 
@@ -1104,31 +1142,49 @@ pub mod error;
 pub mod plugin;
 pub mod queue;
 
-#[cfg(target_os = "macos")]
-pub mod vision;
+// Sidecar module kept (private) until T9 rewrites queue.rs and T10 rewrites plugin.rs.
+// Both still reference crate::sidecar::* internally. Full deletion happens in T13.
+mod sidecar;
 
-#[cfg(target_os = "windows")]
-pub mod winocr;
+// `vision` and `winocr` modules are declared by T7 and T8 respectively
+// (each adds its own `#[cfg(target_os = "...")] pub mod ...;` line here
+// alongside creating the source file). T5 does NOT declare them — would
+// fail `cargo build` because the source files don't exist yet.
 
 pub use backend::{OcrBackend, OcrResult};
 pub use error::OcrError;
 pub use plugin::init;
 ```
 
-(Note: `sidecar.rs` is NOT re-exported. It still exists on disk for now — deletion is T13. This task only stops referencing it.)
+Plan amendment 2026-05-26: `sidecar.rs` is downgraded from `pub mod sidecar;` to a private `mod sidecar;` here (rather than removed entirely) because `queue.rs` and `plugin.rs` still reference `crate::sidecar::*` until T9 rewrites the queue and T10 rewrites the plugin. T13 deletes both the file and this `mod` declaration together. Without this private `mod` line, `cargo build -p snk-ocr` fails on Step 3. The two-line comment is a worthwhile exception to the "no comments" rule because the dead-walking transition is non-obvious.
 
-**Step 3: Run tests**
+**Step 3: Gate the old integration test**
+
+Replace the body of `crates/snk-ocr/tests/integration_test.rs` with:
+
+```rust
+// Integration tests gated until T12 rewrites them against the native backend.
+// Sidecar is downgraded to a private module in T5 (lib.rs), so the previous
+// `snk_ocr::sidecar::run_tesseract` test calls would no longer compile from
+// outside the crate. T12 replaces this file entirely with backend-trait tests.
+#![cfg(any())]
+```
+
+The `#![cfg(any())]` attribute (always-false predicate) excludes the entire test file from compilation. Single line; zero behavioral risk; preserves bisect-cleanliness through the T5→T12 window.
+
+**Step 4: Run build + tests**
 
 ```bash
 cargo build -p snk-ocr
+cargo test -p snk-ocr
 ```
 
-Expected: builds clean. Existing `cargo test -p snk-ocr` will currently fail because `queue.rs` and `plugin.rs` reference `sidecar` — that's expected and is fixed in T9.
+Expected: both pass clean. Plan amendment 2026-05-26: the previous "tests will fail" caveat was wrong — see Step 3.
 
-**Step 4: Commit**
+**Step 5: Commit**
 
 ```bash
-git add crates/snk-ocr/src/backend.rs crates/snk-ocr/src/error.rs crates/snk-ocr/src/lib.rs
+git add crates/snk-ocr/src/backend.rs crates/snk-ocr/src/error.rs crates/snk-ocr/src/lib.rs crates/snk-ocr/tests/integration_test.rs
 git diff --cached
 git commit -m "feat(ocr): OcrBackend trait, OcrResult, OcrError types"
 ```
@@ -1165,23 +1221,43 @@ tracing.workspace = true
 tokio.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
+# Plan amendments (Spike B findings approved 2026-05-26):
+#   - "VNImageRequestHandler" / "VNRecognizedTextObservation" are CLASS names, not features.
+#     The actual features are "VNRequestHandler" and "VNObservation".
+#   - "VNGeometry" needed for VNRectangleObservation (returned by boundingBoxForRange_error).
+#   - "objc2-core-foundation" gates CGRect on VNDetectedObjectObservation::boundingBox().
+#   - "NSProcessInfo" needed by T7's engine_version() OS version read.
+#   - "NSRange" pulled in transitively by "VNObservation" — kept explicit for clarity.
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", features = ["NSString", "NSURL", "NSArray", "NSDictionary", "NSError", "NSRange"] }
+objc2-foundation = { version = "0.3", features = [
+    "NSString", "NSURL", "NSArray", "NSDictionary", "NSError", "NSRange",
+    "NSProcessInfo",
+] }
 objc2-vision = { version = "0.3", features = [
     "VNRequest",
-    "VNImageRequestHandler",
+    "VNRequestHandler",
     "VNRecognizeTextRequest",
-    "VNRecognizedTextObservation",
+    "VNObservation",
+    "VNGeometry",
+    "objc2-core-foundation",
 ] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.58", features = [
+# Plan amendments (Spike A + T8 follow-up, approved 2026-05-26):
+#   - Pin to 0.62 to align with workspace transitive (via tao/wry/tauri).
+#     Avoids duplicate-major bloat.
+#   - "Wdk_System_SystemServices" + "Win32_System_SystemInformation" + "Win32_Foundation"
+#     added for RtlGetVersion call in win_build_number() (T8 step 1 helper).
+windows = { version = "0.62", features = [
     "Media_Ocr",
     "Globalization",
     "Graphics_Imaging",
     "Storage",
     "Storage_Streams",
     "Foundation",
+    "Wdk_System_SystemServices",
+    "Win32_System_SystemInformation",
+    "Win32_Foundation",
 ] }
 
 [dev-dependencies]
@@ -1211,10 +1287,12 @@ If the build fails because `which` or `serial_test` is removed from `[dependenci
 **Step 3: Commit**
 
 ```bash
-git add crates/snk-ocr/Cargo.toml
+git add crates/snk-ocr/Cargo.toml Cargo.lock
 git diff --cached
 git commit -m "chore(ocr): swap deps — drop Tesseract sidecar crates, add objc2-vision + windows"
 ```
+
+Plan amendment 2026-05-26 (vision-mac during T6): `Cargo.lock` MUST be staged alongside dep changes in this repo. Repo precedent (`git log --grep='^chore(deps)'`) shows every prior dep-touching commit bundles the lockfile. Omitting it desyncs every other agent's checkout. The plan's original single-file `git add` was local-only thinking missing multi-agent impact.
 
 ---
 
@@ -1222,6 +1300,7 @@ git commit -m "chore(ocr): swap deps — drop Tesseract sidecar crates, add objc
 
 **Files:**
 - Create: `crates/snk-ocr/src/vision.rs`
+- Modify: `crates/snk-ocr/src/lib.rs` — add `#[cfg(target_os = "macos")] pub mod vision;` (plan amendment 2026-05-26: T5 left this declaration to T7 so the file-vs-declaration order is consistent)
 
 **Step 1: Implement the backend**
 
@@ -1414,6 +1493,7 @@ git commit -m "feat(ocr): VisionBackend — VNRecognizeTextRequest via objc2-vis
 
 **Files:**
 - Create: `crates/snk-ocr/src/winocr.rs`
+- Modify: `crates/snk-ocr/src/lib.rs` — add `#[cfg(target_os = "windows")] pub mod winocr;` (plan amendment 2026-05-26: T5 left this declaration to T8 so the file-vs-declaration order is consistent)
 
 **Step 1: Implement the backend**
 
@@ -1469,30 +1549,39 @@ impl OcrBackend for WinOcrBackend {
             path: image_path.display().to_string(),
             detail: e.to_string(),
         })?;
-        let path = HSTRING::from(abs.as_os_str());
+        // Plan amendment (Spike A finding approved 2026-05-26): Windows
+        // canonicalize() returns extended-length namespace paths prefixed with
+        // \\?\, which StorageFile::GetFileFromPathAsync rejects with HRESULT
+        // 0x800700A1. Strip the prefix before constructing the HSTRING.
+        let abs_str = abs.to_string_lossy();
+        let stripped = abs_str.strip_prefix(r"\\?\").unwrap_or(&abs_str);
+        let path = HSTRING::from(stripped);
 
+        // Plan amendment (Spike A finding approved 2026-05-26): windows-rs 0.62
+        // removed `IAsyncOperation::get()`. Use the inherent `.join()` method
+        // on each of the four async types — no `windows-future` dep, no trait import.
         let file = StorageFile::GetFileFromPathAsync(&path)
             .map_err(|e| OcrError::ImageLoad { path: image_path.display().to_string(), detail: format!("GetFileFromPathAsync: {e}") })?
-            .get()
+            .join()
             .map_err(|e| OcrError::ImageLoad { path: image_path.display().to_string(), detail: format!("await GetFileFromPathAsync: {e}") })?;
 
         let stream = file.OpenAsync(FileAccessMode::Read)
-            .and_then(|op| op.get())
+            .and_then(|op| op.join())
             .map_err(|e| OcrError::ImageLoad { path: image_path.display().to_string(), detail: format!("OpenAsync: {e}") })?;
 
         let decoder = BitmapDecoder::CreateAsync(&stream)
-            .and_then(|op| op.get())
+            .and_then(|op| op.join())
             .map_err(|e| OcrError::ImageLoad { path: image_path.display().to_string(), detail: format!("BitmapDecoder: {e}") })?;
 
         let pixel_width = decoder.PixelWidth().unwrap_or(1) as f32;
         let pixel_height = decoder.PixelHeight().unwrap_or(1) as f32;
 
         let bitmap = decoder.GetSoftwareBitmapAsync()
-            .and_then(|op| op.get())
+            .and_then(|op| op.join())
             .map_err(|e| OcrError::ImageLoad { path: image_path.display().to_string(), detail: format!("GetSoftwareBitmap: {e}") })?;
 
         let result = self.engine.RecognizeAsync(&bitmap)
-            .and_then(|op| op.get())
+            .and_then(|op| op.join())
             .map_err(|e| OcrError::Recognize { detail: format!("RecognizeAsync: {e}") })?;
 
         let lines = result.Lines().map_err(|e| OcrError::Recognize { detail: format!("Lines: {e}") })?;
@@ -1500,8 +1589,12 @@ impl OcrBackend for WinOcrBackend {
 
         let mut text_lines: Vec<String> = Vec::new();
         let mut words: Vec<OcrWord> = Vec::new();
-        let mut total_conf: f64 = 0.0;
-        let mut conf_count: usize = 0;
+
+        // Plan amendment (Spike A finding approved 2026-05-26): Windows.Media.Ocr
+        // does NOT expose any Confidence accessor on OcrWord OR OcrLine (verified
+        // by reading windows-0.62.2 source). Hard-code line-broadcast confidence
+        // at 0.85 — this is the documented asymmetry vs Vision.
+        const WIN_OCR_HEURISTIC_CONF: f64 = 0.85;
 
         for li in 0..line_count {
             let line = match lines.GetAt(li) {
@@ -1509,16 +1602,6 @@ impl OcrBackend for WinOcrBackend {
                 Err(e) => { debug!("line {li} GetAt err: {e}"); continue; }
             };
             let line_text = line.Text().map(|h| h.to_string_lossy()).unwrap_or_default();
-
-            // Per Spike A: line-level confidence is what's exposed. If `OcrWord::Confidence`
-            // is available (spike outcome A.1), call it here per-word. Otherwise broadcast
-            // line-level confidence to all words.
-            //
-            // Approximate line confidence as average of word confidences if per-word is
-            // available; else hard-code a moderate value (0.85) as the heuristic.
-            let line_conf: f64 = line_confidence(&line).unwrap_or(0.85);
-            total_conf += line_conf;
-            conf_count += 1;
             text_lines.push(line_text.clone());
 
             let line_words = line.Words().map_err(|e| OcrError::Recognize { detail: format!("Words: {e}") })?;
@@ -1538,32 +1621,41 @@ impl OcrBackend for WinOcrBackend {
                     w: r.Width / pixel_width,
                     h: r.Height / pixel_height,
                 };
-                words.push(OcrWord { text: wt, bbox, confidence: line_conf, line: li });
+                words.push(OcrWord { text: wt, bbox, confidence: WIN_OCR_HEURISTIC_CONF, line: li });
             }
         }
 
         let text = text_lines.join("\n");
-        let avg = if conf_count > 0 { total_conf / conf_count as f64 } else { 0.0 };
         let language = self.engine.RecognizerLanguage()
             .ok()
             .and_then(|l| l.LanguageTag().ok().map(|h| h.to_string_lossy()))
             .unwrap_or_else(|| "auto".to_string());
 
-        Ok(OcrResult { text, words, language, confidence: avg })
+        Ok(OcrResult { text, words, language, confidence: WIN_OCR_HEURISTIC_CONF })
     }
 }
 
-/// Best-effort per-line confidence accessor. If Spike A confirmed
-/// `OcrLine::Confidence` exists in the API surface, replace this body with the
-/// real call. If not, return None and the caller uses 0.85 heuristic.
-fn line_confidence(_line: &windows::Media::Ocr::OcrLine) -> Option<f64> {
-    None
-}
-
 fn win_build_number() -> Option<String> {
-    // PowerShell-free read via registry would be ideal; for plan-time simplicity
-    // we read the env that Windows sets. If unavailable, return None.
-    std::env::var("OS_BUILD").ok()
+    // Plan amendment 2026-05-26 (winocr-pc, T8 follow-up): the original code
+    // read `std::env::var("OS_BUILD")` — Windows does NOT set that variable,
+    // so engine_version() reliably returned "10.0.unknown". RtlGetVersion is
+    // the authoritative source (ntdll, not subject to the GetVersionEx
+    // app-compat lying Microsoft bolted on in 8.1+). Returns NTSTATUS == 0
+    // (STATUS_SUCCESS) on success. Requires `windows` features:
+    // `Wdk_System_SystemServices`, `Win32_System_SystemInformation`, `Win32_Foundation`.
+    use windows::Wdk::System::SystemServices::RtlGetVersion;
+    use windows::Win32::System::SystemInformation::OSVERSIONINFOW;
+
+    let mut info = OSVERSIONINFOW {
+        dwOSVersionInfoSize: std::mem::size_of::<OSVERSIONINFOW>() as u32,
+        ..Default::default()
+    };
+    let status = unsafe { RtlGetVersion(&mut info) };
+    if status.0 == 0 {
+        Some(info.dwBuildNumber.to_string())
+    } else {
+        None
+    }
 }
 
 #[cfg(all(test, target_os = "windows"))]
@@ -1610,6 +1702,7 @@ git commit -m "feat(ocr): WinOcrBackend — Windows.Media.Ocr via windows-rs"
 
 **Files:**
 - Modify: `crates/snk-ocr/src/queue.rs`
+- Modify: `crates/snk-ocr/src/plugin.rs` — minimum-touch update to keep workspace building (plan amendment 2026-05-26 — pre-flight catch). The existing `let queue = OcrQueue::start(Arc::clone(&db), root);` call uses the OLD 2-arg signature. T9 changes the signature to 4 args (backend, db, root, emit_ready) which plugin.rs can't supply yet (backend selection is T10, emit_ready callback is T10). Swap the line to `let queue = OcrQueue::disabled();` so the workspace builds through the T9→T10 window. T10 then rewrites plugin.rs end-to-end with the real backend selection. **Do NOT touch the `crate::sidecar::set_bundled_resource_dir(dir)` call in plugin.rs in T9** — that stays until T10's rewrite (sidecar.rs is still on disk until T13).
 
 **Step 1: Rewrite queue**
 
@@ -1708,18 +1801,39 @@ fn persist_and_index(
 }
 ```
 
-**Step 2: Build**
+**Step 2: Update plugin.rs to keep workspace building**
+
+In `crates/snk-ocr/src/plugin.rs`, find the line:
+
+```rust
+let queue = OcrQueue::start(Arc::clone(&db), root);
+```
+
+Replace it with:
+
+```rust
+// T9 transition: queue is disabled until T10 wires real backend selection.
+let queue = OcrQueue::disabled();
+let _ = (Arc::clone(&db), root); // suppress unused warnings until T10
+```
+
+OR if T10 is being claimed by you alongside T9, skip the disabled-stub and go straight to T10's full rewrite — bundle the two task commits together. Either way works; the disabled-stub option is simpler if T9 and T10 are claimed by different implementers.
+
+Effect: OCR pipeline is non-functional in the T9→T10 window (captures don't trigger OCR), but the workspace builds and tests pass. Acceptable interim state on a feature branch.
+
+**Step 3: Build**
 
 ```bash
 cargo build -p snk-ocr
+cargo test -p snk-ocr
 ```
 
-Expected: builds clean. If `snk_library::ocr::upsert_full` or `snk_library::search::index_capture` signatures don't match, check T3 and Phase 5's `search.rs` and adjust.
+Expected: both pass clean. If `snk_library::ocr::upsert_full` or `snk_library::search::index_capture` signatures don't match, check T3 and Phase 5's `search.rs` and adjust.
 
-**Step 3: Commit**
+**Step 4: Commit**
 
 ```bash
-git add crates/snk-ocr/src/queue.rs
+git add crates/snk-ocr/src/queue.rs crates/snk-ocr/src/plugin.rs
 git diff --cached
 git commit -m "refactor(ocr): OcrQueue takes Box<dyn OcrBackend>; emit-ready callback"
 ```
@@ -1730,6 +1844,15 @@ git commit -m "refactor(ocr): OcrQueue takes Box<dyn OcrBackend>; emit-ready cal
 
 **Files:**
 - Modify: `crates/snk-ocr/src/plugin.rs`
+- Modify: `crates/snk-ocr/build.rs` — append `"get_ocr_words"` to the `COMMANDS` array
+- Modify: `crates/snk-ocr/permissions/default.toml` — append `"allow-get-ocr-words"` to the `permissions` array
+
+Plan amendment 2026-05-26 (winocr-pc post-T10 catch — landed as `fix(ocr): expose get_ocr_words via build.rs COMMANDS + default capability`):
+
+1. **build.rs `COMMANDS`** — Tauri's `tauri_plugin::Builder::new(COMMANDS).build()` autogenerates the per-command permission files under `crates/snk-ocr/permissions/autogenerated/commands/`. Without the array update, the `allow-get-ocr-words` permission file never gets generated.
+2. **`default.toml` permissions array** — this is the SOURCE-OF-TRUTH bundle that selects which command permissions roll into the `snk-ocr:default` capability. It is NOT autogenerated; it's hand-maintained per-plugin. Without adding `"allow-get-ocr-words"` here, the autogenerated permission file exists but isn't included in `snk-ocr:default`, and the frontend invoke fails with a capability denial.
+
+Cross-plugin convention check: `snk-annotate/permissions/default.toml` lists `["allow-save-annotation", "allow-derive-capture"]`; `snk-clipboard/permissions/default.toml` lists all three of its commands. Every plugin enumerates its full command set in both `build.rs COMMANDS` AND `permissions/default.toml`.
 
 **Step 1: Rewrite plugin**
 
@@ -1775,15 +1898,21 @@ pub fn get_ocr_words<R: Runtime>(
 }
 
 fn build_backend() -> Result<Arc<dyn OcrBackend>, OcrError> {
+    // Plan amendment 2026-05-26: original code used `return Ok(...)` in each
+    // cfg-block, which trips clippy's needless_return lint. Each expression is
+    // already the final expression of its block AND the function — implicit
+    // return is the idiomatic form. Quality-sentinel caught the clippy failure
+    // post-T13 (sidecar.rs deletion unmasked the warning by clearing 9 other
+    // dead-code warnings that dominated clippy's output).
     #[cfg(target_os = "macos")]
     {
         let b = crate::vision::VisionBackend::new()?;
-        return Ok(Arc::new(b) as Arc<dyn OcrBackend>);
+        Ok(Arc::new(b) as Arc<dyn OcrBackend>)
     }
     #[cfg(target_os = "windows")]
     {
         let b = crate::winocr::WinOcrBackend::new()?;
-        return Ok(Arc::new(b) as Arc<dyn OcrBackend>);
+        Ok(Arc::new(b) as Arc<dyn OcrBackend>)
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
@@ -1897,21 +2026,29 @@ git commit -m "feat(ocr): plugin wires backend selection, ocr:ready event, get_o
 
 ---
 
-### Task 11: TS bindings — `packages/snk-ocr` adds `ocr:ready` + `getOcrWords`
+### Task 11: TS bindings — `packages/snk-ocr` (CREATE) with `ocr:ready` + `getOcrWords`
 
 **Files:**
-- Modify: `packages/snk-ocr/src/index.ts` (or whatever the entry file is — check `packages/snk-ocr/package.json` "main"/"exports")
+- Create: `packages/snk-ocr/package.json` (mirror `packages/snk-capture/package.json` shape — name `@snk/ocr`)
+- Create: `packages/snk-ocr/tsconfig.json` (mirror `packages/snk-capture/tsconfig.json`)
+- Create: `packages/snk-ocr/vitest.config.ts` (mirror `packages/snk-capture/vitest.config.ts`)
+- Create: `packages/snk-ocr/src/index.ts` (the bindings — see Step 2)
+- Create: `packages/snk-ocr/src/index.test.ts` (mirror `packages/snk-capture/src/index.test.ts` pattern for basic mock-invoke shape verification)
+- Maybe: `pnpm-lock.yaml` if pnpm regenerates when the new workspace package registers
 
-**Step 1: Examine current bindings**
+Plan amendment 2026-05-26 (vision-mac during T11): `packages/snk-ocr/` was deleted by PR #129 (About panel cluster, closing issue #62 — "the unused `@snk/ocr` TS package, sole export was a stub binding to a stub Rust command"). T11 must CREATE the package, not modify it. The 4-file minimum + tests for consistency mirror `packages/snk-capture/`.
+
+**Step 1: Verify package doesn't exist**
 
 ```bash
-cat packages/snk-ocr/src/index.ts
-cat packages/snk-ocr/package.json
+ls packages/snk-ocr/   # expected: directory not present
 ```
 
-**Step 2: Add types + functions**
+Confirms the plan-amendment context (deleted by PR #129). Proceed to create from scratch using `packages/snk-capture/` as the structural template.
 
-Append to `packages/snk-ocr/src/index.ts`:
+**Step 2: Create `packages/snk-ocr/src/index.ts`**
+
+New file contents:
 
 ```typescript
 import { invoke } from '@tauri-apps/api/core';
@@ -1961,23 +2098,26 @@ pnpm -F @snk/ocr test  # if it has tests
 
 Expected: type-check clean.
 
-**Step 4: Permissions — register the new commands**
+**Step 4: Permissions — already handled by T10 follow-up**
 
-Open `app/src-tauri/capabilities/default.json`. Find the `snk-ocr` section. Add `get_ocr_words` to the allowed commands list (the existing `ocr_status` is already there).
+Plan amendment 2026-05-26: the original plan said to edit `app/src-tauri/capabilities/default.json` — wrong layer for this repo. `capabilities/default.json` references `snk-ocr:default` as a plugin-level alias; the actual permission enumeration lives in `crates/snk-ocr/permissions/default.toml`. Adding `allow-get-ocr-words` to that toml was bundled into winocr-pc's T10 follow-up commit `fix(ocr): expose get_ocr_words via build.rs COMMANDS + default capability`.
 
-```json
-{
-  "identifier": "snk-ocr:default",
-  "permissions": ["ocr_status", "get_ocr_words"]
-}
+Verification step before staging T11:
+
+```bash
+grep -F 'allow-get-ocr-words' crates/snk-ocr/permissions/default.toml
 ```
 
-(Exact structure varies — match the pattern used for other plugins.)
+Should return one match. If it doesn't, the T10 follow-up hasn't landed yet — coordinate with the team-lead before proceeding.
+
+**T11 stages NO permission files** — those are owned by the T10 follow-up commit.
 
 **Step 5: Commit**
 
 ```bash
-git add packages/snk-ocr/src/index.ts app/src-tauri/capabilities/default.json
+git add packages/snk-ocr/package.json packages/snk-ocr/tsconfig.json packages/snk-ocr/vitest.config.ts packages/snk-ocr/src/index.ts packages/snk-ocr/src/index.test.ts
+# Also pnpm-lock.yaml if pnpm regenerated it cleanly for the new workspace package:
+git add pnpm-lock.yaml   # only if `git diff --cached` shows only @snk/ocr-related additions; otherwise leave to whoever's deps work is in flight
 git diff --cached
 git commit -m "feat(ocr): TS bindings — getOcrWords, onOcrReady, OcrStatus"
 ```
@@ -1988,18 +2128,18 @@ git commit -m "feat(ocr): TS bindings — getOcrWords, onOcrReady, OcrStatus"
 
 **Files:**
 - Modify: `crates/snk-ocr/tests/integration_test.rs`
-- Create (if missing): `crates/snk-ocr/tests/fixtures/hello_world.png` (small PNG of the text "hello world")
+- Create (if missing): `crates/snk-ocr/tests/fixtures/hello-world.png` (small PNG of the text "hello world")
 
 **Step 1: Create the fixture image**
 
-A trivial way: open any image editor (Paint, Preview, GIMP), white background, type "hello world" in a clear sans-serif font at ~48pt, save as `hello_world.png`. Keep it under 5 KB.
+A trivial way: open any image editor (Paint, Preview, GIMP), white background, type "hello world" in a clear sans-serif font at ~48pt, save as `hello-world.png`. Keep it under 5 KB.
 
 Alternatively, generate programmatically with `image` crate (one-shot script outside the project, then copy the PNG into the fixtures dir).
 
 ```bash
 ls crates/snk-ocr/tests/fixtures/  # may not exist yet
 mkdir -p crates/snk-ocr/tests/fixtures
-# Place hello_world.png in there.
+# Place hello-world.png in there.
 ```
 
 **Step 2: Rewrite `integration_test.rs`**
@@ -2042,7 +2182,7 @@ fn fixture(name: &str) -> PathBuf {
 #[test]
 fn recognize_hello_world_returns_text_and_words() {
     let b = make_backend();
-    let r = b.recognize(&fixture("hello_world.png")).expect("recognize");
+    let r = b.recognize(&fixture("hello-world.png")).expect("recognize");
     let text_lower = r.text.to_lowercase();
     assert!(text_lower.contains("hello"), "text should contain 'hello'; got {:?}", r.text);
     assert!(text_lower.contains("world"), "text should contain 'world'; got {:?}", r.text);
@@ -2071,21 +2211,29 @@ Expected: passes on Mac (Vision) and on Windows (WinOcr, unless the runner has n
 **Step 4: Commit**
 
 ```bash
-git add crates/snk-ocr/tests/integration_test.rs crates/snk-ocr/tests/fixtures/hello_world.png
+git add crates/snk-ocr/tests/integration_test.rs crates/snk-ocr/tests/fixtures/hello-world.png
 git diff --cached
 git commit -m "test(ocr): integration test against native backend with hello_world fixture"
 ```
 
 ---
 
-### Task 13: Tesseract cleanse — delete `sidecar.rs`, `build.rs`, update tests directory
+### Task 13: Tesseract cleanse — delete `sidecar.rs`, `build.rs`, update lib.rs
 
 **Files:**
 - Delete: `crates/snk-ocr/src/sidecar.rs`
 - Delete: `crates/snk-ocr/build.rs` (if Tesseract-only)
-- Modify: `crates/snk-ocr/src/lib.rs` (already done in T5 — confirm `pub mod sidecar;` is gone)
+- Modify: `crates/snk-ocr/src/lib.rs` — remove the `mod sidecar;` private declaration that T5 left in place (plan amendment 2026-05-26 pre-flight catch — original plan said this was "already done in T5" but T5's amended scope KEEPS the private mod declaration; T13 is the actual deletion point)
 
-**Step 1: Inspect `build.rs`**
+**Step 1: Pre-flight — confirm no consumers remain**
+
+```bash
+git grep -nE 'crate::sidecar|mod sidecar|use crate::sidecar|snk_ocr::sidecar' -- 'crates/snk-ocr/'
+```
+
+Expected: ONLY two matches — the `mod sidecar;` line in `crates/snk-ocr/src/lib.rs` and the file itself. If `crate::sidecar::*` callsites appear in queue.rs or plugin.rs, T9 or T10 didn't complete their refactor cleanly — stop and ping team-lead. **Do not delete sidecar.rs until queue.rs and plugin.rs have stopped referencing it.**
+
+**Step 2: Inspect `build.rs`**
 
 ```bash
 cat crates/snk-ocr/build.rs
@@ -2093,19 +2241,27 @@ cat crates/snk-ocr/build.rs
 
 If it only generates Tauri plugin metadata (via `tauri_plugin::Builder` or `tauri_build`), keep it. If it has Tesseract-specific logic (env-var passing, downloading, etc.), delete it. Most Tauri-plugin `build.rs` files are 3 lines — keep.
 
-**Step 2: Delete the sidecar file**
+**Step 3: Delete the sidecar file + lib.rs declaration**
 
 ```bash
 git rm crates/snk-ocr/src/sidecar.rs
 ```
 
-**Step 3: Confirm `lib.rs` doesn't reference `sidecar`**
+Edit `crates/snk-ocr/src/lib.rs` — remove the three lines:
 
-```bash
-grep sidecar crates/snk-ocr/src/lib.rs
+```rust
+// Sidecar module kept (private) until T9 rewrites queue.rs and T10 rewrites plugin.rs.
+// Both still reference crate::sidecar::* internally. Full deletion happens in T13.
+mod sidecar;
 ```
 
-Expected: no output. (Already removed in T5.)
+**Step 4: Verify lib.rs clean**
+
+```bash
+git grep -nE 'sidecar|mod sidecar' -- crates/snk-ocr/src/lib.rs
+```
+
+Expected: no output.
 
 **Step 4: Build + test**
 
@@ -2156,13 +2312,23 @@ app/src-tauri/resources/tesseract/*
 !app/src-tauri/resources/tesseract/.placeholder
 ```
 
-**Step 4: Build the full app to confirm no broken references**
+**Step 4: Build to confirm no broken references**
 
 ```bash
-pnpm tauri build --debug
+pnpm tauri build --debug --no-bundle
 ```
 
-Expected: build succeeds. If `tauri.conf.json` validation fails because `bundle.resources` becomes an empty object, swap to remove the key.
+Plan amendment 2026-05-26: `--no-bundle` skips the bundler + signing step (which is what changes across platforms and would prompt for Azure code signing on Windows) while still exercising the cargo build + tauri.conf.json parse + resource glob — that's all this task needs to verify. The full installer build is reserved for T18 (single end-of-PR-2 inspection).
+
+Expected: build succeeds in ~1 min. If `tauri.conf.json` validation fails because `bundle.resources` becomes an empty object, remove the key entirely.
+
+Optional fast schema check:
+
+```bash
+pnpm tauri info | head -50
+```
+
+Confirms tauri.conf.json parses cleanly against the schema.
 
 **Step 5: Commit**
 
@@ -2230,7 +2396,7 @@ Line 5 (`**Dev environment setup (toolchain versions, Tesseract install, per-OS 
 
 Also: update the "Phase status" table at the bottom to add a Phase 10 row, e.g.:
 
-| 10 | OCR surfaces: Vision + WinOcr + PII redact + Text Actions; full Tesseract cleanse | In progress |
+| 10 | OCR surfaces: Vision + WinOcr + PII redact + Text Actions; full bundled-engine removal | In progress |
 
 (Change to "Done" when the parent branch merges.)
 
@@ -2248,33 +2414,48 @@ git commit -m "chore(cleanse): remove Tesseract references from README, CLAUDE.m
 
 ---
 
-### Task 17: Tesseract cleanse — `SNK_TESSERACT_PATH` env var sweep
+### Task 17: Tesseract cleanse — `SNK_TESSERACT_PATH` sweep + `docs/release-signing.md`
 
-**Files:** any file still referencing `SNK_TESSERACT_PATH`.
+**Files:**
+- Any file still referencing `SNK_TESSERACT_PATH` (sweep below).
+- `docs/release-signing.md` — delete the entire `## Tesseract bundling` section AND the "macOS bundles are not yet self-contained for OCR" paragraph that follows from it. Plan amendment 2026-05-26: winocr-pc's pre-work `git grep` found this section is not covered by T13/T14/T15/T16 and would fail the T18 verification predicate.
 
 **Step 1: Sweep**
 
 ```bash
 git grep -n SNK_TESSERACT_PATH
+git grep -n -i tesseract -- docs/release-signing.md
 ```
 
-Expected: zero results. If any remain (likely in inline doc comments missed elsewhere), delete those references.
+Expected after this task: zero results from both. If any other `SNK_TESSERACT_PATH` references remain (likely in inline doc comments missed elsewhere), delete those too.
 
-**Step 2: Commit (if anything changed)**
+**Step 2: Delete the release-signing Tesseract section**
+
+In `docs/release-signing.md`, remove the entire `## Tesseract bundling` H2 section (multi-paragraph: choco install, sidecar resolve order, macOS dylib `install_name_tool` caveat) AND the immediately-following "macOS bundles are not yet self-contained for OCR" paragraph. The exact line range varies; use `git grep -n` to find boundaries.
+
+**Step 3: Commit**
 
 ```bash
-git add <files-touched>
+git add docs/release-signing.md <any-other-files-touched>
 git diff --cached
-git commit -m "chore(cleanse): purge final SNK_TESSERACT_PATH references"
+git commit -m "chore(cleanse): purge Tesseract from release-signing docs + final env-var sweep"
 ```
 
-If nothing changed, skip the commit.
+If nothing changed (no SNK_TESSERACT_PATH refs AND no release-signing Tesseract section), skip the commit — but verify the predicate `git grep -i tesseract -- ':!docs/superpowers/**'` is clean before declaring no-op.
 
 ---
 
 ### Task 18: Cleanse verification gate
 
 **Files:** none modified — verification only.
+
+**Prerequisites — all of these MUST have landed first** (per amendments during PR-2 execution):
+
+- T13 follow-on: `chore(cleanse): drop unused dev-deps from snk-ocr Cargo.toml` (commit `24f45e5` in PR-2 history). Removes `serial_test` and `tempfile` from snk-ocr dev-deps — they only existed for sidecar tests, which T13 deleted. Spec §8 checklist line for `crates/snk-ocr/Cargo.toml`.
+- T17 follow-on: `chore(cleanse): reword release-strategy changelog to satisfy T18 predicate` (commit `5907b49`). `docs/superpowers/release-strategy.md` had "Tesseract" in a historical changelog row that's outside the T18 predicate's `docs/superpowers/{specs,plans,research,reviews}/**` exclusion list.
+- T10 follow-on: `fix(ocr): expose get_ocr_words via build.rs COMMANDS + default capability` (commit `243091f`). Without this, the JS `invoke('plugin:snk-ocr|get_ocr_words')` from T11 bindings fails at runtime with a capability denial.
+
+If any of the three above are missing, T18 fails. Either re-route to whoever's mid-flight, or land them as a single bundled `chore(cleanse): final spec §8 cleanups before T18` commit before this gate.
 
 **Step 1: Run the cleanse predicate**
 
@@ -2293,14 +2474,17 @@ git grep -i 'sidecar.rs'
 
 Both should return zero matches.
 
-**Step 2: Full workspace build + test**
+**Step 2: Full workspace build + test + clippy**
 
 ```bash
 cargo build --workspace
 cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-Expected: clean build + all tests pass on the host platform.
+Expected: clean build + all tests pass + clippy clean on the host platform.
+
+Plan amendment 2026-05-26 (quality-sentinel during T9 review): the clippy gate is added explicitly here because the cluster (T9 through T13) intentionally leaves sidecar.rs's symbols (`which`, `run_tesseract`, `invoke_tesseract`, `OcrOutput::confidence`) unreferenced from intermediate commits. T9 stops *reading* those symbols; T10 stops calling `crate::sidecar::set_bundled_resource_dir`; T13 deletes the file. Intermediate commits T9, T10, T11, T12 will FAIL `cargo clippy --workspace -- -D warnings` with 7 dead-code warnings each — that's expected interim state. T13 (`git rm sidecar.rs`) restores green clippy. **Spec-auditor and quality-sentinel: do NOT fail T10/T11/T12 individually for dead-code clippy warnings in sidecar.rs.** The cluster as a whole is the unit that must be clippy-green, enforced here.
 
 **Step 3: Tauri build smoke**
 
@@ -4263,7 +4447,7 @@ gh issue close 40 --reason completed -c "Obsoleted by Phase 10 — in-process OC
 
 The phase status table entry added in T16 should now flip to "Done":
 
-| 10 | OCR surfaces: Vision + WinOcr + PII redact + Text Actions; full Tesseract cleanse | Done |
+| 10 | OCR surfaces: Vision + WinOcr + PII redact + Text Actions; full bundled-engine removal | Done |
 
 Commit this directly to `main` as a small docs follow-up, or fold into the parent PR before merge.
 

@@ -22,7 +22,7 @@ A cross-platform (Windows + macOS) desktop utility that combines screen capture 
 - Content-hash deduplication, configurable eviction limit
 
 ### OCR + search
-- Tesseract sidecar runs asynchronously on every capture
+- Native OS OCR (Apple Vision on macOS, Windows.Media.Ocr on Windows) runs asynchronously on every capture
 - FTS5 full-text search across OCR text, clipboard content, and tag names
 - Search bar in the library window with debounced queries
 
@@ -51,14 +51,9 @@ A cross-platform (Windows + macOS) desktop utility that combines screen capture 
 
 - **Rust** 1.78+ via [rustup](https://rustup.rs/)
 - **Node.js** 20+ and **pnpm** 9+
-- **Tesseract** (for OCR in dev — packaged builds ship their own copy on Windows)
-  - Windows: `winget install UB-Mannheim.TesseractOCR` or `choco install tesseract`
-  - macOS: `brew install tesseract`
-  - Linux: `apt install tesseract-ocr`
-  - Override the discovered path with the `SNK_TESSERACT_PATH` env var
 - Platform deps from <https://v2.tauri.app/start/prerequisites/>:
   - **Windows:** Microsoft Visual Studio C++ Build Tools, WebView2 (pre-installed on Win 10/11)
-  - **macOS:** Xcode Command Line Tools (`xcode-select --install`)
+  - **macOS:** 14.0+ (Sonoma) — Apple Vision OCR requires it. Xcode Command Line Tools (`xcode-select --install`)
   - **Linux:** `libwebkit2gtk-4.1-dev`, `libappindicator3-dev`, `librsvg2-dev`, `libxdo-dev`, `libssl-dev`. Linux is supported as a **dev convenience only** — the project ships signed installers for Windows and macOS only, and CI does not run a Linux release pipeline.
 
 ### Run in dev
@@ -126,7 +121,7 @@ crates/
   snk-capture/      xcap grabs + orchestrator (region, window, timed, fullscreen)
   snk-annotate/     Annotation save/export Tauri commands
   snk-clipboard/    Clipboard watcher + paste synthesis + caret detection
-  snk-ocr/          Tesseract sidecar + async OCR queue + retry
+  snk-ocr/          Native OCR backends (Vision / Windows.Media.Ocr) + async queue
   snk-updater/      Ed25519-signed auto-update via tauri-plugin-updater
 packages/
   snk-library/      TS bindings: captures, tags, settings, search

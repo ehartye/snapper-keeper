@@ -7,6 +7,7 @@ members = [
     "crates/snk-annotate",
     "crates/snk-clipboard",
     "crates/snk-ocr",
+    "crates/snk-pii",
     "crates/snk-updater",
     "app/src-tauri",
     "tests/fixtures/smoke-target",

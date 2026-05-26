@@ -1,3 +1,0 @@
-CI populates this directory with the Tesseract OCR distribution before
-bundling. In dev, the resolver falls back to system PATH / install locations,
-so this placeholder is the only file present locally.
