@@ -2428,14 +2428,17 @@ git grep -i 'sidecar.rs'
 
 Both should return zero matches.
 
-**Step 2: Full workspace build + test**
+**Step 2: Full workspace build + test + clippy**
 
 ```bash
 cargo build --workspace
 cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-Expected: clean build + all tests pass on the host platform.
+Expected: clean build + all tests pass + clippy clean on the host platform.
+
+Plan amendment 2026-05-26 (quality-sentinel during T9 review): the clippy gate is added explicitly here because the cluster (T9 through T13) intentionally leaves sidecar.rs's symbols (`which`, `run_tesseract`, `invoke_tesseract`, `OcrOutput::confidence`) unreferenced from intermediate commits. T9 stops *reading* those symbols; T10 stops calling `crate::sidecar::set_bundled_resource_dir`; T13 deletes the file. Intermediate commits T9, T10, T11, T12 will FAIL `cargo clippy --workspace -- -D warnings` with 7 dead-code warnings each — that's expected interim state. T13 (`git rm sidecar.rs`) restores green clippy. **Spec-auditor and quality-sentinel: do NOT fail T10/T11/T12 individually for dead-code clippy warnings in sidecar.rs.** The cluster as a whole is the unit that must be clippy-green, enforced here.
 
 **Step 3: Tauri build smoke**
 
