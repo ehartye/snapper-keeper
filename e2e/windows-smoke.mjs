@@ -10,28 +10,31 @@ const ARTIFACT_DIR = process.env.E2E_ARTIFACT_DIR ?? join(process.cwd(), 'e2e-ar
 const SCREENSHOT_PATH = join(ARTIFACT_DIR, 'library-window.png');
 const TAURI_DRIVER_LOG_PATH = join(ARTIFACT_DIR, 'tauri-driver.log');
 const RESULT_PATH = join(ARTIFACT_DIR, 'result.json');
+const WEBDRIVER_REQUEST_TIMEOUT_MS = 30_000;
 
-if (!APP_BINARY_PATH) {
-  throw new Error('APP_BINARY_PATH is required');
-}
-
+// Create artifact dir before try/catch so result.json can always be written on failure.
 mkdirSync(ARTIFACT_DIR, { recursive: true });
-await access(APP_BINARY_PATH);
 
-const tauriDriverLog = createWriteStream(TAURI_DRIVER_LOG_PATH, { flags: 'a' });
-const tauriDriver = spawn('tauri-driver', [], {
-  stdio: ['ignore', 'pipe', 'pipe'],
-  env: process.env,
-});
-
-tauriDriver.stdout.pipe(tauriDriverLog);
-tauriDriver.stderr.pipe(tauriDriverLog);
-
+let tauriDriver;
+let tauriDriverLog;
 let sessionId;
 let failed = false;
 let failureReason;
 
 try {
+  if (!APP_BINARY_PATH) {
+    throw new Error('APP_BINARY_PATH is required');
+  }
+  await access(APP_BINARY_PATH);
+
+  tauriDriverLog = createWriteStream(TAURI_DRIVER_LOG_PATH, { flags: 'a' });
+  tauriDriver = spawn('tauri-driver', [], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: process.env,
+  });
+  tauriDriver.stdout.pipe(tauriDriverLog);
+  tauriDriver.stderr.pipe(tauriDriverLog);
+
   sessionId = await createSession();
   const title = await webdriver('GET', `/session/${sessionId}/title`);
   if (!String(title.value ?? '').toLowerCase().includes('snapper-keeper')) {
@@ -86,11 +89,13 @@ try {
     } catch {}
   }
 
-  if (tauriDriver.exitCode === null) {
+  if (tauriDriver && tauriDriver.exitCode === null) {
     tauriDriver.kill();
     await new Promise((resolve) => tauriDriver.once('exit', resolve));
   }
-  tauriDriverLog.end();
+  if (tauriDriverLog) {
+    tauriDriverLog.end();
+  }
 }
 
 if (failed) {
@@ -149,11 +154,27 @@ async function saveScreenshot(sessionId, destinationPath) {
 }
 
 async function webdriver(method, path, body) {
-  const response = await fetch(`${DRIVER_URL}${path}`, {
-    method,
-    headers: body ? { 'content-type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), WEBDRIVER_REQUEST_TIMEOUT_MS);
+
+  let response;
+  try {
+    response = await fetch(`${DRIVER_URL}${path}`, {
+      method,
+      headers: body ? { 'content-type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error(
+        `WebDriver ${method} ${path} timed out after ${WEBDRIVER_REQUEST_TIMEOUT_MS}ms`,
+      );
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   let json = null;
   try {
