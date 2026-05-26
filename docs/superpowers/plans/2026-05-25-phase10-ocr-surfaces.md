@@ -124,7 +124,9 @@ Edit `Cargo.toml`:
 
 ```toml
 [dependencies]
-windows = { version = "0.58", features = [
+# Plan amendment (Spike A finding): workspace transitively pulls windows 0.61/0.62
+# via tao/wry/tauri. Pin 0.62 to align — see Findings entry "windows crate version".
+windows = { version = "0.62", features = [
   "Media_Ocr",
   "Globalization",
   "Graphics_Imaging",
@@ -235,7 +237,16 @@ Edit `Cargo.toml`:
 [dependencies]
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSString", "NSURL", "NSData"] }
-objc2-vision = { version = "0.3", features = ["VNRequest", "VNImageRequestHandler", "VNRecognizeTextRequest", "VNRecognizedTextObservation"] }
+objc2-vision = { version = "0.3", features = [
+  # Plan amendment (Spike B finding): "VNImageRequestHandler" and "VNRecognizedTextObservation"
+  # are CLASS names, not feature names. Actual features are the parent module names.
+  "VNRequest",
+  "VNRequestHandler",           # provides VNImageRequestHandler
+  "VNRecognizeTextRequest",
+  "VNObservation",              # provides VNRecognizedTextObservation
+  "VNGeometry",                 # provides VNRectangleObservation (boundingBoxForRange return)
+  "objc2-core-foundation",      # gates CGRect on VNDetectedObjectObservation::boundingBox()
+] }
 objc2-core-image = { version = "0.3", features = ["CIImage"] }
 ```
 
@@ -356,9 +367,12 @@ Delete `vision-spike` afterward. Do NOT commit it.
 - **`windows` crate version:** The workspace already pulls `windows = "0.61.3"` and `windows = "0.62.2"` transitively (via `tao`/`wry`/`tauri`-stack). The plan's suggested `0.58` is stale. Spike used `0.62` and built clean. T8 should pin `0.62` (not `0.58`) to align with the workspace and minimize duplicate-major bloat.
 - **windows-rs 0.62 async API change:** `IAsyncOperation::get()` was REMOVED in this version. Use the inherent method `.join()` instead (e.g. `StorageFile::GetFileFromPathAsync(&path)?.join()?`). It is a public method on each of the four async types (`IAsyncAction`, `IAsyncOperation<T>`, `IAsyncActionWithProgress<P>`, `IAsyncOperationWithProgress<T,P>`); no `windows-future` dep or trait import needed. The plan T8 code block uses `.and_then(|op| op.get())` — must be rewritten to `.and_then(|op| op.join())`.
 - **Windows UNC path gotcha for StorageFile:** `Path::canonicalize()` on Windows returns paths prefixed with `\\?\` (extended-length namespace). `StorageFile::GetFileFromPathAsync` REJECTS that prefix with HRESULT 0x800700A1 ("path is too long"). The implementation must strip the `\\?\` prefix before constructing the `HSTRING`. Trivial 5-line fix; required.
-- **`objc2-vision` resolved version:** _<to be filled by vision-mac>_
-- **`objc2` family versions in workspace:** _<to be filled by vision-mac>_
-- **Vision per-word bounds API verified:** _<to be filled by vision-mac>_
+- **`objc2-vision` resolved version:** ✅ `0.3.2`. `cargo check --target aarch64-apple-darwin` builds clean against a throwaway probe with the corrected feature set. Runtime FFI smoke (`performRequests` against a real Vision framework + verifying observations + per-word bbox extraction) is **DEFERRED TO MAC CI** — Spike B was executed from a Windows host where the framework is unreachable. PR-2's Mac CI build job validates runtime on PR-2 open.
+- **`objc2` family versions in workspace:** ✅ All aligned at the same major. `objc2 0.6.4`, `objc2-foundation 0.3.2`, `objc2-app-kit 0.3.2` (all transitive via arboard/global-hotkey/muda); `objc2-vision 0.3.2` (new). No parallel runtime trains; objc2 workspace-dedupe check passes (per memory `reference_objc2_workspace_dedupe.md`).
+- **Vision per-word bounds API verified:** ✅ Source-confirmed (runtime deferred). `VNRecognizedText::boundingBoxForRange_error(NSRange) -> Result<Retained<VNRectangleObservation>, Retained<NSError>>` exists in `objc2-vision 0.3.2`'s hand-written `src/observation.rs` (gated on `VNObservation` feature). `VNRectangleObservation::boundingBox() -> CGRect` exists on superclass `VNDetectedObjectObservation` (gated on `objc2-core-foundation` feature). T7's `recognize()` implementation matches the API surface; selectors verified by reading the crate source at `~/.cargo/registry/src/.../objc2-vision-0.3.2/`.
+- **Plan amendments triggered by Spike B findings (approved 2026-05-26 — already applied in place):**
+    1. **T6 Mac dep block** — replaced non-existent feature names `VNImageRequestHandler` / `VNRecognizedTextObservation` (class names, not features) with `VNRequestHandler` / `VNObservation`; added `VNGeometry`, `objc2-core-foundation`, and `NSProcessInfo` (on `objc2-foundation`). See inline plan amendment comment in §T6 Step 1.
+    2. **§PR-1 Spike B Step 2** — same dep-block correction so the spike code in the plan compiles if re-run on a Mac.
 - **Plan amendments triggered by Spike A findings (proposed; awaiting team-lead approval per plan-as-source-of-truth protocol):**
     1. **T6 + T8** — pin `windows = "0.62"` (not `0.58`). Plus drop `Foundation_Collections` feature only if unused; spike confirms `Foundation_Collections` is NOT required for the core OCR call path (we never instantiate a generic vector; the API returns `IVectorView<OcrLine>` whose interface is exported by `Media_Ocr`).
     2. **T8 `WinOcrBackend::recognize`** — three diffs vs the plan's pasted code block:
@@ -1174,17 +1188,31 @@ tracing.workspace = true
 tokio.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
+# Plan amendments (Spike B findings approved 2026-05-26):
+#   - "VNImageRequestHandler" / "VNRecognizedTextObservation" are CLASS names, not features.
+#     The actual features are "VNRequestHandler" and "VNObservation".
+#   - "VNGeometry" needed for VNRectangleObservation (returned by boundingBoxForRange_error).
+#   - "objc2-core-foundation" gates CGRect on VNDetectedObjectObservation::boundingBox().
+#   - "NSProcessInfo" needed by T7's engine_version() OS version read.
+#   - "NSRange" pulled in transitively by "VNObservation" — kept explicit for clarity.
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", features = ["NSString", "NSURL", "NSArray", "NSDictionary", "NSError", "NSRange"] }
+objc2-foundation = { version = "0.3", features = [
+    "NSString", "NSURL", "NSArray", "NSDictionary", "NSError", "NSRange",
+    "NSProcessInfo",
+] }
 objc2-vision = { version = "0.3", features = [
     "VNRequest",
-    "VNImageRequestHandler",
+    "VNRequestHandler",
     "VNRecognizeTextRequest",
-    "VNRecognizedTextObservation",
+    "VNObservation",
+    "VNGeometry",
+    "objc2-core-foundation",
 ] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.58", features = [
+# Plan amendment (Spike A finding approved 2026-05-26): pin to 0.62 to align with
+# workspace transitive (via tao/wry/tauri). Avoids duplicate-major bloat.
+windows = { version = "0.62", features = [
     "Media_Ocr",
     "Globalization",
     "Graphics_Imaging",
@@ -1478,30 +1506,39 @@ impl OcrBackend for WinOcrBackend {
             path: image_path.display().to_string(),
             detail: e.to_string(),
         })?;
-        let path = HSTRING::from(abs.as_os_str());
+        // Plan amendment (Spike A finding approved 2026-05-26): Windows
+        // canonicalize() returns extended-length namespace paths prefixed with
+        // \\?\, which StorageFile::GetFileFromPathAsync rejects with HRESULT
+        // 0x800700A1. Strip the prefix before constructing the HSTRING.
+        let abs_str = abs.to_string_lossy();
+        let stripped = abs_str.strip_prefix(r"\\?\").unwrap_or(&abs_str);
+        let path = HSTRING::from(stripped);
 
+        // Plan amendment (Spike A finding approved 2026-05-26): windows-rs 0.62
+        // removed `IAsyncOperation::get()`. Use the inherent `.join()` method
+        // on each of the four async types — no `windows-future` dep, no trait import.
         let file = StorageFile::GetFileFromPathAsync(&path)
             .map_err(|e| OcrError::ImageLoad { path: image_path.display().to_string(), detail: format!("GetFileFromPathAsync: {e}") })?
-            .get()
+            .join()
             .map_err(|e| OcrError::ImageLoad { path: image_path.display().to_string(), detail: format!("await GetFileFromPathAsync: {e}") })?;
 
         let stream = file.OpenAsync(FileAccessMode::Read)
-            .and_then(|op| op.get())
+            .and_then(|op| op.join())
             .map_err(|e| OcrError::ImageLoad { path: image_path.display().to_string(), detail: format!("OpenAsync: {e}") })?;
 
         let decoder = BitmapDecoder::CreateAsync(&stream)
-            .and_then(|op| op.get())
+            .and_then(|op| op.join())
             .map_err(|e| OcrError::ImageLoad { path: image_path.display().to_string(), detail: format!("BitmapDecoder: {e}") })?;
 
         let pixel_width = decoder.PixelWidth().unwrap_or(1) as f32;
         let pixel_height = decoder.PixelHeight().unwrap_or(1) as f32;
 
         let bitmap = decoder.GetSoftwareBitmapAsync()
-            .and_then(|op| op.get())
+            .and_then(|op| op.join())
             .map_err(|e| OcrError::ImageLoad { path: image_path.display().to_string(), detail: format!("GetSoftwareBitmap: {e}") })?;
 
         let result = self.engine.RecognizeAsync(&bitmap)
-            .and_then(|op| op.get())
+            .and_then(|op| op.join())
             .map_err(|e| OcrError::Recognize { detail: format!("RecognizeAsync: {e}") })?;
 
         let lines = result.Lines().map_err(|e| OcrError::Recognize { detail: format!("Lines: {e}") })?;
@@ -1509,8 +1546,12 @@ impl OcrBackend for WinOcrBackend {
 
         let mut text_lines: Vec<String> = Vec::new();
         let mut words: Vec<OcrWord> = Vec::new();
-        let mut total_conf: f64 = 0.0;
-        let mut conf_count: usize = 0;
+
+        // Plan amendment (Spike A finding approved 2026-05-26): Windows.Media.Ocr
+        // does NOT expose any Confidence accessor on OcrWord OR OcrLine (verified
+        // by reading windows-0.62.2 source). Hard-code line-broadcast confidence
+        // at 0.85 — this is the documented asymmetry vs Vision.
+        const WIN_OCR_HEURISTIC_CONF: f64 = 0.85;
 
         for li in 0..line_count {
             let line = match lines.GetAt(li) {
@@ -1518,16 +1559,6 @@ impl OcrBackend for WinOcrBackend {
                 Err(e) => { debug!("line {li} GetAt err: {e}"); continue; }
             };
             let line_text = line.Text().map(|h| h.to_string_lossy()).unwrap_or_default();
-
-            // Per Spike A: line-level confidence is what's exposed. If `OcrWord::Confidence`
-            // is available (spike outcome A.1), call it here per-word. Otherwise broadcast
-            // line-level confidence to all words.
-            //
-            // Approximate line confidence as average of word confidences if per-word is
-            // available; else hard-code a moderate value (0.85) as the heuristic.
-            let line_conf: f64 = line_confidence(&line).unwrap_or(0.85);
-            total_conf += line_conf;
-            conf_count += 1;
             text_lines.push(line_text.clone());
 
             let line_words = line.Words().map_err(|e| OcrError::Recognize { detail: format!("Words: {e}") })?;
@@ -1547,26 +1578,18 @@ impl OcrBackend for WinOcrBackend {
                     w: r.Width / pixel_width,
                     h: r.Height / pixel_height,
                 };
-                words.push(OcrWord { text: wt, bbox, confidence: line_conf, line: li });
+                words.push(OcrWord { text: wt, bbox, confidence: WIN_OCR_HEURISTIC_CONF, line: li });
             }
         }
 
         let text = text_lines.join("\n");
-        let avg = if conf_count > 0 { total_conf / conf_count as f64 } else { 0.0 };
         let language = self.engine.RecognizerLanguage()
             .ok()
             .and_then(|l| l.LanguageTag().ok().map(|h| h.to_string_lossy()))
             .unwrap_or_else(|| "auto".to_string());
 
-        Ok(OcrResult { text, words, language, confidence: avg })
+        Ok(OcrResult { text, words, language, confidence: WIN_OCR_HEURISTIC_CONF })
     }
-}
-
-/// Best-effort per-line confidence accessor. If Spike A confirmed
-/// `OcrLine::Confidence` exists in the API surface, replace this body with the
-/// real call. If not, return None and the caller uses 0.85 heuristic.
-fn line_confidence(_line: &windows::Media::Ocr::OcrLine) -> Option<f64> {
-    None
 }
 
 fn win_build_number() -> Option<String> {
@@ -2165,13 +2188,23 @@ app/src-tauri/resources/tesseract/*
 !app/src-tauri/resources/tesseract/.placeholder
 ```
 
-**Step 4: Build the full app to confirm no broken references**
+**Step 4: Build to confirm no broken references**
 
 ```bash
-pnpm tauri build --debug
+pnpm tauri build --debug --no-bundle
 ```
 
-Expected: build succeeds. If `tauri.conf.json` validation fails because `bundle.resources` becomes an empty object, swap to remove the key.
+Plan amendment 2026-05-26: `--no-bundle` skips the bundler + signing step (which is what changes across platforms and would prompt for Azure code signing on Windows) while still exercising the cargo build + tauri.conf.json parse + resource glob — that's all this task needs to verify. The full installer build is reserved for T18 (single end-of-PR-2 inspection).
+
+Expected: build succeeds in ~1 min. If `tauri.conf.json` validation fails because `bundle.resources` becomes an empty object, remove the key entirely.
+
+Optional fast schema check:
+
+```bash
+pnpm tauri info | head -50
+```
+
+Confirms tauri.conf.json parses cleanly against the schema.
 
 **Step 5: Commit**
 
