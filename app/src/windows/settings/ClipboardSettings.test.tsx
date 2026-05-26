@@ -4,17 +4,24 @@ import { invoke } from '@tauri-apps/api/core';
 
 import { ClipboardSettings } from './ClipboardSettings';
 import { renderWithQuery } from '../../test/renderWithQuery';
+import { ModalProvider } from '../../components/Modal';
 
 const mockedInvoke = vi.mocked(invoke);
 
 describe('<ClipboardSettings />', () => {
   beforeEach(() => {
     mockedInvoke.mockReset();
+
+    const existing = document.getElementById('modal-root');
+    if (existing) existing.remove();
+    const root = document.createElement('div');
+    root.id = 'modal-root';
+    document.body.appendChild(root);
   });
 
   it('renders empty state when setting is unset', async () => {
     mockedInvoke.mockResolvedValueOnce(null);
-    renderWithQuery(<ClipboardSettings />);
+    renderWithQuery(<ModalProvider><ClipboardSettings /></ModalProvider>);
     expect(await screen.findByText(/no exclusions configured/i)).toBeInTheDocument();
   });
 
@@ -23,14 +30,14 @@ describe('<ClipboardSettings />', () => {
       { identifier: 'com.1password.1password8', display_name: '1Password 8', kind: 'macos_bundle_id' },
       { identifier: 'KeePassXC.exe', display_name: 'KeePassXC', kind: 'windows_exe' },
     ]);
-    renderWithQuery(<ClipboardSettings />);
+    renderWithQuery(<ModalProvider><ClipboardSettings /></ModalProvider>);
     expect(await screen.findByText('1Password 8')).toBeInTheDocument();
     expect(screen.getByText('KeePassXC')).toBeInTheDocument();
   });
 
   it('Add app modal submits a new entry via set_setting', async () => {
     mockedInvoke.mockResolvedValueOnce([]);
-    renderWithQuery(<ClipboardSettings />);
+    renderWithQuery(<ModalProvider><ClipboardSettings /></ModalProvider>);
 
     fireEvent.click(await screen.findByText(/add app/i));
     fireEvent.change(screen.getByPlaceholderText(/com.example.app/i), {
@@ -58,7 +65,7 @@ describe('<ClipboardSettings />', () => {
 
   it('add-from-frontmost calls detect_frontmost_app and prefills the confirmation modal', async () => {
     mockedInvoke.mockResolvedValueOnce([]);
-    renderWithQuery(<ClipboardSettings />);
+    renderWithQuery(<ModalProvider><ClipboardSettings /></ModalProvider>);
 
     mockedInvoke.mockResolvedValueOnce({
       identifier: 'com.1password.1password8',
@@ -76,7 +83,7 @@ describe('<ClipboardSettings />', () => {
       { identifier: 'foo.exe', display_name: 'Foo', kind: 'windows_exe' },
       { identifier: 'bar.exe', display_name: 'Bar', kind: 'windows_exe' },
     ]);
-    renderWithQuery(<ClipboardSettings />);
+    renderWithQuery(<ModalProvider><ClipboardSettings /></ModalProvider>);
 
     fireEvent.click(await screen.findByLabelText(/remove foo/i));
     mockedInvoke.mockResolvedValueOnce(undefined);
@@ -96,7 +103,7 @@ describe('<ClipboardSettings />', () => {
     mockedInvoke.mockResolvedValueOnce([
       { identifier: 'foo.exe', display_name: 'Foo', kind: 'windows_exe' },
     ]);
-    renderWithQuery(<ClipboardSettings />);
+    renderWithQuery(<ModalProvider><ClipboardSettings /></ModalProvider>);
     fireEvent.click(await screen.findByText(/add app/i));
 
     fireEvent.change(screen.getByRole('combobox'), {
