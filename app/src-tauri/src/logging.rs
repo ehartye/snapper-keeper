@@ -136,10 +136,7 @@ fn install_panic_hook(crash_dir: PathBuf) {
     }));
 }
 
-fn write_crash_dump(
-    crash_dir: &Path,
-    info: &std::panic::PanicHookInfo<'_>,
-) -> std::io::Result<()> {
+fn write_crash_dump(crash_dir: &Path, info: &std::panic::PanicHookInfo<'_>) -> std::io::Result<()> {
     use std::io::Write;
 
     let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%S%.3fZ");

@@ -75,3 +75,4 @@ IPC note: the enum is internally-tagged with `"kind"` via serde, so the `Error` 
 3. Wire #23 implementable policy outcomes:
    - user toggle off => `SuppressedByPolicy { reason: UserDisabled }`
    - store edition => `SuppressedByPolicy { reason: StoreEdition }`
+

@@ -49,7 +49,7 @@ pub fn get_ocr_words<R: Runtime>(
     Ok(row.and_then(|r| r.words).unwrap_or_default())
 }
 
-fn build_backend() -> Result<Arc<dyn OcrBackend>, OcrError> {
+fn build_backend() -> Result<Arc<dyn OcrBackend>> {
     #[cfg(target_os = "macos")]
     {
         let b = crate::vision::VisionBackend::new()?;
