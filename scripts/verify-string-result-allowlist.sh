@@ -5,8 +5,14 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 ALLOWLIST="crates/.string-result-allowlist"
-ACTUAL="$(mktemp)"
-EXPECTED="$(mktemp)"
+
+if [[ ! -f "$ALLOWLIST" ]]; then
+    echo "::error::Allowlist file $ALLOWLIST is missing. Create it (may be empty) to enforce the Result<_, String> policy."
+    exit 1
+fi
+
+ACTUAL="$(mktemp /tmp/snk_actual.XXXXXX)"
+EXPECTED="$(mktemp /tmp/snk_expected.XXXXXX)"
 trap 'rm -f "$ACTUAL" "$EXPECTED"' EXIT
 
 {
