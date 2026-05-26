@@ -394,7 +394,9 @@ if [[ "$OS" == "windows" ]]; then
   trap cleanup_tesseract EXIT
 
   # Resolve a Tesseract source dir using the same resolver order as
-  # snk-ocr/sidecar.rs at runtime.
+  # snk-ocr/sidecar.rs at runtime. Both Program Files locations are
+  # checked because the runtime resolver also checks both (older /
+  # 32-bit UB-Mannheim installers landed in Program Files (x86)).
   TESSERACT_BIN=""
   if [[ -n "${SNK_TESSERACT_PATH:-}" && -x "$SNK_TESSERACT_PATH" ]]; then
     TESSERACT_BIN="$SNK_TESSERACT_PATH"
@@ -402,6 +404,8 @@ if [[ "$OS" == "windows" ]]; then
     TESSERACT_BIN="$(command -v tesseract)"
   elif [[ -x "/c/Program Files/Tesseract-OCR/tesseract.exe" ]]; then
     TESSERACT_BIN="/c/Program Files/Tesseract-OCR/tesseract.exe"
+  elif [[ -x "/c/Program Files (x86)/Tesseract-OCR/tesseract.exe" ]]; then
+    TESSERACT_BIN="/c/Program Files (x86)/Tesseract-OCR/tesseract.exe"
   fi
 
   if [[ -z "$TESSERACT_BIN" ]]; then
