@@ -119,6 +119,18 @@ describe('<AboutSection />', () => {
     });
   });
 
+  it('renders updater error status with retry hint', async () => {
+    setStatusResponses({
+      status: { kind: 'error', reason: 'check-failed', retryable: true },
+    });
+    renderAbout();
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Error \(check-failed\), retry scheduled/i),
+      ).toBeInTheDocument();
+    });
+  });
+
   it('renders Check Now button which is enabled when idle', async () => {
     setStatusResponses({ status: { kind: 'idle' } });
     renderAbout();
