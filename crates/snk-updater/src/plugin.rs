@@ -12,10 +12,56 @@ use tracing::{error, info, warn};
 pub enum UpdateStatus {
     Idle,
     Checking,
-    Available { version: String },
-    Downloading { percent: f32 },
-    Ready { version: String },
-    Error { detail: String },
+    Available {
+        version: String,
+        urgency: Urgency,
+    },
+    Downloading {
+        progress: f32,
+    },
+    Ready {
+        version: String,
+    },
+    Installing,
+    Error {
+        reason: UpdateErrorKind,
+        retryable: bool,
+    },
+    RejectedBySignature,
+    SuppressedByPolicy {
+        reason: SuppressionReason,
+    },
+    Skipped {
+        until_epoch_ms: i64,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum Urgency {
+    Low,
+    Normal,
+    High,
+    Critical,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum UpdateErrorKind {
+    CheckFailed,
+    DownloadFailed,
+    InstallFailed,
+    SignatureVerificationFailed,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum SuppressionReason {
+    UserDisabled,
+    StoreEdition,
+    DowngradeBlocked,
+    UnknownPolicy,
 }
 
 pub struct UpdaterState {
@@ -33,6 +79,11 @@ impl UpdaterState {
 
     fn set_status(&self, s: UpdateStatus) {
         if let Ok(mut lock) = self.status.lock() {
+            if matches!(*lock, UpdateStatus::RejectedBySignature)
+                && !matches!(s, UpdateStatus::RejectedBySignature)
+            {
+                return;
+            }
             *lock = s;
         }
     }
@@ -72,6 +123,9 @@ pub fn get_last_check_at<R: Runtime>(app: AppHandle<R>) -> Option<i64> {
 
 #[tauri::command]
 pub fn restart_app<R: Runtime>(app: AppHandle<R>) {
+    let status = UpdateStatus::Installing;
+    app.state::<UpdaterState>().set_status(status.clone());
+    let _ = app.emit("updater:status-changed", status);
     app.restart();
 }
 
@@ -89,6 +143,7 @@ async fn do_update_check<R: Runtime>(app: AppHandle<R>) -> Result<UpdateStatus, 
             info!(%version, "update available");
             let status = UpdateStatus::Available {
                 version: version.clone(),
+                urgency: Urgency::Normal,
             };
             state.set_status(status.clone());
             let _ = app.emit("updater:status-changed", status.clone());
@@ -102,10 +157,10 @@ async fn do_update_check<R: Runtime>(app: AppHandle<R>) -> Result<UpdateStatus, 
                     .download_and_install(
                         |chunk, content_length| {
                             downloaded += chunk as u64;
-                            let percent = content_length
+                            let progress = content_length
                                 .map(|cl| (downloaded as f32 / cl as f32) * 100.0)
                                 .unwrap_or(0.0);
-                            let status = UpdateStatus::Downloading { percent };
+                            let status = UpdateStatus::Downloading { progress };
                             dl_handle.state::<UpdaterState>().set_status(status.clone());
                             let _ = dl_handle.emit("updater:status-changed", status);
                         },
@@ -125,7 +180,8 @@ async fn do_update_check<R: Runtime>(app: AppHandle<R>) -> Result<UpdateStatus, 
                     Ok(()) => {}
                     Err(e) => {
                         let status = UpdateStatus::Error {
-                            detail: e.to_string(),
+                            reason: UpdateErrorKind::DownloadFailed,
+                            retryable: true,
                         };
                         err_handle
                             .state::<UpdaterState>()
@@ -147,7 +203,8 @@ async fn do_update_check<R: Runtime>(app: AppHandle<R>) -> Result<UpdateStatus, 
         Err(e) => {
             warn!(error = %e, "update check failed");
             let status = UpdateStatus::Error {
-                detail: e.to_string(),
+                reason: UpdateErrorKind::CheckFailed,
+                retryable: true,
             };
             state.set_status(status.clone());
             let _ = app.emit("updater:status-changed", status.clone());
@@ -218,11 +275,13 @@ mod tests {
         let state = UpdaterState::new();
         state.set_status(UpdateStatus::Available {
             version: "1.2.3".to_string(),
+            urgency: Urgency::Normal,
         });
         assert_eq!(
             state.get_status(),
             UpdateStatus::Available {
-                version: "1.2.3".to_string()
+                version: "1.2.3".to_string(),
+                urgency: Urgency::Normal
             }
         );
     }
@@ -230,10 +289,10 @@ mod tests {
     #[test]
     fn set_downloading_status() {
         let state = UpdaterState::new();
-        state.set_status(UpdateStatus::Downloading { percent: 42.5 });
+        state.set_status(UpdateStatus::Downloading { progress: 42.5 });
         assert_eq!(
             state.get_status(),
-            UpdateStatus::Downloading { percent: 42.5 }
+            UpdateStatus::Downloading { progress: 42.5 }
         );
     }
 
@@ -241,12 +300,14 @@ mod tests {
     fn set_error_status() {
         let state = UpdaterState::new();
         state.set_status(UpdateStatus::Error {
-            detail: "network timeout".to_string(),
+            reason: UpdateErrorKind::CheckFailed,
+            retryable: true,
         });
         assert_eq!(
             state.get_status(),
             UpdateStatus::Error {
-                detail: "network timeout".to_string()
+                reason: UpdateErrorKind::CheckFailed,
+                retryable: true
             }
         );
     }
@@ -261,8 +322,9 @@ mod tests {
 
         state.set_status(UpdateStatus::Available {
             version: "2.0.0".to_string(),
+            urgency: Urgency::Normal,
         });
-        state.set_status(UpdateStatus::Downloading { percent: 50.0 });
+        state.set_status(UpdateStatus::Downloading { progress: 50.0 });
         state.set_status(UpdateStatus::Ready {
             version: "2.0.0".to_string(),
         });
@@ -287,12 +349,22 @@ mod tests {
     fn serde_roundtrip_data_variants() {
         let available = UpdateStatus::Available {
             version: "3.0.0".to_string(),
+            urgency: Urgency::High,
         };
         let json = serde_json::to_string(&available).unwrap();
         assert!(json.contains("\"kind\":\"available\""));
         assert!(json.contains("\"version\":\"3.0.0\""));
+        assert!(json.contains("\"urgency\":\"high\""));
         let parsed: UpdateStatus = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, available);
+    }
+
+    #[test]
+    fn rejected_by_signature_is_terminal_for_process_lifetime() {
+        let state = UpdaterState::new();
+        state.set_status(UpdateStatus::RejectedBySignature);
+        state.set_status(UpdateStatus::Idle);
+        assert_eq!(state.get_status(), UpdateStatus::RejectedBySignature);
     }
 
     #[test]
