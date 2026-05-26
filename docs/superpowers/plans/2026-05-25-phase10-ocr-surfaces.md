@@ -1231,8 +1231,11 @@ objc2-vision = { version = "0.3", features = [
 ] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-# Plan amendment (Spike A finding approved 2026-05-26): pin to 0.62 to align with
-# workspace transitive (via tao/wry/tauri). Avoids duplicate-major bloat.
+# Plan amendments (Spike A + T8 follow-up, approved 2026-05-26):
+#   - Pin to 0.62 to align with workspace transitive (via tao/wry/tauri).
+#     Avoids duplicate-major bloat.
+#   - "Wdk_System_SystemServices" + "Win32_System_SystemInformation" + "Win32_Foundation"
+#     added for RtlGetVersion call in win_build_number() (T8 step 1 helper).
 windows = { version = "0.62", features = [
     "Media_Ocr",
     "Globalization",
@@ -1240,6 +1243,9 @@ windows = { version = "0.62", features = [
     "Storage",
     "Storage_Streams",
     "Foundation",
+    "Wdk_System_SystemServices",
+    "Win32_System_SystemInformation",
+    "Win32_Foundation",
 ] }
 
 [dev-dependencies]
@@ -1618,9 +1624,26 @@ impl OcrBackend for WinOcrBackend {
 }
 
 fn win_build_number() -> Option<String> {
-    // PowerShell-free read via registry would be ideal; for plan-time simplicity
-    // we read the env that Windows sets. If unavailable, return None.
-    std::env::var("OS_BUILD").ok()
+    // Plan amendment 2026-05-26 (winocr-pc, T8 follow-up): the original code
+    // read `std::env::var("OS_BUILD")` — Windows does NOT set that variable,
+    // so engine_version() reliably returned "10.0.unknown". RtlGetVersion is
+    // the authoritative source (ntdll, not subject to the GetVersionEx
+    // app-compat lying Microsoft bolted on in 8.1+). Returns NTSTATUS == 0
+    // (STATUS_SUCCESS) on success. Requires `windows` features:
+    // `Wdk_System_SystemServices`, `Win32_System_SystemInformation`, `Win32_Foundation`.
+    use windows::Wdk::System::SystemServices::RtlGetVersion;
+    use windows::Win32::System::SystemInformation::OSVERSIONINFOW;
+
+    let mut info = OSVERSIONINFOW {
+        dwOSVersionInfoSize: std::mem::size_of::<OSVERSIONINFOW>() as u32,
+        ..Default::default()
+    };
+    let status = unsafe { RtlGetVersion(&mut info) };
+    if status.0 == 0 {
+        Some(info.dwBuildNumber.to_string())
+    } else {
+        None
+    }
 }
 
 #[cfg(all(test, target_os = "windows"))]
