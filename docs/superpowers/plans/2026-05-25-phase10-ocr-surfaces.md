@@ -1886,15 +1886,21 @@ pub fn get_ocr_words<R: Runtime>(
 }
 
 fn build_backend() -> Result<Arc<dyn OcrBackend>, OcrError> {
+    // Plan amendment 2026-05-26: original code used `return Ok(...)` in each
+    // cfg-block, which trips clippy's needless_return lint. Each expression is
+    // already the final expression of its block AND the function — implicit
+    // return is the idiomatic form. Quality-sentinel caught the clippy failure
+    // post-T13 (sidecar.rs deletion unmasked the warning by clearing 9 other
+    // dead-code warnings that dominated clippy's output).
     #[cfg(target_os = "macos")]
     {
         let b = crate::vision::VisionBackend::new()?;
-        return Ok(Arc::new(b) as Arc<dyn OcrBackend>);
+        Ok(Arc::new(b) as Arc<dyn OcrBackend>)
     }
     #[cfg(target_os = "windows")]
     {
         let b = crate::winocr::WinOcrBackend::new()?;
-        return Ok(Arc::new(b) as Arc<dyn OcrBackend>);
+        Ok(Arc::new(b) as Arc<dyn OcrBackend>)
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
