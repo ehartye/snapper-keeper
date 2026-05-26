@@ -10,7 +10,9 @@
 # See docs/superpowers/specs/2026-05-26-local-installer-build-design.md
 # for the full design rationale.
 
-set -euo pipefail
+# -E (errtrace) so the ERR trap fires for failures inside functions
+# (sha256_of, bytes_of, mb_of, print_artifact, cleanup_*).
+set -Eeuo pipefail
 
 trap 'echo "build-local: failed at line ${LINENO}" >&2' ERR
 
