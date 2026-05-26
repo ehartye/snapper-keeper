@@ -9,6 +9,9 @@ pub mod queue;
 // Both still reference crate::sidecar::* internally. Full deletion happens in T13.
 mod sidecar;
 
+#[cfg(target_os = "macos")]
+pub mod vision;
+
 pub use backend::{OcrBackend, OcrResult};
 pub use error::OcrError;
 pub use plugin::init;
