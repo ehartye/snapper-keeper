@@ -1,19 +1,15 @@
 name: Claude Code
 
 on:
-  # Disabled: automatic @claude mention triggers removed while the
-  # GitHub App lacks write access on this repo. Re-enable by restoring
-  # the issue_comment / pull_request_review_comment / issues /
-  # pull_request_review triggers below.
   workflow_dispatch:
-  # issue_comment:
-  #   types: [created]
-  # pull_request_review_comment:
-  #   types: [created]
-  # issues:
-  #   types: [opened, assigned]
-  # pull_request_review:
-  #   types: [submitted]
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned]
+  pull_request_review:
+    types: [submitted]
 
 jobs:
   claude:
@@ -26,8 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
-      issues: read
+      pull-requests: write
+      issues: write
       id-token: write
       actions: read # Required for Claude to read CI results on PRs
     steps:
