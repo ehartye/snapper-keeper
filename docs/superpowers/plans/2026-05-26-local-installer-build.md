@@ -4,11 +4,24 @@
 
 **Goal:** Make `pnpm build:local` produce production-fidelity unsigned installers on Windows + macOS, and remove the dead-weight `bundle.windows.signCommand` from base `tauri.conf.json` (production Windows signing already happens directly in the `sign-win-x64` CI job, not via Tauri's hook).
 
-**Architecture:** One bash script (`scripts/build-local.sh`) is the entry point. It runs natively on macOS and inside Git Bash on Windows. Per-OS branches handle target-triple computation, Tesseract bundling on Windows (copied from the user's existing install), and the `tauri build` invocation with `--config '{"bundle":{"createUpdaterArtifacts":false}}'` overlay to skip the updater-payload signing step. A precursor refactor removes `bundle.windows.signCommand` from base config and the corresponding `Strip signCommand` step from `release.yml` — these are dead weight that exists only as a workaround for itself.
+**Architecture:** One bash script (`scripts/build-local.sh`) is the entry point. It runs natively on macOS and inside Git Bash on Windows. Per-OS branches handle target-triple computation and the `tauri build` invocation with `--config '{"bundle":{"createUpdaterArtifacts":false}}'` overlay to skip the updater-payload signing step. A precursor refactor removes `bundle.windows.signCommand` from base config and the corresponding `Strip signCommand` step from `release.yml` — these are dead weight that exists only as a workaround for itself.
 
-**Tech Stack:** bash, jq (unused after refactor), pnpm, Tauri 2 CLI, Git Bash (Windows), Homebrew tesseract (macOS), winget/choco tesseract (Windows).
+**Tech Stack:** bash, pnpm, Tauri 2 CLI, Git Bash (Windows).
 
 **Spec:** [`docs/superpowers/specs/2026-05-26-local-installer-build-design.md`](../specs/2026-05-26-local-installer-build-design.md)
+
+---
+
+## Plan amendment 2026-05-26 — Phase 10 merged mid-flight
+
+Phase 10 (`feat(phase10): OCR backend swap — Vision + WinOcr; 100% Tesseract cleanse`, commit `f1a888e`, PR #135) landed on `main` after Tasks 1–5 of this plan were already committed on the worktree branch. Phase 10 removed Tesseract entirely from the project — replaced by Apple Vision (macOS) and Windows.Media.Ocr (Windows). The lead merged `main` into `feat/build-local` (commit `67dde88`) and amended this plan as follows:
+
+- **Task 4's Tesseract bundling logic is now dead code.** Production no longer bundles Tesseract, so per the design principle "production parity except for signing secrets" neither should `pnpm build:local`. The bundling code is removed in **new Task 10** rather than retroactively amending Task 4's commit (preserves bisectability + clear audit trail of why the cleanup commit exists).
+- **Task 7's README replacement content is amended** to drop "with bundled Tesseract" and "same Tesseract bundling on Windows" phrasing (see Task 7 below for the corrected replacement text).
+- **The dependency graph adds Task 10**, blocked by Task 5; Task 9 is blocked by Task 10 in addition to its prior blockers.
+- Tasks 1–6 + 8 are unaffected. Task 8's "Where signing lives" note never referenced Tesseract.
+
+The original spec (`docs/superpowers/specs/2026-05-26-local-installer-build-design.md`) was written before Phase 10 and still references Tesseract bundling as production-parity. **Treat this plan as the source of truth post-merge.** The spec should be updated separately as a docs cleanup if it ever becomes load-bearing again, but for now it's a historical artifact.
 
 ---
 
@@ -761,13 +774,13 @@ Produce an unsigned installer locally for smoke-testing what end users will rece
 pnpm build:local
 ```
 
-On macOS this produces a `.app` + `.dmg` for your machine's architecture; on Windows it produces an NSIS `*-setup.exe` with bundled Tesseract. The artifact path + SHA-256 are printed when the build completes.
+On macOS this produces a `.app` + `.dmg` for your machine's architecture; on Windows it produces an NSIS `*-setup.exe`. The artifact path + SHA-256 are printed when the build completes.
 
 **Differences from production:**
 
 - Not Authenticode-signed (Windows) or codesigned + notarized (macOS) — the OS will warn on first launch (see below).
 - No updater payload (`.app.tar.gz` + `.sig`) — local builds can't sign the updater manifest.
-- Otherwise identical: same target triples, same bundle contents, same Tesseract bundling on Windows.
+- Otherwise identical: same target triples, same bundle contents.
 
 **Installing an unsigned build:**
 
@@ -850,6 +863,76 @@ direct codesign / dotnet sign invocations, not via Tauri's hook."
 
 ---
 
+## Task 10: Strip obsolete Tesseract code from `scripts/build-local.sh`
+
+**Rationale:** Phase 10 (merge commit `67dde88`) removed Tesseract from production entirely — replaced by Apple Vision (macOS) and Windows.Media.Ocr (Windows), both native OS APIs that need no bundling. The Windows pre-build block in `build-local.sh` (the `cleanup_tesseract` function, EXIT trap, resolver, and `cp -Rp` added by Task 4) bundles Tesseract from the contributor's local install into `app/src-tauri/resources/tesseract/`. That directory no longer exists in source, the `bundle.resources` glob that consumed it is gone from `tauri.conf.json`, and `crates/snk-ocr/src/sidecar.rs` (the runtime resolver our comment references) is deleted.
+
+The block is dead weight that wastes ~140 MB of disk I/O per Windows build and prints misleading `build-local: bundling Tesseract from <path>` messages. Production-parity is the design principle — production no longer bundles Tesseract, so `pnpm build:local` shouldn't either.
+
+**Files:**
+- Modify: `scripts/build-local.sh` (remove the entire `if [[ "$OS" == "windows" ]]` Windows pre-build block)
+
+### Step 1: Read the current script to confirm boundaries
+
+```bash
+sed -n '/^# --- Pre-build (Windows only)/,/^fi$/p' scripts/build-local.sh
+```
+
+Expected: the full Windows pre-build block (the `if [[ "$OS" == "windows" ]]` through its closing `fi`). That whole block — including the leading `# --- Pre-build (Windows only) ---` comment — is what gets removed.
+
+### Step 2: Delete the block
+
+Use the Edit tool to remove the block. The block to delete starts at `# --- Pre-build (Windows only) ---` and ends at the matching `fi`. Replace it with:
+
+```bash
+# --- Pre-build ---
+# No pre-build work needed on either OS. Phase 10 removed Tesseract
+# bundling from production (Apple Vision + Windows.Media.Ocr are
+# native OS APIs); production-parity for unsigned local builds means
+# we don't bundle anything pre-build either.
+```
+
+### Step 3: Syntax check
+
+```bash
+bash -n scripts/build-local.sh && echo "syntax OK"
+```
+
+Expected: `syntax OK`.
+
+### Step 4: Smoke-run on current OS
+
+```bash
+bash scripts/build-local.sh
+```
+
+Expected per OS:
+- **Linux:** still aborts cleanly with the supported-platforms message.
+- **macOS:** still produces `.app` + `.dmg` (unchanged from Task 5 state).
+- **Windows:** now skips the Tesseract bundling step entirely. The `build-local: bundling Tesseract from <path>` line should be gone. `app/src-tauri/resources/tesseract/` is not created. Otherwise behaves identically to the Task 5 state on Windows minus the Tesseract dance.
+
+If you're not on the target OS, do at least the `bash -n` syntax check and the Linux abort verification (works on WSL or any Linux box) — runtime verification on the other OS gets deferred to the user.
+
+### Step 5: Commit
+
+```bash
+git add scripts/build-local.sh
+git commit -m "chore(scripts): drop Tesseract bundling from build-local.sh after Phase 10
+
+Production no longer bundles Tesseract (Apple Vision + Windows.Media.Ocr
+replaced the sidecar in Phase 10 / PR #135). The Windows pre-build
+block in build-local.sh — added by Task 4 of this plan before Phase 10
+landed — became dead code at the merge point (67dde88).
+
+The script's design principle is production-parity except for signing
+secrets. Production-parity means: no Tesseract bundling. The pre-build
+block (cleanup_tesseract, EXIT trap, resolver, copy) is removed
+entirely, replaced by a brief comment explaining why pre-build is now
+empty."
+```
+
+---
+
 ## Task 9: Pre-merge verification
 
 **Rationale:** Validate that (a) the script works end-to-end on both Windows and macOS, and (b) the CI release pipeline still produces a signed Windows installer after the `signCommand` removal.
@@ -880,7 +963,7 @@ Expected:
 - `.app` + `.dmg` produced under `target/<triple>/release/bundle/{macos,dmg}/`
 - Summary block at end with path/size/SHA-256 for the `.dmg`
 - Launching the `.app` from the `.dmg` works (right-click → Open to clear Gatekeeper)
-- OCR works (via `brew install`-ed Tesseract)
+- OCR works on macOS 14+ (via native Apple Vision — no third-party install needed; Phase 10)
 
 ### Verification 3: Windows local build (interactive desktop)
 
@@ -893,9 +976,9 @@ pnpm build:local
 Expected:
 - `*-setup.exe` produced under `target/x86_64-pc-windows-msvc/release/bundle/nsis/`
 - Summary block at end with path/size/SHA-256
-- `app/src-tauri/resources/tesseract/` contains only `.placeholder` after script exit
+- No `app/src-tauri/resources/tesseract/` directory created (Phase 10 / Task 10 removed bundling)
 - Running the `.exe` (SmartScreen → "Run anyway") installs the app
-- Installed app captures a screen and OCR returns text (validates bundled Tesseract)
+- Installed app captures a screen and OCR returns text (via Windows.Media.Ocr — native OS API; Phase 10)
 
 Uninstall the test install via Settings → Apps when done.
 
@@ -936,7 +1019,7 @@ If the run fails on the signing step or on JSON parse of `tauri.conf.json`, reve
 When all four verifications above are green:
 
 1. Update the PR description with the dry-run release URL (proves Windows signing still works).
-2. Self-review the diff one more time. Confirm no `target/` or `app/src-tauri/resources/tesseract/` files were accidentally committed.
+2. Self-review the diff one more time. Confirm no `target/` files were accidentally committed. (Post-Phase-10, there is no `app/src-tauri/resources/tesseract/` directory to worry about.)
 3. Merge using whatever merge strategy this repo uses (squash, rebase, or merge — check existing PR history).
 
 ---
