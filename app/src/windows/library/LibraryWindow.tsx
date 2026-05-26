@@ -88,45 +88,53 @@ export function LibraryWindow() {
   }, [refreshCaptures]);
 
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    listen<PluginSetupFailedPayload>('plugin:setup-failed', ({ payload }) => {
-      modal.custom({
-        title: `Plugin "${payload.pluginName}" failed to start`,
-        render: ({ close }) => (
-          <div className="space-y-4">
-            <p className="text-sm text-fg">
-              Plugin {payload.pluginName} failed to start — please file a bug.
-            </p>
-            <pre className="text-xs whitespace-pre-wrap break-words p-2 bg-surface border border-border">
-              {payload.panicMessage}
-            </pre>
-            <div className="flex justify-end gap-2">
-              <button
-                className="font-display text-[11px] uppercase tracking-widest px-3 py-1.5 border-2 border-border bg-surface hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_0_var(--border)] transition-transform"
-                onClick={() => {
-                  void navigator.clipboard.writeText(payload.diagnosticsMarkdown).catch((e) => {
-                    console.error('copy diagnostics failed', e);
-                  });
-                }}
-              >
-                Copy diagnostics
-              </button>
-              <button
-                className="font-display text-[11px] uppercase tracking-widest px-3 py-1.5 border-2 border-border bg-primary text-bg hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_0_var(--border)] transition-transform"
-                onClick={close}
-              >
-                OK
-              </button>
+    let cancelled = false;
+    let unlisteners: (() => void)[] = [];
+    const setup = async () => {
+      const fn = await listen<PluginSetupFailedPayload>('plugin:setup-failed', ({ payload }) => {
+        modal.custom({
+          title: `Plugin "${payload.pluginName}" failed to start`,
+          render: ({ close }) => (
+            <div className="space-y-4">
+              <p className="text-sm text-fg">
+                Plugin {payload.pluginName} failed to start — please file a bug.
+              </p>
+              <pre className="text-xs whitespace-pre-wrap break-words p-2 bg-surface border border-border">
+                {payload.panicMessage}
+              </pre>
+              <div className="flex justify-end gap-2">
+                <button
+                  className="font-display text-[11px] uppercase tracking-widest px-3 py-1.5 border-2 border-border bg-surface hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_0_var(--border)] transition-transform"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(payload.diagnosticsMarkdown).catch((e) => {
+                      console.error('copy diagnostics failed', e);
+                    });
+                  }}
+                >
+                  Copy diagnostics
+                </button>
+                <button
+                  className="font-display text-[11px] uppercase tracking-widest px-3 py-1.5 border-2 border-border bg-primary text-bg hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_0_var(--border)] transition-transform"
+                  onClick={close}
+                >
+                  OK
+                </button>
+              </div>
             </div>
-          </div>
-        ),
+          ),
+        });
       });
-    })
-      .then((fn) => {
-        unlisten = fn;
-      })
-      .catch((e) => console.error('library plugin:setup-failed listener failed', e));
-    return () => unlisten?.();
+      if (cancelled) {
+        fn();
+      } else {
+        unlisteners = [fn];
+      }
+    };
+    setup().catch((e) => console.error('library plugin:setup-failed listener failed', e));
+    return () => {
+      cancelled = true;
+      unlisteners.forEach((fn) => fn());
+    };
   }, [modal]);
 
   const showToolbar = useCallback(async (captureId: string) => {

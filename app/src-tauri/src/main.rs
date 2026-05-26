@@ -33,15 +33,11 @@ struct PluginSetupFailedPayload {
 }
 
 struct SafeSetupPlugin<P> {
-    name: &'static str,
     inner: P,
 }
 
-fn safe_setup<P>(name: &'static str, plugin: P) -> SafeSetupPlugin<P> {
-    SafeSetupPlugin {
-        name,
-        inner: plugin,
-    }
+fn safe_setup<P>(plugin: P) -> SafeSetupPlugin<P> {
+    SafeSetupPlugin { inner: plugin }
 }
 
 fn panic_message(payload: &(dyn Any + Send)) -> String {
@@ -89,16 +85,17 @@ where
         app: &AppHandle<R>,
         config: serde_json::Value,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        let name = self.inner.name();
         match std::panic::catch_unwind(AssertUnwindSafe(|| self.inner.initialize(app, config))) {
             Ok(result) => result,
             Err(payload) => {
                 let panic = panic_message(payload.as_ref());
                 error!(
-                    plugin = self.name,
+                    plugin = name,
                     panic = %panic,
                     "plugin setup panicked"
                 );
-                emit_plugin_setup_failed(app, self.name, &panic);
+                emit_plugin_setup_failed(app, name, &panic);
                 Ok(())
             }
         }
@@ -187,33 +184,28 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(safe_setup(
-            "tauri-plugin-global-shortcut",
             tauri_plugin_global_shortcut::Builder::new().build(),
         ))
         // Launch-at-login support. The plugin manages the platform-specific
         // bits (registry entry on Windows, LaunchAgent on macOS). The user
         // toggles it from Settings → Startup.
+        .plugin(safe_setup(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            // No extra args — the app reads its own state to decide whether
+            // to start hidden or focused.
+            None,
+        )))
+        .plugin(safe_setup(tauri_plugin_opener::init()))
+        .plugin(safe_setup(snk_library::init()))
+        .plugin(safe_setup(snk_hotkeys::init()))
+        .plugin(safe_setup(snk_capture::init()))
+        .plugin(safe_setup(snk_annotate::init()))
+        .plugin(safe_setup(snk_clipboard::init()))
+        .plugin(safe_setup(snk_ocr::init()))
         .plugin(safe_setup(
-            "tauri-plugin-autostart",
-            tauri_plugin_autostart::init(
-                tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-                // No extra args — the app reads its own state to decide whether
-                // to start hidden or focused.
-                None,
-            ),
-        ))
-        .plugin(safe_setup("tauri-plugin-opener", tauri_plugin_opener::init()))
-        .plugin(safe_setup("snk-library", snk_library::init()))
-        .plugin(safe_setup("snk-hotkeys", snk_hotkeys::init()))
-        .plugin(safe_setup("snk-capture", snk_capture::init()))
-        .plugin(safe_setup("snk-annotate", snk_annotate::init()))
-        .plugin(safe_setup("snk-clipboard", snk_clipboard::init()))
-        .plugin(safe_setup("snk-ocr", snk_ocr::init()))
-        .plugin(safe_setup(
-            "tauri-plugin-updater",
             tauri_plugin_updater::Builder::new().build(),
         ))
-        .plugin(safe_setup("snk-releaser", snk_releaser::init()))
+        .plugin(safe_setup(snk_releaser::init()))
         .invoke_handler(tauri::generate_handler![set_tray_theme])
         .setup(|app| {
             let capture_region = MenuItem::with_id(
