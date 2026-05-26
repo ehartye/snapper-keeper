@@ -36,7 +36,14 @@ impl OcrQueue {
     }
 
     pub fn enqueue(&self, capture_id: String, image_path: std::path::PathBuf) {
-        if self.tx.send(OcrJob { capture_id, image_path }).is_err() {
+        if self
+            .tx
+            .send(OcrJob {
+                capture_id,
+                image_path,
+            })
+            .is_err()
+        {
             error!("ocr queue closed");
         }
     }
@@ -63,7 +70,13 @@ async fn worker(
 
         match result {
             Ok(Ok(out)) => {
-                if let Err(e) = persist_and_index(&db_clone, &cap_id, &out, backend.name(), &backend.engine_version()) {
+                if let Err(e) = persist_and_index(
+                    &db_clone,
+                    &cap_id,
+                    &out,
+                    backend.name(),
+                    &backend.engine_version(),
+                ) {
                     error!(capture_id = %cap_id, error = %e, "persist ocr failed");
                     continue;
                 }
@@ -87,13 +100,24 @@ fn persist_and_index(
     // Use the qualified engine string the caller passed in; backend_name is for logging only.
     let _ = backend_name;
     snk_library::ocr::upsert_full(
-        db, capture_id, &out.text, &out.language, out.confidence, &out.words, engine_version,
-    ).map_err(|e| e.to_string())?;
+        db,
+        capture_id,
+        &out.text,
+        &out.language,
+        out.confidence,
+        &out.words,
+        engine_version,
+    )
+    .map_err(|e| e.to_string())?;
     let cap = snk_library::captures::get(db, capture_id).map_err(|e| e.to_string())?;
     snk_library::search::index_capture(
-        db, capture_id,
-        cap.source_app.as_deref(), cap.source_window_title.as_deref(),
-        Some(&out.text), None,
-    ).map_err(|e| e.to_string())?;
+        db,
+        capture_id,
+        cap.source_app.as_deref(),
+        cap.source_window_title.as_deref(),
+        Some(&out.text),
+        None,
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }

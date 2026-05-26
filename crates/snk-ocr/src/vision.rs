@@ -22,13 +22,18 @@ impl VisionBackend {
 }
 
 impl OcrBackend for VisionBackend {
-    fn name(&self) -> &'static str { "Vision" }
+    fn name(&self) -> &'static str {
+        "Vision"
+    }
 
     fn engine_version(&self) -> String {
         let v = unsafe {
             let pi = objc2_foundation::NSProcessInfo::processInfo();
             let os = pi.operatingSystemVersion();
-            format!("{}.{}.{}", os.majorVersion, os.minorVersion, os.patchVersion)
+            format!(
+                "{}.{}.{}",
+                os.majorVersion, os.minorVersion, os.patchVersion
+            )
         };
         format!("Vision (macOS {v})")
     }
@@ -53,11 +58,10 @@ impl OcrBackend for VisionBackend {
                 &NSDictionary::new(),
             );
 
-            let perform_result = handler.performRequests_error(
-                &objc2_foundation::NSArray::from_slice(&[
-                    objc2::runtime::ProtocolObject::from_ref(&*request).cast()
-                ])
-            );
+            let perform_result =
+                handler.performRequests_error(&objc2_foundation::NSArray::from_slice(&[
+                    objc2::runtime::ProtocolObject::from_ref(&*request).cast(),
+                ]));
             perform_result.map_err(|e| OcrError::Recognize {
                 detail: format!("performRequests: {e:?}"),
             })?;
@@ -75,7 +79,9 @@ impl OcrBackend for VisionBackend {
                 let obs: Retained<VNRecognizedTextObservation> =
                     observations.objectAtIndex(line_idx).cast();
                 let candidates = obs.topCandidates(1);
-                if candidates.count() == 0 { continue; }
+                if candidates.count() == 0 {
+                    continue;
+                }
                 let candidate = candidates.objectAtIndex(0);
                 let line_text = candidate.string().to_string();
                 let line_conf = candidate.confidence() as f64;
@@ -90,7 +96,10 @@ impl OcrBackend for VisionBackend {
                 let mut byte_pos: usize = 0;
                 for word in line_text.split_whitespace() {
                     let word_len = word.len();
-                    let range = NSRange { location: byte_pos, length: word_len };
+                    let range = NSRange {
+                        location: byte_pos,
+                        length: word_len,
+                    };
                     if byte_pos + word_len > total_len {
                         warn!("vision word range out of bounds; skipping");
                         break;
@@ -122,7 +131,11 @@ impl OcrBackend for VisionBackend {
             }
 
             let text = text_lines.join("\n");
-            let avg_conf = if conf_count > 0 { total_conf / conf_count as f64 } else { 0.0 };
+            let avg_conf = if conf_count > 0 {
+                total_conf / conf_count as f64
+            } else {
+                0.0
+            };
 
             Ok(OcrResult {
                 text,
