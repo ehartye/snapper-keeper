@@ -20,18 +20,18 @@ Define a single updater state contract before wiring #27/#23 behavior so future 
 enum UpdateStatus {
     Idle,
     Checking,
-    Available { version: Version, urgency: Urgency },
+    Available { version: String, urgency: Urgency },
     Downloading { progress: f32 },
-    Ready { version: Version },
+    Ready { version: String },
     Installing,
-    Error { kind: UpdateErrorKind, retryable: bool },
+    Error { reason: UpdateErrorKind, retryable: bool },
     RejectedBySignature,
     SuppressedByPolicy { reason: SuppressionReason },
-    Skipped { until: Instant },
+    Skipped { until_epoch_ms: i64 },
 }
 ```
 
-Implementation note for IPC: because updater status is serde internally-tagged with `"kind"`, the error payload field is serialized as `reason` (not `kind`) to avoid tag/field collision. `Skipped` is represented on the wire as epoch-ms (`until_epoch_ms`) so it round-trips cross-process safely.
+IPC note: the enum is internally-tagged with `"kind"` via serde, so the `Error` variant uses `reason` (not `kind`) for its error field to avoid a tag/field name collision. `Skipped` stores the defer instant as epoch-ms (`until_epoch_ms: i64`) rather than `Instant` so it round-trips cross-process safely.
 
 ## 3) Meaning of each state
 
@@ -62,7 +62,7 @@ Implementation note for IPC: because updater status is serde internally-tagged w
 - `Ready -> Installing | Skipped`
 - `Installing -> Idle | Error`
 - `Error -> Checking | SuppressedByPolicy` (retry or policy toggle)
-- `Skipped -> Checking` (once `until` elapsed or user forces check)
+- `Skipped -> Checking` (once `until_epoch_ms` elapsed or user forces check)
 - `SuppressedByPolicy -> Idle` (policy reason removed)
 - `RejectedBySignature -> RejectedBySignature` only
 

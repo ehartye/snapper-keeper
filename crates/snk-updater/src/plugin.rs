@@ -79,8 +79,8 @@ impl UpdaterState {
 
     fn set_status(&self, s: UpdateStatus) {
         if let Ok(mut lock) = self.status.lock() {
-            if matches!(*lock, UpdateStatus::RejectedBySignature)
-                && !matches!(s, UpdateStatus::RejectedBySignature)
+            if matches!(&*lock, UpdateStatus::RejectedBySignature)
+                && !matches!(&s, UpdateStatus::RejectedBySignature)
             {
                 return;
             }
