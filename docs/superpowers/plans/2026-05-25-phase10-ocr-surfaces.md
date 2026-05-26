@@ -1665,6 +1665,7 @@ git commit -m "feat(ocr): WinOcrBackend — Windows.Media.Ocr via windows-rs"
 
 **Files:**
 - Modify: `crates/snk-ocr/src/queue.rs`
+- Modify: `crates/snk-ocr/src/plugin.rs` — minimum-touch update to keep workspace building (plan amendment 2026-05-26 — pre-flight catch). The existing `let queue = OcrQueue::start(Arc::clone(&db), root);` call uses the OLD 2-arg signature. T9 changes the signature to 4 args (backend, db, root, emit_ready) which plugin.rs can't supply yet (backend selection is T10, emit_ready callback is T10). Swap the line to `let queue = OcrQueue::disabled();` so the workspace builds through the T9→T10 window. T10 then rewrites plugin.rs end-to-end with the real backend selection. **Do NOT touch the `crate::sidecar::set_bundled_resource_dir(dir)` call in plugin.rs in T9** — that stays until T10's rewrite (sidecar.rs is still on disk until T13).
 
 **Step 1: Rewrite queue**
 
@@ -1763,18 +1764,39 @@ fn persist_and_index(
 }
 ```
 
-**Step 2: Build**
+**Step 2: Update plugin.rs to keep workspace building**
+
+In `crates/snk-ocr/src/plugin.rs`, find the line:
+
+```rust
+let queue = OcrQueue::start(Arc::clone(&db), root);
+```
+
+Replace it with:
+
+```rust
+// T9 transition: queue is disabled until T10 wires real backend selection.
+let queue = OcrQueue::disabled();
+let _ = (Arc::clone(&db), root); // suppress unused warnings until T10
+```
+
+OR if T10 is being claimed by you alongside T9, skip the disabled-stub and go straight to T10's full rewrite — bundle the two task commits together. Either way works; the disabled-stub option is simpler if T9 and T10 are claimed by different implementers.
+
+Effect: OCR pipeline is non-functional in the T9→T10 window (captures don't trigger OCR), but the workspace builds and tests pass. Acceptable interim state on a feature branch.
+
+**Step 3: Build**
 
 ```bash
 cargo build -p snk-ocr
+cargo test -p snk-ocr
 ```
 
-Expected: builds clean. If `snk_library::ocr::upsert_full` or `snk_library::search::index_capture` signatures don't match, check T3 and Phase 5's `search.rs` and adjust.
+Expected: both pass clean. If `snk_library::ocr::upsert_full` or `snk_library::search::index_capture` signatures don't match, check T3 and Phase 5's `search.rs` and adjust.
 
-**Step 3: Commit**
+**Step 4: Commit**
 
 ```bash
-git add crates/snk-ocr/src/queue.rs
+git add crates/snk-ocr/src/queue.rs crates/snk-ocr/src/plugin.rs
 git diff --cached
 git commit -m "refactor(ocr): OcrQueue takes Box<dyn OcrBackend>; emit-ready callback"
 ```
@@ -2133,14 +2155,22 @@ git commit -m "test(ocr): integration test against native backend with hello_wor
 
 ---
 
-### Task 13: Tesseract cleanse — delete `sidecar.rs`, `build.rs`, update tests directory
+### Task 13: Tesseract cleanse — delete `sidecar.rs`, `build.rs`, update lib.rs
 
 **Files:**
 - Delete: `crates/snk-ocr/src/sidecar.rs`
 - Delete: `crates/snk-ocr/build.rs` (if Tesseract-only)
-- Modify: `crates/snk-ocr/src/lib.rs` (already done in T5 — confirm `pub mod sidecar;` is gone)
+- Modify: `crates/snk-ocr/src/lib.rs` — remove the `mod sidecar;` private declaration that T5 left in place (plan amendment 2026-05-26 pre-flight catch — original plan said this was "already done in T5" but T5's amended scope KEEPS the private mod declaration; T13 is the actual deletion point)
 
-**Step 1: Inspect `build.rs`**
+**Step 1: Pre-flight — confirm no consumers remain**
+
+```bash
+git grep -nE 'crate::sidecar|mod sidecar|use crate::sidecar|snk_ocr::sidecar' -- 'crates/snk-ocr/'
+```
+
+Expected: ONLY two matches — the `mod sidecar;` line in `crates/snk-ocr/src/lib.rs` and the file itself. If `crate::sidecar::*` callsites appear in queue.rs or plugin.rs, T9 or T10 didn't complete their refactor cleanly — stop and ping team-lead. **Do not delete sidecar.rs until queue.rs and plugin.rs have stopped referencing it.**
+
+**Step 2: Inspect `build.rs`**
 
 ```bash
 cat crates/snk-ocr/build.rs
@@ -2148,19 +2178,27 @@ cat crates/snk-ocr/build.rs
 
 If it only generates Tauri plugin metadata (via `tauri_plugin::Builder` or `tauri_build`), keep it. If it has Tesseract-specific logic (env-var passing, downloading, etc.), delete it. Most Tauri-plugin `build.rs` files are 3 lines — keep.
 
-**Step 2: Delete the sidecar file**
+**Step 3: Delete the sidecar file + lib.rs declaration**
 
 ```bash
 git rm crates/snk-ocr/src/sidecar.rs
 ```
 
-**Step 3: Confirm `lib.rs` doesn't reference `sidecar`**
+Edit `crates/snk-ocr/src/lib.rs` — remove the three lines:
 
-```bash
-grep sidecar crates/snk-ocr/src/lib.rs
+```rust
+// Sidecar module kept (private) until T9 rewrites queue.rs and T10 rewrites plugin.rs.
+// Both still reference crate::sidecar::* internally. Full deletion happens in T13.
+mod sidecar;
 ```
 
-Expected: no output. (Already removed in T5.)
+**Step 4: Verify lib.rs clean**
+
+```bash
+git grep -nE 'sidecar|mod sidecar' -- crates/snk-ocr/src/lib.rs
+```
+
+Expected: no output.
 
 **Step 4: Build + test**
 
