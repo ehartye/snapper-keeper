@@ -33,6 +33,7 @@ pub mod error;
 pub mod files;
 pub mod migrate;
 pub mod ocr;
+pub mod pii;
 pub mod plugin;
 pub mod redacted;
 pub mod search;
