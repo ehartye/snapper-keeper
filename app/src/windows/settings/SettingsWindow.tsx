@@ -283,7 +283,7 @@ export function SettingsWindow() {
         <SettingsSection title="OCR">
           <SettingRow
             label="Enable OCR"
-            description="Automatically extract text from captures using Tesseract"
+            description="Automatically extract text from captures using native OS OCR"
           >
             <Toggle value={ocrEnabled as boolean} onChange={setOcrEnabled} />
           </SettingRow>

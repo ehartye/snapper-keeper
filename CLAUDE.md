@@ -2,7 +2,7 @@
 
 This file gives Claude project-specific context. Read it before you start anything substantive. The user-level `~/.claude/CLAUDE.md` already covers Eric's general working preferences; this file covers what's true *here*.
 
-**Dev environment setup (toolchain versions, Tesseract install, per-OS prerequisites, `pnpm tauri dev`):** [`README.md`](README.md) is canonical. This file documents *project conventions and gotchas* — not setup steps.
+**Dev environment setup (toolchain versions, per-OS prerequisites, `pnpm tauri dev`):** [`README.md`](README.md) is canonical. This file documents *project conventions and gotchas* — not setup steps.
 
 ## What this repo is
 
@@ -92,6 +92,7 @@ Don't let plan and code drift. The audit trail "plan was fixed because X" is muc
 | 6 | Library polish (sidebar, tags, settings, first-run wizard) | Done |
 | 7 | Signing, notarization, auto-updater, release pipeline | Done |
 | 7+ | Release pipeline hardening: SHA pins, build/sign split, env gate, nightly audit, per-release SBOM | Done |
+| 10 | OCR surfaces: Vision + WinOcr + PII redact + Text Actions; full Tesseract cleanse | In progress |
 
 **Known limitation:** Smoke tests on Windows require an interactive desktop session. SSH-only environments can build and lint but can't smoke. CI's `build-app` job verifies the compile across all three OSes; runtime verification is manual.
 
