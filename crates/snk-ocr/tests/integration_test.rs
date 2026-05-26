@@ -13,19 +13,17 @@ use std::path::PathBuf;
 use snk_ocr::backend::OcrBackend;
 
 #[cfg(target_os = "macos")]
-fn make_backend() -> Box<dyn OcrBackend> {
-    Box::new(snk_ocr::vision::VisionBackend::new().expect("Vision backend should construct"))
+fn make_backend() -> Option<Box<dyn OcrBackend>> {
+    Some(Box::new(snk_ocr::vision::VisionBackend::new().expect("Vision backend should construct")))
 }
 
 #[cfg(target_os = "windows")]
-fn make_backend() -> Box<dyn OcrBackend> {
+fn make_backend() -> Option<Box<dyn OcrBackend>> {
     match snk_ocr::winocr::WinOcrBackend::new() {
-        Ok(b) => Box::new(b),
+        Ok(b) => Some(Box::new(b)),
         Err(e) => {
             eprintln!("WinOcrBackend unavailable on this machine; skipping: {e:?}");
-            // Soft-skip — clean exit so CI runners without an English language
-            // pack don't false-fail. Per plan §T12 step 2.
-            std::process::exit(0);
+            None
         }
     }
 }
@@ -40,7 +38,7 @@ fn fixture(name: &str) -> PathBuf {
 
 #[test]
 fn recognize_hello_world_returns_text_and_words() {
-    let b = make_backend();
+    let Some(b) = make_backend() else { return };
     let r = b.recognize(&fixture("hello-world.png")).expect("recognize");
     let text_lower = r.text.to_lowercase();
     assert!(
@@ -69,7 +67,7 @@ fn recognize_hello_world_returns_text_and_words() {
 
 #[test]
 fn engine_version_is_populated() {
-    let b = make_backend();
+    let Some(b) = make_backend() else { return };
     let v = b.engine_version();
     assert!(!v.is_empty(), "engine_version should not be empty");
 }

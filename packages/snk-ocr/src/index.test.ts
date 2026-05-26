@@ -63,11 +63,11 @@ describe('@snk/ocr bindings', () => {
     const status: OcrStatus = {
       backend: 'none',
       version: 'unavailable',
-      last_error: { kind: 'BackendUnavailable', reason: 'no recognizer language' },
+      last_error: { kind: 'backend-unavailable', reason: 'no recognizer language' },
     };
     mockedInvoke.mockResolvedValue(status);
     const s = await ocrStatus();
-    expect(s.last_error?.kind).toBe('BackendUnavailable');
+    expect(s.last_error?.kind).toBe('backend-unavailable');
     expect(s.last_error?.reason).toBe('no recognizer language');
   });
 

@@ -5,6 +5,7 @@ use tokio::sync::mpsc;
 use tracing::{error, info};
 
 use crate::backend::{OcrBackend, OcrResult};
+use crate::OcrError;
 
 pub struct OcrQueue {
     tx: mpsc::UnboundedSender<OcrJob>,
@@ -21,9 +22,10 @@ impl OcrQueue {
         db: Arc<Db>,
         library_root: std::path::PathBuf,
         emit_ready: Arc<dyn Fn(&str) + Send + Sync>,
+        on_error: Arc<dyn Fn(OcrError) + Send + Sync>,
     ) -> Self {
         let (tx, rx) = mpsc::unbounded_channel();
-        tauri::async_runtime::spawn(worker(rx, backend, db, library_root, emit_ready));
+        tauri::async_runtime::spawn(worker(rx, backend, db, library_root, emit_ready, on_error));
         Self { tx }
     }
 
@@ -55,6 +57,7 @@ async fn worker(
     db: Arc<Db>,
     library_root: std::path::PathBuf,
     emit_ready: Arc<dyn Fn(&str) + Send + Sync>,
+    on_error: Arc<dyn Fn(OcrError) + Send + Sync>,
 ) {
     info!(backend = backend.name(), "ocr worker started");
     while let Some(job) = rx.recv().await {
@@ -77,14 +80,21 @@ async fn worker(
                     backend.name(),
                     &backend.engine_version(),
                 ) {
+                    on_error(OcrError::Recognize { detail: format!("persist: {e}") });
                     error!(capture_id = %cap_id, error = %e, "persist ocr failed");
                     continue;
                 }
                 emit(&cap_id);
                 info!(capture_id = %cap_id, chars = out.text.len(), words = out.words.len(), "ocr indexed");
             }
-            Ok(Err(e)) => error!(capture_id = %cap_id, error = ?e, "backend recognize failed"),
-            Err(e) => error!(capture_id = %cap_id, error = %e, "ocr task panicked"),
+            Ok(Err(e)) => {
+                on_error(e.clone());
+                error!(capture_id = %cap_id, error = ?e, "backend recognize failed");
+            }
+            Err(e) => {
+                on_error(OcrError::Recognize { detail: format!("task panicked: {e}") });
+                error!(capture_id = %cap_id, error = %e, "ocr task panicked");
+            }
         }
     }
     info!("ocr worker stopped");

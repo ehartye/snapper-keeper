@@ -51,9 +51,16 @@ impl OcrBackend for WinOcrBackend {
         // canonicalize() returns extended-length namespace paths prefixed with
         // \\?\, which StorageFile::GetFileFromPathAsync rejects with HRESULT
         // 0x800700A1. Strip the prefix before constructing the HSTRING.
+        // \\?\UNC\server\share must become \\server\share (not UNC\server\share).
         let abs_str = abs.to_string_lossy();
-        let stripped = abs_str.strip_prefix(r"\\?\").unwrap_or(&abs_str);
-        let path = HSTRING::from(stripped);
+        let stripped: String = if abs_str.starts_with(r"\\?\UNC\") {
+            format!(r"\\{}", &abs_str[r"\\?\UNC\".len()..])
+        } else if let Some(s) = abs_str.strip_prefix(r"\\?\") {
+            s.to_string()
+        } else {
+            abs_str.into_owned()
+        };
+        let path = HSTRING::from(stripped.as_str());
 
         // Plan amendment (Spike A finding approved 2026-05-26): windows-rs 0.62
         // removed `IAsyncOperation::get()`. Use the inherent `.join()` method

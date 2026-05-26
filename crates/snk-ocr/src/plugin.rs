@@ -14,7 +14,7 @@ pub struct OcrState {
     pub queue: OcrQueue,
     pub backend_name: &'static str,
     pub backend_version: String,
-    pub last_error: std::sync::Mutex<Option<OcrError>>,
+    pub last_error: std::sync::Arc<std::sync::Mutex<Option<OcrError>>>,
 }
 
 #[tauri::command]
@@ -78,12 +78,22 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
                     let backend_version = backend.engine_version();
                     tracing::info!(backend = backend_name, version = %backend_version, "ocr backend ready");
 
-                    let queue = OcrQueue::start(Arc::clone(&backend), Arc::clone(&db), root, emit_ready);
+                    let last_error: std::sync::Arc<std::sync::Mutex<Option<OcrError>>> =
+                        std::sync::Arc::new(std::sync::Mutex::new(None));
+                    let last_error_for_cb = std::sync::Arc::clone(&last_error);
+                    let on_error: Arc<dyn Fn(OcrError) + Send + Sync> =
+                        Arc::new(move |e: OcrError| {
+                            if let Ok(mut g) = last_error_for_cb.lock() {
+                                *g = Some(e);
+                            }
+                        });
+
+                    let queue = OcrQueue::start(Arc::clone(&backend), Arc::clone(&db), root, emit_ready, on_error);
                     app.manage(OcrState {
                         queue,
                         backend_name,
                         backend_version,
-                        last_error: std::sync::Mutex::new(None),
+                        last_error,
                     });
 
                     let db_for_listener = Arc::clone(&db);
@@ -108,7 +118,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
                         queue: OcrQueue::disabled(),
                         backend_name: "none",
                         backend_version: "unavailable".into(),
-                        last_error: std::sync::Mutex::new(Some(e)),
+                        last_error: std::sync::Arc::new(std::sync::Mutex::new(Some(e))),
                     });
                 }
             }
