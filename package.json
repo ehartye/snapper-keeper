@@ -8,6 +8,7 @@
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
     "build": "pnpm -r run build",
+    "build:local": "bash scripts/build-local.sh",
     "tauri": "pnpm --filter @snk/app tauri"
   },
   "devDependencies": {
