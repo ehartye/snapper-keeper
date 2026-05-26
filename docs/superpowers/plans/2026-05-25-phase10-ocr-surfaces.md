@@ -743,7 +743,9 @@ pub fn get(db: &Db, capture_id: &str) -> Result<Option<OcrText>> {
 }
 ```
 
-If `LibraryError::Persist` doesn't exist yet, check `crates/snk-library/src/lib.rs` for the existing error variants and add `Persist { detail: String }` to the enum if needed, marked with the same serde tags as the others.
+If `LibraryError::Persist` doesn't exist yet, add `Persist { detail: String }` to the enum in `crates/snk-library/src/error.rs` (the file where `LibraryError` actually lives — `lib.rs` only re-exports it), marked with the same serde tags as the others.
+
+Plan amendment 2026-05-26: also append a snapshot entry for the new `Persist` variant to `crates/snk-library/tests/library_error_wire_shape.rs`, matching the existing per-variant pattern. The test file's header explicitly states "failing here is intentional; update snapshot when contract changes" — adding a new variant IS a contract change.
 
 **Step 4: Run tests — confirm they pass**
 
@@ -764,7 +766,7 @@ Expected: full suite passes. If anything else (search, fts) breaks, it's likely 
 **Step 6: Commit**
 
 ```bash
-git add crates/snk-library/src/ocr.rs crates/snk-library/src/lib.rs
+git add crates/snk-library/src/ocr.rs crates/snk-library/src/error.rs crates/snk-library/tests/library_error_wire_shape.rs
 git diff --cached
 git commit -m "feat(library): OcrText words_json + engine; OcrWord/BBox types"
 ```
