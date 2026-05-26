@@ -175,7 +175,9 @@ describe('<AboutSection />', () => {
     const link = await screen.findByRole('button', { name: /License/i });
     fireEvent.click(link);
     await waitFor(() => {
-      expect(openUrl).toHaveBeenCalledWith(expect.stringContaining('github.com'));
+      expect(openUrl).toHaveBeenCalledWith(
+        expect.stringContaining('/LICENSE.md'),
+      );
     });
   });
 
