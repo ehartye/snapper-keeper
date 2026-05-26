@@ -97,7 +97,7 @@ Replace the entire contents of `app/src/windows/settings/ClipboardSettings.tsx` 
 
 ```tsx
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { getSetting, setSetting } from '@snk/library';
 import {
@@ -133,6 +133,12 @@ export function ClipboardSettings() {
   });
   const entries = readEntries(rawValue);
 
+  // Mirror entries in a ref so the modal's render closure (which captures
+  // values at modal.custom() invocation time, not on every parent render)
+  // can read fresh entries for the dup check at submit time.
+  const entriesRef = useRef<BlocklistEntry[]>(entries);
+  entriesRef.current = entries;
+
   async function persist(next: BlocklistEntry[]) {
     await setSetting(APP_BLOCKLIST_SETTING_KEY, next);
     await queryClient.invalidateQueries({
@@ -151,9 +157,9 @@ export function ClipboardSettings() {
       title: 'Add excluded app',
       render: ({ close }) => (
         <AddAppForm
-          existing={entries}
+          getExisting={() => entriesRef.current}
           onAdd={(entry) => {
-            void persist([...entries, entry]);
+            void persist([...entriesRef.current, entry]);
             close();
           }}
           onCancel={close}
@@ -170,9 +176,9 @@ export function ClipboardSettings() {
       render: ({ close }) => (
         <ConfirmFrontmostBody
           app={app}
-          existing={entries}
+          getExisting={() => entriesRef.current}
           onConfirm={(entry) => {
-            void persist([...entries, entry]);
+            void persist([...entriesRef.current, entry]);
             close();
           }}
           onCancel={close}
@@ -236,12 +242,15 @@ export function ClipboardSettings() {
 }
 
 interface AddAppFormProps {
-  existing: BlocklistEntry[];
+  // Getter (not array) so the dup check reads the freshest entries at
+  // submit time. The render closure captures props at modal.custom()
+  // invocation time, so a static array prop would be stale.
+  getExisting: () => BlocklistEntry[];
   onAdd: (entry: BlocklistEntry) => void;
   onCancel: () => void;
 }
 
-function AddAppForm({ existing, onAdd, onCancel }: AddAppFormProps) {
+function AddAppForm({ getExisting, onAdd, onCancel }: AddAppFormProps) {
   const [identifier, setIdentifier] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [kind, setKind] = useState<BlocklistEntry['kind']>('macos_bundle_id');
@@ -253,7 +262,7 @@ function AddAppForm({ existing, onAdd, onCancel }: AddAppFormProps) {
       setError('Identifier is required.');
       return;
     }
-    const dup = existing.find((e) => e.identifier === id && e.kind === kind);
+    const dup = getExisting().find((e) => e.identifier === id && e.kind === kind);
     if (dup) {
       setError('Already in the list.');
       return;
@@ -309,18 +318,19 @@ function AddAppForm({ existing, onAdd, onCancel }: AddAppFormProps) {
 
 interface ConfirmFrontmostBodyProps {
   app: SourceApp;
-  existing: BlocklistEntry[];
+  // Same staleness rationale as AddAppForm.
+  getExisting: () => BlocklistEntry[];
   onConfirm: (entry: BlocklistEntry) => void;
   onCancel: () => void;
 }
 
 function ConfirmFrontmostBody({
   app,
-  existing,
+  getExisting,
   onConfirm,
   onCancel,
 }: ConfirmFrontmostBodyProps) {
-  const dup = existing.find(
+  const dup = getExisting().find(
     (e) => e.identifier === app.identifier && e.kind === app.kind,
   );
   return (
