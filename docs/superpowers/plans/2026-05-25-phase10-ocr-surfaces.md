@@ -373,6 +373,18 @@ Delete `vision-spike` afterward. Do NOT commit it.
 - **Plan amendments triggered by Spike B findings (approved 2026-05-26 — already applied in place):**
     1. **T6 Mac dep block** — replaced non-existent feature names `VNImageRequestHandler` / `VNRecognizedTextObservation` (class names, not features) with `VNRequestHandler` / `VNObservation`; added `VNGeometry`, `objc2-core-foundation`, and `NSProcessInfo` (on `objc2-foundation`). See inline plan amendment comment in §T6 Step 1.
     2. **§PR-1 Spike B Step 2** — same dep-block correction so the spike code in the plan compiles if re-run on a Mac.
+- **⚠️ Spike B caveat — Windows-host verification does NOT compile Mac code** (added 2026-05-26 post-Mac-CI catch):
+    Spike B's "resolution check on Windows host" is fundamentally insufficient for verifying Mac-only objc2 code compiles. The build.rs chain (`objc2-exception-helper` → `try_catch.m`) requires a `cc` toolchain for `aarch64-apple-darwin` that doesn't exist on Windows. Cargo silently fails at the build-script step before rustc proper runs.
+
+    **What Windows-host verification DOES prove:** Cargo.toml feature names resolve, dep versions are compatible, crate metadata is valid.
+
+    **What it does NOT prove:** any line of `vision.rs` actually compiles.
+
+    Implementers writing Mac-only objc2/Vision code from a Windows host must treat Mac CI on PR open as the FIRST real compile. Expect at least one iteration of "push, watch Mac CI fail, fix trait imports, push again." Budget for this in time estimates.
+
+    Mitigation in this codebase: spec §6's "Vision per-word bounds API verified via `boundingBoxForRange_error`" remains valid (verified by reading crate source), but the broader "objc2-vision FFI smoke" claim in Spike B must include "compile-verified on Mac" before it can be called done.
+
+    Historical record — PR-2's first Mac CI run (PR #135) caught 3 trait-import errors not surfaced by any Windows-host check: `VNImageRequestHandler::alloc()` needed `use objc2::AnyThread;`; `ProtocolObject::from_ref(...).cast()` was the wrong abstraction (VNRequest is a class, not a protocol) — replaced with `request.as_super().as_super()` via `use objc2::ClassType;`; `Retained::cast()` is deprecated in objc2 0.6 — replaced with `Retained::cast_unchecked`. Fixed in commit `85f034e`.
 - **Plan amendments triggered by Spike A findings (proposed; awaiting team-lead approval per plan-as-source-of-truth protocol):**
     1. **T6 + T8** — pin `windows = "0.62"` (not `0.58`). Plus drop `Foundation_Collections` feature only if unused; spike confirms `Foundation_Collections` is NOT required for the core OCR call path (we never instantiate a generic vector; the API returns `IVectorView<OcrLine>` whose interface is exported by `Media_Ocr`).
     2. **T8 `WinOcrBackend::recognize`** — three diffs vs the plan's pasted code block:
