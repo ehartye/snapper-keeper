@@ -9,8 +9,8 @@ use crate::backend::{OcrBackend, OcrResult};
 use crate::OcrError;
 
 /// Maximum number of OCR jobs queued at once. When full, the oldest
-/// queued job is dropped (and the dropped capture_id emitted via
-/// `OcrQueue::enqueue` return) and the new job takes its slot.
+/// queued job is dropped (its `capture_id` is returned from
+/// `OcrQueue::enqueue` for the caller to emit) and the new job takes its slot.
 ///
 /// 100 = generous enough for bursty timed-capture mode (10 captures/sec
 /// would saturate in 10s); small enough to keep memory bounded. The
@@ -30,6 +30,8 @@ struct OcrJob {
 }
 
 impl OcrQueue {
+    pub const CAPACITY: usize = MAX_QUEUE_SIZE;
+
     pub fn start(
         backend: Arc<dyn OcrBackend>,
         db: Arc<Db>,
@@ -105,9 +107,27 @@ impl OcrQueue {
         dropped
     }
 
-    /// Returns `true` if the queue is at maximum capacity. Used by the
-    /// startup sweep to stop enqueuing before eviction would discard
-    /// items already queued in this sweep pass.
+    /// Enqueue a job only if capacity remains. Returns `false` when full.
+    pub fn enqueue_if_space(&self, capture_id: String, image_path: std::path::PathBuf) -> bool {
+        let was_empty = {
+            let mut q = self.queue.lock().expect("ocr queue mutex poisoned");
+            if q.len() >= MAX_QUEUE_SIZE {
+                return false;
+            }
+            let was_empty = q.is_empty();
+            q.push_back(OcrJob {
+                capture_id,
+                image_path,
+            });
+            was_empty
+        };
+        if was_empty {
+            self.notify.notify_one();
+        }
+        true
+    }
+
+    /// Returns `true` if the queue is at maximum capacity.
     pub fn is_full(&self) -> bool {
         self.queue.lock().expect("ocr queue mutex poisoned").len() >= MAX_QUEUE_SIZE
     }
@@ -276,5 +296,23 @@ mod tests {
         q.enqueue("a".into(), PathBuf::from("x.png"));
         assert_eq!(q.len(), 1);
         assert!(!q.is_empty());
+    }
+
+    #[test]
+    fn enqueue_if_space_refuses_when_full() {
+        let q = make_queue();
+        for i in 0..MAX_QUEUE_SIZE {
+            let dropped = q.enqueue(format!("cap-{i}"), PathBuf::from("x.png"));
+            assert!(dropped.is_none());
+        }
+
+        assert!(
+            !q.enqueue_if_space("overflow".into(), PathBuf::from("y.png")),
+            "enqueue_if_space should refuse to evict when full"
+        );
+        let dropped = q
+            .enqueue("next".into(), PathBuf::from("z.png"))
+            .expect("queue should still contain original oldest item");
+        assert_eq!(dropped, "cap-0");
     }
 }
