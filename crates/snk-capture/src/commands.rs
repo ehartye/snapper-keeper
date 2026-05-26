@@ -1,15 +1,61 @@
+use std::time::Duration;
+
 use snk_library::{plugin::LibraryState, Capture};
 use tauri::{Emitter, Manager, Runtime, State};
 
 use crate::grab::WindowInfo;
+use crate::window_hider::{TauriWindowManager, WindowVisibilityGuard};
 use crate::Result;
+
+const HIDE_OWN_WINDOWS_KEY: &str = "capture.hide_own_windows";
+/// Labels excluded from the visibility guard. The capture overlay
+/// is already hidden by the React frontend before invoking
+/// capture_region (see CaptureOverlay.tsx); we exclude it to avoid
+/// racing the frontend's existing hide.
+const EXCLUDE_LABELS: &[&str] = &["capture-overlay"];
+/// Delay between hiding our windows and grabbing pixels. Lets the
+/// compositor unmap the windows before the screen capture API reads
+/// the framebuffer. 50ms matches what we've seen reliable in the
+/// existing overlay self-hide path.
+const HIDE_SETTLE_DELAY: Duration = Duration::from_millis(50);
+
+fn should_hide_own_windows(db: &snk_library::Db) -> bool {
+    snk_library::settings::get(db, HIDE_OWN_WINDOWS_KEY)
+        .ok()
+        .flatten()
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true)
+}
+
+/// Run `f` with our own windows hidden if the setting is enabled. The
+/// guard restores visibility on drop, so any panic/error in `f` still
+/// leaves the user's windows back up. When the setting is false, `f`
+/// runs unmodified.
+fn with_hidden_own_windows<R: Runtime, T, F>(
+    app: &tauri::AppHandle<R>,
+    db: &snk_library::Db,
+    f: F,
+) -> T
+where
+    F: FnOnce() -> T,
+{
+    if !should_hide_own_windows(db) {
+        return f();
+    }
+    let manager = TauriWindowManager::new(app);
+    let _guard = WindowVisibilityGuard::hide_all(&manager, EXCLUDE_LABELS);
+    std::thread::sleep(HIDE_SETTLE_DELAY);
+    f()
+}
 
 #[tauri::command]
 pub fn capture_full_screen<R: Runtime>(
     state: State<'_, LibraryState>,
     app: tauri::AppHandle<R>,
 ) -> Result<Capture> {
-    let capture = crate::orchestrate::capture_full_screen(&state.db, &state.root)?;
+    let capture = with_hidden_own_windows(&app, &state.db, || {
+        crate::orchestrate::capture_full_screen(&state.db, &state.root)
+    })?;
     let _ = app.emit("capture:saved", &capture.id);
     Ok(capture)
 }
@@ -20,7 +66,9 @@ pub fn capture_window<R: Runtime>(
     app: tauri::AppHandle<R>,
     window_id: u32,
 ) -> Result<Capture> {
-    let capture = crate::orchestrate::capture_window(&state.db, &state.root, window_id)?;
+    let capture = with_hidden_own_windows(&app, &state.db, || {
+        crate::orchestrate::capture_window(&state.db, &state.root, window_id)
+    })?;
     let _ = app.emit("capture:saved", &capture.id);
     Ok(capture)
 }
@@ -35,8 +83,9 @@ pub fn capture_region<R: Runtime>(
     w: u32,
     h: u32,
 ) -> Result<Capture> {
-    let capture =
-        crate::orchestrate::capture_region(&state.db, &state.root, monitor_id, x, y, w, h)?;
+    let capture = with_hidden_own_windows(&app, &state.db, || {
+        crate::orchestrate::capture_region(&state.db, &state.root, monitor_id, x, y, w, h)
+    })?;
     let _ = app.emit("capture:saved", &capture.id);
     Ok(capture)
 }
@@ -102,5 +151,30 @@ mod tests {
         assert_ne!(a, b, "two calls must return different tokens");
         assert!(!a.is_empty());
         assert!(!b.is_empty());
+    }
+
+    #[test]
+    fn should_hide_own_windows_defaults_to_true_when_setting_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = snk_library::Db::open(&dir.path().join("test.db")).unwrap();
+        assert!(should_hide_own_windows(&db));
+    }
+
+    #[test]
+    fn should_hide_own_windows_reads_false_when_setting_false() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = snk_library::Db::open(&dir.path().join("test.db")).unwrap();
+        snk_library::settings::set(&db, HIDE_OWN_WINDOWS_KEY, &serde_json::Value::Bool(false))
+            .unwrap();
+        assert!(!should_hide_own_windows(&db));
+    }
+
+    #[test]
+    fn should_hide_own_windows_reads_true_when_setting_true() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = snk_library::Db::open(&dir.path().join("test.db")).unwrap();
+        snk_library::settings::set(&db, HIDE_OWN_WINDOWS_KEY, &serde_json::Value::Bool(true))
+            .unwrap();
+        assert!(should_hide_own_windows(&db));
     }
 }
