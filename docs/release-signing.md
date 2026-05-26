@@ -1,5 +1,11 @@
 # Release Signing Setup
 
+## Where signing lives in the build system
+
+`app/src-tauri/tauri.conf.json` contains no signing commands. Production code signing happens entirely in the release workflow's per-platform sign jobs (`sign-mac-arm`, `sign-mac-x64`, `sign-win-x64`), which download the unsigned artifact and invoke `codesign` / `dotnet sign` directly. This keeps the base config buildable without secrets — `pnpm build:local` (see [`README.md`](../README.md#build-a-local-installer-unsigned)) produces a working unsigned installer on any contributor's machine.
+
+The minisign signature on the updater payload is also added in the sign jobs (using the `TAURI_SIGNING_PRIVATE_KEY` secret), not at build time. The build job sets `createUpdaterArtifacts: false` via inline `--config` overlay; the sign jobs re-create the updater payload (`<app>.tar.gz` on macOS, the signed `.exe` itself on Windows) and run `minisign -S` on it.
+
 ## Ed25519 updater key pair
 
 The Tauri updater uses Ed25519 signatures to verify update payloads. The private key signs `latest.json` during CI; the public key is embedded in `tauri.conf.json`.
