@@ -24,6 +24,10 @@ const TRAY_RISO_PNG: &[u8] = include_bytes!("../icons/sk-riso.png");
 const TRAY_CONSTRUCTIVIST_PNG: &[u8] = include_bytes!("../icons/sk-constructivist.png");
 const TRAY_ATOMIC_PNG: &[u8] = include_bytes!("../icons/sk-atomic.png");
 const PLUGIN_SETUP_FAILED_EVENT: &str = "plugin:setup-failed";
+#[cfg(target_os = "macos")]
+const HOTKEY_MOD: &str = "Cmd";
+#[cfg(not(target_os = "macos"))]
+const HOTKEY_MOD: &str = "Ctrl";
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -149,6 +153,10 @@ fn tray_icon_for(family: &str) -> Image<'static> {
     Image::new_owned(img.into_raw(), w, h)
 }
 
+fn tray_hotkey_label(action: &str, key: &str) -> String {
+    format!("{action}\t{HOTKEY_MOD}+Shift+{key}")
+}
+
 #[tauri::command]
 fn set_tray_theme<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -221,35 +229,35 @@ fn main() {
             let capture_region = MenuItem::with_id(
                 app,
                 "tray:capture-region",
-                "Capture region\tCtrl+Shift+4",
+                tray_hotkey_label("Capture region", "4"),
                 true,
                 None::<&str>,
             )?;
             let capture_window = MenuItem::with_id(
                 app,
                 "tray:capture-window",
-                "Capture window\tCtrl+Shift+5",
+                tray_hotkey_label("Capture window", "5"),
                 true,
                 None::<&str>,
             )?;
             let capture_screen = MenuItem::with_id(
                 app,
                 "tray:capture-full-screen",
-                "Capture screen\tCtrl+Shift+3",
+                tray_hotkey_label("Capture screen", "3"),
                 true,
                 None::<&str>,
             )?;
             let capture_timed = MenuItem::with_id(
                 app,
                 "tray:capture-timed",
-                "Timed (5s)\tCtrl+Shift+6",
+                tray_hotkey_label("Timed (5s)", "6"),
                 true,
                 None::<&str>,
             )?;
             let clipboard_hist = MenuItem::with_id(
                 app,
                 "tray:clipboard-history",
-                "Clipboard history\tCtrl+Shift+V",
+                tray_hotkey_label("Clipboard history", "V"),
                 true,
                 None::<&str>,
             )?;

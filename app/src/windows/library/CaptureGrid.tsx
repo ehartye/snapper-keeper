@@ -7,6 +7,7 @@ import type { Capture, ListCapturesQuery } from '@snk/library';
 
 import { captureAssetUrl } from '../../lib/assetUrl';
 import { queryKeys } from '../../lib/queryKeys';
+import { formatShortcutForPlatform } from '../../lib/shortcuts';
 import { Thumbnail } from './Thumbnail';
 
 interface Props {
@@ -99,7 +100,7 @@ export function CaptureGrid({ query }: Props) {
         </div>
         {!inTrash && (
           <div className="text-sm text-fg-muted max-w-xs">
-            Press <kbd className="font-display text-xs bg-surface border-2 border-border px-1.5 py-0.5 rounded mx-1">Ctrl+Shift+3</kbd> or use the tray menu to capture.
+            Press <kbd className="font-display text-xs bg-surface border-2 border-border px-1.5 py-0.5 rounded mx-1">{formatShortcutForPlatform('CmdOrCtrl+Shift+3')}</kbd> or use the tray menu to capture.
           </div>
         )}
       </div>

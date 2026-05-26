@@ -2,17 +2,18 @@ import { useState, type ReactNode } from 'react';
 
 import { setSetting } from '@snk/library';
 
+import { formatShortcutForPlatform } from '../../lib/shortcuts';
 import { THEME_FAMILIES, useTheme, type ThemeFamily, type ThemeId } from '../../lib/theme';
 
 type Step = 'welcome' | 'theme' | 'hotkeys' | 'library' | 'done';
 
 const DEFAULT_HOTKEYS = [
-  { action: 'Capture region', chord: 'Ctrl+Shift+4' },
-  { action: 'Capture window', chord: 'Ctrl+Shift+5' },
-  { action: 'Capture screen', chord: 'Ctrl+Shift+3' },
-  { action: 'Timed capture', chord: 'Ctrl+Shift+6' },
-  { action: 'Clipboard history', chord: 'Ctrl+Shift+V' },
-  { action: 'Open library', chord: 'Ctrl+Shift+L' },
+  { action: 'Capture region', chord: 'CmdOrCtrl+Shift+4' },
+  { action: 'Capture window', chord: 'CmdOrCtrl+Shift+5' },
+  { action: 'Capture screen', chord: 'CmdOrCtrl+Shift+3' },
+  { action: 'Timed capture', chord: 'CmdOrCtrl+Shift+6' },
+  { action: 'Clipboard history', chord: 'CmdOrCtrl+Shift+V' },
+  { action: 'Open library', chord: 'CmdOrCtrl+Shift+L' },
 ];
 
 interface Props {
@@ -120,7 +121,7 @@ export function FirstRunWizard({ onComplete }: Props) {
                 <div key={hk.action} className="flex justify-between px-4 py-2.5">
                   <span className="text-sm text-fg">{hk.action}</span>
                   <kbd className="text-xs font-display bg-surface text-fg px-2 py-0.5 rounded border border-border">
-                    {hk.chord}
+                    {formatShortcutForPlatform(hk.chord)}
                   </kbd>
                 </div>
               ))}
@@ -168,8 +169,8 @@ export function FirstRunWizard({ onComplete }: Props) {
               all set!
             </h2>
             <p className="text-sm text-fg-muted">
-              Try pressing <kbd className="font-display text-[10px] bg-bg-soft border border-border px-1.5 py-0.5 rounded">Ctrl+Shift+4</kbd> for region capture, or{' '}
-              <kbd className="font-display text-[10px] bg-bg-soft border border-border px-1.5 py-0.5 rounded">Ctrl+Shift+V</kbd> for clipboard history.
+              Try pressing <kbd className="font-display text-[10px] bg-bg-soft border border-border px-1.5 py-0.5 rounded">{formatShortcutForPlatform('CmdOrCtrl+Shift+4')}</kbd> for region capture, or{' '}
+              <kbd className="font-display text-[10px] bg-bg-soft border border-border px-1.5 py-0.5 rounded">{formatShortcutForPlatform('CmdOrCtrl+Shift+V')}</kbd> for clipboard history.
             </p>
             <PrimaryButton onClick={finish}>start using snapper-keeper</PrimaryButton>
           </div>
