@@ -1133,11 +1133,10 @@ pub mod queue;
 // Both still reference crate::sidecar::* internally. Full deletion happens in T13.
 mod sidecar;
 
-#[cfg(target_os = "macos")]
-pub mod vision;
-
-#[cfg(target_os = "windows")]
-pub mod winocr;
+// `vision` and `winocr` modules are declared by T7 and T8 respectively
+// (each adds its own `#[cfg(target_os = "...")] pub mod ...;` line here
+// alongside creating the source file). T5 does NOT declare them — would
+// fail `cargo build` because the source files don't exist yet.
 
 pub use backend::{OcrBackend, OcrResult};
 pub use error::OcrError;
@@ -1265,6 +1264,7 @@ git commit -m "chore(ocr): swap deps — drop Tesseract sidecar crates, add objc
 
 **Files:**
 - Create: `crates/snk-ocr/src/vision.rs`
+- Modify: `crates/snk-ocr/src/lib.rs` — add `#[cfg(target_os = "macos")] pub mod vision;` (plan amendment 2026-05-26: T5 left this declaration to T7 so the file-vs-declaration order is consistent)
 
 **Step 1: Implement the backend**
 
@@ -1457,6 +1457,7 @@ git commit -m "feat(ocr): VisionBackend — VNRecognizeTextRequest via objc2-vis
 
 **Files:**
 - Create: `crates/snk-ocr/src/winocr.rs`
+- Modify: `crates/snk-ocr/src/lib.rs` — add `#[cfg(target_os = "windows")] pub mod winocr;` (plan amendment 2026-05-26: T5 left this declaration to T8 so the file-vs-declaration order is consistent)
 
 **Step 1: Implement the backend**
 
