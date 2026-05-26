@@ -7,6 +7,7 @@ export const CAPTURE_FULL_SCREEN_EVENT = 'hotkey:capture-full-screen';
 export const CAPTURE_REGION_EVENT = 'hotkey:capture-region';
 export const CAPTURE_WINDOW_EVENT = 'hotkey:capture-window';
 export const CAPTURE_TIMED_EVENT = 'hotkey:capture-timed';
+export * from './generated/errors';
 
 export function captureFullScreen(): Promise<Capture> {
   return invoke<Capture>('plugin:snk-capture|capture_full_screen');

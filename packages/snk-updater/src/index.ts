@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type { UpdateStatus } from './types';
 
 export * from './types';
+export * from './generated/errors';
 
 export function checkForUpdate(): Promise<UpdateStatus> {
   return invoke<UpdateStatus>('plugin:snk-updater|check_for_update');

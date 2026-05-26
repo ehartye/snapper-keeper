@@ -27,6 +27,13 @@ jobs:
       - name: "Verify TS theme keys match Rust tray-icon match arms"
         run: bash scripts/verify-theme-keys.sh
 
+  verify-csp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: "Verify CSP allows both http:// and https:// loopback protocols"
+        run: bash scripts/verify-csp.sh
+
   lint-typecheck:
     runs-on: ubuntu-latest
     steps:
@@ -76,6 +83,10 @@ jobs:
       - run: cargo fmt -- --check
       - run: cargo clippy --workspace --exclude snapper-keeper-app -- -D warnings
       - run: cargo test --workspace --exclude snapper-keeper-app
+      - name: Verify generated TS bindings from Rust types
+        run: bash scripts/verify-ts-bindings.sh
+      - name: Verify Result<_, String> allowlist
+        run: bash scripts/verify-string-result-allowlist.sh
 
       # Cross-plugin internals are off-limits — consumers must use the
       # public re-exports from `snk_library::*`, not `snk_library::plugin::*`.

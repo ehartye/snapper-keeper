@@ -12,5 +12,5 @@ pub mod vision;
 pub mod winocr;
 
 pub use backend::{OcrBackend, OcrResult};
-pub use error::OcrError;
+pub use error::{OcrError, Result};
 pub use plugin::init;

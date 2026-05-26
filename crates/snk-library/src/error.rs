@@ -2,8 +2,13 @@ use std::path::Path;
 
 use serde::Serialize;
 use thiserror::Error;
+use ts_rs::TS;
 
-#[derive(Error, Debug, Serialize)]
+#[derive(Error, Debug, Serialize, TS)]
+#[ts(
+    export,
+    export_to = "../../../packages/snk-library/src/generated/errors.ts"
+)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum LibraryError {
     #[error("database error: {message}")]

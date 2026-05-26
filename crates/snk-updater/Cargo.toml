@@ -35,3 +35,4 @@ thiserror.workspace = true
 tracing.workspace = true
 tokio.workspace = true
 chrono.workspace = true
+ts-rs.workspace = true
