@@ -57,8 +57,46 @@ esac
 
 echo "build-local: OS=$OS  TARGET=$TARGET  BUNDLES=$BUNDLES"
 
-# --- Pre-build (Windows only — task 4) ---
-# TODO(task-4): Tesseract resolver + copy + EXIT trap
+# --- Pre-build (Windows only) ---
+if [[ "$OS" == "windows" ]]; then
+  # Install the EXIT trap BEFORE copying, so an interrupted build cleans up.
+  # Preserves .placeholder so the bundle resource glob continues to match in dev.
+  cleanup_tesseract() {
+    if [[ -d "app/src-tauri/resources/tesseract" ]]; then
+      find "app/src-tauri/resources/tesseract" -mindepth 1 ! -name '.placeholder' -delete 2>/dev/null || true
+    fi
+  }
+  trap cleanup_tesseract EXIT
+
+  # Resolve a Tesseract source dir using the same resolver order as
+  # snk-ocr/sidecar.rs at runtime. Both Program Files locations are
+  # checked because the runtime resolver also checks both (older /
+  # 32-bit UB-Mannheim installers landed in Program Files (x86)).
+  TESSERACT_BIN=""
+  if [[ -n "${SNK_TESSERACT_PATH:-}" && -x "$SNK_TESSERACT_PATH" ]]; then
+    TESSERACT_BIN="$SNK_TESSERACT_PATH"
+  elif command -v tesseract >/dev/null 2>&1; then
+    TESSERACT_BIN="$(command -v tesseract)"
+  elif [[ -x "/c/Program Files/Tesseract-OCR/tesseract.exe" ]]; then
+    TESSERACT_BIN="/c/Program Files/Tesseract-OCR/tesseract.exe"
+  elif [[ -x "/c/Program Files (x86)/Tesseract-OCR/tesseract.exe" ]]; then
+    TESSERACT_BIN="/c/Program Files (x86)/Tesseract-OCR/tesseract.exe"
+  fi
+
+  if [[ -z "$TESSERACT_BIN" ]]; then
+    echo "Tesseract not found. Install via 'winget install UB-Mannheim.TesseractOCR' or 'choco install tesseract' (see README -> Prerequisites)." >&2
+    echo "Set SNK_TESSERACT_PATH to override." >&2
+    exit 1
+  fi
+
+  TESSERACT_DIR="$(dirname "$TESSERACT_BIN")"
+  echo "build-local: bundling Tesseract from $TESSERACT_DIR"
+
+  mkdir -p "app/src-tauri/resources/tesseract"
+  # Copy everything from the install dir; -p preserves attributes.
+  # Trailing /. on the source ensures contents-of (not the dir itself) are copied.
+  cp -Rp "$TESSERACT_DIR/." "app/src-tauri/resources/tesseract/"
+fi
 
 # --- Build ---
 echo "build-local: invoking pnpm tauri build"
