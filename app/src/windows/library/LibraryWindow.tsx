@@ -16,6 +16,7 @@ import {
 import { CLIPBOARD_HISTORY_EVENT, CLIPBOARD_POPUP_SHOW_EVENT, showPopup } from '@snk/clipboard';
 import { getSetting } from '@snk/library';
 
+import { useModal } from '../../components/Modal';
 import { queryKeys } from '../../lib/queryKeys';
 import { CaptureGrid } from './CaptureGrid';
 import { ClipboardList } from './ClipboardList';
@@ -24,8 +25,15 @@ import { SearchBar } from './SearchBar';
 import { Sidebar } from './Sidebar';
 import type { SidebarSelection } from './Sidebar';
 
+interface PluginSetupFailedPayload {
+  pluginName: string;
+  panicMessage: string;
+  diagnosticsMarkdown: string;
+}
+
 export function LibraryWindow() {
   const queryClient = useQueryClient();
+  const modal = useModal();
   const [selection, setSelection] = useState<SidebarSelection>({
     type: 'captures',
     label: 'All',
@@ -78,6 +86,48 @@ export function LibraryWindow() {
       .catch((e) => console.error('library capture:saved listener failed', e));
     return () => unlisten?.();
   }, [refreshCaptures]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen<PluginSetupFailedPayload>('plugin:setup-failed', ({ payload }) => {
+      modal.custom({
+        title: `Plugin "${payload.pluginName}" failed to start`,
+        render: ({ close }) => (
+          <div className="space-y-4">
+            <p className="text-sm text-fg">
+              Plugin {payload.pluginName} failed to start — please file a bug.
+            </p>
+            <pre className="text-xs whitespace-pre-wrap break-words p-2 bg-surface border border-border">
+              {payload.panicMessage}
+            </pre>
+            <div className="flex justify-end gap-2">
+              <button
+                className="font-display text-[11px] uppercase tracking-widest px-3 py-1.5 border-2 border-border bg-surface hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_0_var(--border)] transition-transform"
+                onClick={() => {
+                  void navigator.clipboard.writeText(payload.diagnosticsMarkdown).catch((e) => {
+                    console.error('copy diagnostics failed', e);
+                  });
+                }}
+              >
+                Copy diagnostics
+              </button>
+              <button
+                className="font-display text-[11px] uppercase tracking-widest px-3 py-1.5 border-2 border-border bg-primary text-bg hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_0_var(--border)] transition-transform"
+                onClick={close}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        ),
+      });
+    })
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch((e) => console.error('library plugin:setup-failed listener failed', e));
+    return () => unlisten?.();
+  }, [modal]);
 
   const showToolbar = useCallback(async (captureId: string) => {
     const toolbar = await WebviewWindow.getByLabel('capture-toolbar');
