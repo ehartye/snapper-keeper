@@ -186,10 +186,9 @@ fn startup_sweep<R: Runtime>(app: tauri::AppHandle<R>, db: Arc<snk_library::Db>)
                     );
                     break;
                 }
-                let dropped = ocr.queue.enqueue(
-                    capture_id,
-                    std::path::PathBuf::from(file_path),
-                );
+                let dropped = ocr
+                    .queue
+                    .enqueue(capture_id, std::path::PathBuf::from(file_path));
                 if let Some(dropped_id) = dropped {
                     emit_dropped(&app, &dropped_id);
                 }

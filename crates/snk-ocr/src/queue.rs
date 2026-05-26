@@ -81,11 +81,7 @@ impl OcrQueue {
     /// queued job is dropped to make room. Returns the dropped
     /// `capture_id` if a drop occurred (caller should emit
     /// `ocr:dropped` event so the UI can surface the backlog overflow).
-    pub fn enqueue(
-        &self,
-        capture_id: String,
-        image_path: std::path::PathBuf,
-    ) -> Option<String> {
+    pub fn enqueue(&self, capture_id: String, image_path: std::path::PathBuf) -> Option<String> {
         let (dropped, was_empty) = {
             let mut q = self.queue.lock().expect("ocr queue mutex poisoned");
             let was_empty = q.is_empty();
