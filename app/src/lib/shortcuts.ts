@@ -1,6 +1,13 @@
 function isMacPlatform() {
   if (typeof navigator === 'undefined') return false;
-  return /Mac|iPhone|iPad|iPod/.test(navigator.platform) || /\bMac OS\b/.test(navigator.userAgent);
+  const uaDataPlatform = (
+    navigator as Navigator & { userAgentData?: { platform?: string } }
+  ).userAgentData?.platform;
+  return (
+    /mac/i.test(uaDataPlatform ?? '') ||
+    /Mac|iPhone|iPad|iPod/.test(navigator.platform) ||
+    /\bMac OS\b/.test(navigator.userAgent)
+  );
 }
 
 export function formatShortcutForPlatform(chord: string, mac = isMacPlatform()) {
