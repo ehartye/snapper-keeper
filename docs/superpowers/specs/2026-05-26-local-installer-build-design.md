@@ -1,8 +1,16 @@
 # Local installer build (unsigned) — design
 
 **Date:** 2026-05-26
-**Status:** Draft (pending implementation plan)
+**Status:** Implemented (PR #141). Spec amended after implementation — see Phase 10 amendment below.
 **Scope:** Make `pnpm build:local` produce an installer locally on Windows and macOS that is production-fidelity in every dimension except code signing. Remove the dead-weight `bundle.windows.signCommand` from base config and simplify the CI release workflow accordingly.
+
+> ### Phase 10 amendment (2026-05-26)
+>
+> Phase 10 ([PR #135](https://github.com/ehartye/snapper-keeper/pull/135)) merged into `main` after this spec was written but before the implementation finished. Phase 10 removed Tesseract entirely from the project, replacing it with Apple Vision (macOS) and Windows.Media.Ocr (Windows) — both native OS APIs requiring no bundling.
+>
+> Sections below that describe **Tesseract bundling on Windows as production-parity** (the Approach section, the Per-OS behavior table, the Windows pre-build flow, parts of the Validation plan) are **historical** — they reflect the design at the time of writing. The shipped implementation does NOT bundle Tesseract; `scripts/build-local.sh` has no pre-build step on either OS. Production parity holds for everything else.
+>
+> The plan at [`docs/superpowers/plans/2026-05-26-local-installer-build.md`](../plans/2026-05-26-local-installer-build.md) is the source of truth post-merge — see its `## Plan amendment 2026-05-26 — Phase 10 merged mid-flight` section and Tasks 10 + 11 for the cleanup details.
 
 ## Motivation
 
