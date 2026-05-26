@@ -129,25 +129,6 @@ mod tests {
     }
 
     #[test]
-    fn v005_drops_sensitive_column_from_clipboard_items() {
-        let mut conn = Connection::open_in_memory().unwrap();
-        migrate(&mut conn).expect("migrations apply");
-
-        let column_names: Vec<String> = conn
-            .prepare("PRAGMA table_info(clipboard_items)")
-            .unwrap()
-            .query_map([], |row| row.get::<_, String>(1))
-            .unwrap()
-            .collect::<rusqlite::Result<_>>()
-            .unwrap();
-
-        assert!(
-            !column_names.iter().any(|c| c == "sensitive"),
-            "sensitive column should be dropped by V005; got columns {column_names:?}"
-        );
-    }
-
-    #[test]
     fn v006_adds_words_json_and_engine_to_ocr_text() {
         let mut conn = Connection::open_in_memory().unwrap();
         migrate(&mut conn).expect("apply migrations");
@@ -200,6 +181,25 @@ mod tests {
             )
             .unwrap();
         assert_eq!(idx_pending, 1);
+    }
+
+    #[test]
+    fn v005_drops_sensitive_column_from_clipboard_items() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate(&mut conn).expect("migrations apply");
+
+        let column_names: Vec<String> = conn
+            .prepare("PRAGMA table_info(clipboard_items)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+
+        assert!(
+            !column_names.iter().any(|c| c == "sensitive"),
+            "sensitive column should be dropped by V005; got columns {column_names:?}"
+        );
     }
 
     #[test]

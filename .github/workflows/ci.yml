@@ -27,6 +27,13 @@ jobs:
       - name: "Verify TS theme keys match Rust tray-icon match arms"
         run: bash scripts/verify-theme-keys.sh
 
+  verify-csp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: "Verify CSP allows both http:// and https:// loopback protocols"
+        run: bash scripts/verify-csp.sh
+
   lint-typecheck:
     runs-on: ubuntu-latest
     steps:
@@ -65,6 +72,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
+          toolchain: stable
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
       - name: Install Linux Tauri deps
@@ -76,6 +84,10 @@ jobs:
       - run: cargo fmt -- --check
       - run: cargo clippy --workspace --exclude snapper-keeper-app -- -D warnings
       - run: cargo test --workspace --exclude snapper-keeper-app
+      - name: Verify generated TS bindings from Rust types
+        run: bash scripts/verify-ts-bindings.sh
+      - name: Verify Result<_, String> allowlist
+        run: bash scripts/verify-string-result-allowlist.sh
 
       # Cross-plugin internals are off-limits — consumers must use the
       # public re-exports from `snk_library::*`, not `snk_library::plugin::*`.
@@ -92,6 +104,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
+          toolchain: stable
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
       - name: Install Linux Tauri deps
@@ -143,6 +156,8 @@ jobs:
           node-version: 20
           cache: pnpm
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: stable
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
       - name: Install Linux deps
         if: matrix.os == 'ubuntu-latest'
@@ -160,6 +175,7 @@ jobs:
     # Hosted macOS runners do not provide a stable display/WebKit WebDriver path.
     needs: [lint-typecheck, rust-test]
     runs-on: windows-latest
+    timeout-minutes: 12
     permissions:
       contents: read
     steps:

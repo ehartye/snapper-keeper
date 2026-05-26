@@ -5,25 +5,39 @@ import { listen } from '@tauri-apps/api/event';
 import { availableMonitors, cursorPosition, getCurrentWindow } from '@tauri-apps/api/window';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 
+import { ModalProvider } from '../../components/Modal';
 import { LibraryWindow } from './LibraryWindow';
 import { renderWithQuery } from '../../test/renderWithQuery';
 
 const mockedInvoke = vi.mocked(invoke);
 
 describe('<LibraryWindow />', () => {
+  const renderLibraryWindow = () =>
+    renderWithQuery(
+      <ModalProvider>
+        <LibraryWindow />
+      </ModalProvider>,
+    );
+
   beforeEach(() => {
     mockedInvoke.mockReset().mockResolvedValue([]);
+    const existing = document.getElementById('modal-root');
+    if (!existing) {
+      const root = document.createElement('div');
+      root.id = 'modal-root';
+      document.body.appendChild(root);
+    }
   });
 
   it('renders the header logotype and capture button', async () => {
-    renderWithQuery(<LibraryWindow />);
+    renderLibraryWindow();
     expect(screen.getByText('snapper')).toBeInTheDocument();
     expect(screen.getByText('keeper')).toBeInTheDocument();
     expect(screen.getByText(/Snap!/i)).toBeInTheDocument();
   });
 
   it('registers an onCloseRequested listener for hide-to-tray', async () => {
-    renderWithQuery(<LibraryWindow />);
+    renderLibraryWindow();
     await waitFor(() => {
       expect(getCurrentWindow().onCloseRequested).toHaveBeenCalled();
     });
@@ -49,7 +63,7 @@ describe('<LibraryWindow />', () => {
       return Promise.resolve([]);
     });
 
-    renderWithQuery(<LibraryWindow />);
+    renderLibraryWindow();
     await act(async () => {
       fireEvent.click(screen.getByText(/Snap!/i));
     });
@@ -59,7 +73,7 @@ describe('<LibraryWindow />', () => {
   });
 
   it('subscribes to the capture and clipboard hotkey events', async () => {
-    renderWithQuery(<LibraryWindow />);
+    renderLibraryWindow();
     await waitFor(() => {
       const calls = vi.mocked(listen).mock.calls.map((c) => c[0]);
       for (const event of [
@@ -126,7 +140,7 @@ describe('<LibraryWindow />', () => {
       return Promise.resolve([]);
     });
 
-    renderWithQuery(<LibraryWindow />);
+    renderLibraryWindow();
     await waitFor(() => expect(regionHandler).not.toBeNull());
 
     await act(async () => regionHandler!({ payload: undefined }));
@@ -146,5 +160,35 @@ describe('<LibraryWindow />', () => {
         scaleFactor: 1.5,
       });
     });
+  });
+
+  it('shows a plugin startup failure modal with copy diagnostics action', async () => {
+    let pluginSetupFailedHandler: ((e: { payload: unknown }) => void) | null = null;
+    vi.mocked(listen).mockImplementation((event, handler) => {
+      if (event === 'plugin:setup-failed') {
+        pluginSetupFailedHandler = handler as typeof pluginSetupFailedHandler;
+      }
+      return Promise.resolve(() => {});
+    });
+
+    renderLibraryWindow();
+    await waitFor(() => expect(pluginSetupFailedHandler).not.toBeNull());
+
+    await act(async () => {
+      pluginSetupFailedHandler!({
+        payload: {
+          pluginName: 'snk-library',
+          panicMessage: 'simulated setup panic',
+          diagnosticsMarkdown:
+            '## Plugin setup panic\n- Plugin: `snk-library`\n- Panic: `simulated setup panic`',
+        },
+      });
+    });
+
+    expect(screen.getByText('Plugin "snk-library" failed to start')).toBeInTheDocument();
+    expect(
+      screen.getByText('Plugin snk-library failed to start — please file a bug.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy diagnostics' })).toBeInTheDocument();
   });
 });

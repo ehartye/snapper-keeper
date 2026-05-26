@@ -1,7 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import type { OcrError } from './generated/errors';
 
 export const OCR_READY_EVENT = 'ocr:ready';
+export * from './generated/errors';
 
 export interface BBox {
   x: number;
@@ -20,7 +22,7 @@ export interface OcrWord {
 export interface OcrStatus {
   backend: string;
   version: string;
-  last_error: { kind: string; [key: string]: unknown } | null;
+  last_error: OcrError | null;
 }
 
 export function getOcrWords(captureId: string): Promise<OcrWord[]> {

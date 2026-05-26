@@ -53,8 +53,8 @@ impl OcrBackend for WinOcrBackend {
         // 0x800700A1. Strip the prefix before constructing the HSTRING.
         // \\?\UNC\server\share must become \\server\share (not UNC\server\share).
         let abs_str = abs.to_string_lossy();
-        let stripped: String = if abs_str.starts_with(r"\\?\UNC\") {
-            format!(r"\\{}", &abs_str[r"\\?\UNC\".len()..])
+        let stripped: String = if let Some(s) = abs_str.strip_prefix(r"\\?\UNC\") {
+            format!(r"\\{s}")
         } else if let Some(s) = abs_str.strip_prefix(r"\\?\") {
             s.to_string()
         } else {

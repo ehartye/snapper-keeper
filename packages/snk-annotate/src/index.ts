@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type { Capture } from '@snk/library';
 
 export * from './types';
+export * from './generated/errors';
 
 // Editable annotation state, serialized into captures.annotation_state.
 // The Rust side stores this verbatim — the schema lives here.

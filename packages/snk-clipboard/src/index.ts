@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type { ClipboardItem, ListClipboardQuery, CaretPosition, SourceApp } from './types';
 
 export * from './types';
+export * from './generated/errors';
 
 export const CLIPBOARD_HISTORY_EVENT = 'hotkey:clipboard-history';
 export const CLIPBOARD_POPUP_SHOW_EVENT = 'clipboard-popup:show';

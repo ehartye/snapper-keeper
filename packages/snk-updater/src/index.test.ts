@@ -20,9 +20,17 @@ describe('@snk/updater bindings', () => {
   });
 
   it('getUpdateStatus returns the status struct', async () => {
-    mockedInvoke.mockResolvedValue({ kind: 'available', version: '1.2.3' });
+    mockedInvoke.mockResolvedValue({
+      kind: 'available',
+      version: '1.2.3',
+      urgency: 'normal',
+    });
     const s = await getUpdateStatus();
-    expect(s).toEqual({ kind: 'available', version: '1.2.3' });
+    expect(s).toEqual({
+      kind: 'available',
+      version: '1.2.3',
+      urgency: 'normal',
+    });
     expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-updater|get_update_status');
   });
 });
