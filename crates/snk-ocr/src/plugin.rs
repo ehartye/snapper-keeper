@@ -33,7 +33,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
                 }
             }
 
-            let queue = OcrQueue::start(Arc::clone(&db), root);
+            // T9 transition: queue is disabled until T10 wires real backend selection.
+            let queue = OcrQueue::disabled();
+            let _ = (Arc::clone(&db), root);
             app.manage(OcrState { queue });
 
             // Re-bind only what the listener closure captures.
@@ -49,9 +51,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
                 match snk_library::captures::get(&db_for_listener, &capture_id) {
                     Ok(capture) => {
                         let image_path = std::path::PathBuf::from(&capture.file_path);
-                        let language = "eng".to_string();
                         if let Some(ocr) = app_handle.try_state::<OcrState>() {
-                            ocr.queue.enqueue(capture_id, image_path, language);
+                            ocr.queue.enqueue(capture_id, image_path);
                         }
                     }
                     Err(e) => {

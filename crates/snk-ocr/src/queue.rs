@@ -4,7 +4,7 @@ use snk_library::Db;
 use tokio::sync::mpsc;
 use tracing::{error, info};
 
-use crate::sidecar;
+use crate::backend::{OcrBackend, OcrResult};
 
 pub struct OcrQueue {
     tx: mpsc::UnboundedSender<OcrJob>,
@@ -13,26 +13,30 @@ pub struct OcrQueue {
 struct OcrJob {
     capture_id: String,
     image_path: std::path::PathBuf,
-    language: String,
 }
 
 impl OcrQueue {
-    pub fn start(db: Arc<Db>, library_root: std::path::PathBuf) -> Self {
+    pub fn start(
+        backend: Arc<dyn OcrBackend>,
+        db: Arc<Db>,
+        library_root: std::path::PathBuf,
+        emit_ready: Arc<dyn Fn(&str) + Send + Sync>,
+    ) -> Self {
         let (tx, rx) = mpsc::unbounded_channel();
-        tauri::async_runtime::spawn(worker(rx, db, library_root));
+        tauri::async_runtime::spawn(worker(rx, backend, db, library_root, emit_ready));
         Self { tx }
     }
 
-    pub fn enqueue(&self, capture_id: String, image_path: std::path::PathBuf, language: String) {
-        if self
-            .tx
-            .send(OcrJob {
-                capture_id,
-                image_path,
-                language,
-            })
-            .is_err()
-        {
+    // Used in the T9→T10 transition (plugin can't yet construct a backend) and as a
+    // runtime fallback in T10 when backend construction fails. enqueue() becomes a
+    // no-op because the receiver is dropped — tx.send returns Err and is logged.
+    pub fn disabled() -> Self {
+        let (tx, _rx) = mpsc::unbounded_channel();
+        Self { tx }
+    }
+
+    pub fn enqueue(&self, capture_id: String, image_path: std::path::PathBuf) {
+        if self.tx.send(OcrJob { capture_id, image_path }).is_err() {
             error!("ocr queue closed");
         }
     }
@@ -40,71 +44,56 @@ impl OcrQueue {
 
 async fn worker(
     mut rx: mpsc::UnboundedReceiver<OcrJob>,
+    backend: Arc<dyn OcrBackend>,
     db: Arc<Db>,
     library_root: std::path::PathBuf,
+    emit_ready: Arc<dyn Fn(&str) + Send + Sync>,
 ) {
-    info!("ocr worker started");
+    info!(backend = backend.name(), "ocr worker started");
     while let Some(job) = rx.recv().await {
-        let OcrJob {
-            capture_id,
-            image_path,
-            language,
-        } = job;
-        let full_path = library_root.join(&image_path);
-        let db_clone = db.clone();
-        let lang_for_blocking = language.clone();
+        let full_path = library_root.join(&job.image_path);
+        let backend_clone = Arc::clone(&backend);
+        let db_clone = Arc::clone(&db);
+        let cap_id = job.capture_id.clone();
+        let emit = Arc::clone(&emit_ready);
 
-        // Tesseract is a blocking child-process call — keep it off the async runtime.
-        let result = tokio::task::spawn_blocking(move || {
-            sidecar::run_tesseract(&full_path, &lang_for_blocking)
-        })
-        .await;
+        // FFI calls are kept off the tokio runtime — Vision is fast but synchronous;
+        // WinOcr bridges an async UWP API but still benefits from isolation.
+        let result = tokio::task::spawn_blocking(move || backend_clone.recognize(&full_path)).await;
 
         match result {
-            Ok(Ok(output)) => {
-                if output.text.is_empty() {
-                    info!(capture_id = %capture_id, "ocr produced no text");
+            Ok(Ok(out)) => {
+                if let Err(e) = persist_and_index(&db_clone, &cap_id, &out, backend.name(), &backend.engine_version()) {
+                    error!(capture_id = %cap_id, error = %e, "persist ocr failed");
                     continue;
                 }
-                if let Err(e) = snk_library::ocr::upsert(
-                    &db_clone,
-                    &capture_id,
-                    &output.text,
-                    &language,
-                    output.confidence,
-                ) {
-                    error!(capture_id = %capture_id, error = %e, "failed to store ocr text");
-                    continue;
-                }
-                // Re-index capture with OCR text so FTS matches the new content.
-                match snk_library::captures::get(&db_clone, &capture_id) {
-                    Ok(cap) => {
-                        if let Err(e) = snk_library::search::index_capture(
-                            &db_clone,
-                            &capture_id,
-                            cap.source_app.as_deref(),
-                            cap.source_window_title.as_deref(),
-                            Some(&output.text),
-                            None,
-                        ) {
-                            error!(capture_id = %capture_id, error = %e, "failed to re-index capture for fts");
-                            continue;
-                        }
-                    }
-                    Err(e) => {
-                        error!(capture_id = %capture_id, error = %e, "capture missing during ocr re-index");
-                        continue;
-                    }
-                }
-                info!(capture_id = %capture_id, chars = output.text.len(), "ocr indexed");
+                emit(&cap_id);
+                info!(capture_id = %cap_id, chars = out.text.len(), words = out.words.len(), "ocr indexed");
             }
-            Ok(Err(e)) => {
-                error!(capture_id = %capture_id, error = %e, "ocr sidecar failed");
-            }
-            Err(e) => {
-                error!(capture_id = %capture_id, error = %e, "ocr task panicked");
-            }
+            Ok(Err(e)) => error!(capture_id = %cap_id, error = ?e, "backend recognize failed"),
+            Err(e) => error!(capture_id = %cap_id, error = %e, "ocr task panicked"),
         }
     }
     info!("ocr worker stopped");
+}
+
+fn persist_and_index(
+    db: &Db,
+    capture_id: &str,
+    out: &OcrResult,
+    backend_name: &str,
+    engine_version: &str,
+) -> Result<(), String> {
+    // Use the qualified engine string the caller passed in; backend_name is for logging only.
+    let _ = backend_name;
+    snk_library::ocr::upsert_full(
+        db, capture_id, &out.text, &out.language, out.confidence, &out.words, engine_version,
+    ).map_err(|e| e.to_string())?;
+    let cap = snk_library::captures::get(db, capture_id).map_err(|e| e.to_string())?;
+    snk_library::search::index_capture(
+        db, capture_id,
+        cap.source_app.as_deref(), cap.source_window_title.as_deref(),
+        Some(&out.text), None,
+    ).map_err(|e| e.to_string())?;
+    Ok(())
 }
