@@ -3,9 +3,10 @@
 use std::path::Path;
 
 use objc2::rc::Retained;
-use objc2_foundation::{NSDictionary, NSRange, NSString, NSURL};
+use objc2::{AnyThread, ClassType};
+use objc2_foundation::{NSArray, NSDictionary, NSRange, NSString, NSURL};
 use objc2_vision::{
-    VNImageRequestHandler, VNRecognizeTextRequest, VNRecognizedTextObservation,
+    VNImageRequestHandler, VNRecognizeTextRequest, VNRecognizedTextObservation, VNRequest,
     VNRequestTextRecognitionLevel,
 };
 use tracing::{debug, warn};
@@ -58,13 +59,15 @@ impl OcrBackend for VisionBackend {
                 &NSDictionary::new(),
             );
 
-            let perform_result =
-                handler.performRequests_error(&objc2_foundation::NSArray::from_slice(&[
-                    objc2::runtime::ProtocolObject::from_ref(&*request).cast(),
-                ]));
-            perform_result.map_err(|e| OcrError::Recognize {
-                detail: format!("performRequests: {e:?}"),
-            })?;
+            // Upcast VNRecognizeTextRequest -> VNImageBasedRequest -> VNRequest via ClassType::as_super
+            // chain. NSArray<VNRequest>::from_slice needs &[&VNRequest] elements.
+            let req_super: &VNRequest = request.as_super().as_super();
+            let requests = NSArray::from_slice(&[req_super]);
+            handler
+                .performRequests_error(&requests)
+                .map_err(|e| OcrError::Recognize {
+                    detail: format!("performRequests: {e:?}"),
+                })?;
 
             let observations = request.results().ok_or_else(|| OcrError::Recognize {
                 detail: "results() returned nil".into(),
@@ -76,8 +79,10 @@ impl OcrBackend for VisionBackend {
             let mut conf_count: usize = 0;
 
             for line_idx in 0..observations.count() {
-                let obs: Retained<VNRecognizedTextObservation> =
-                    observations.objectAtIndex(line_idx).cast();
+                // VNRecognizeTextRequest only emits VNRecognizedTextObservation; downcast via
+                // cast_unchecked (Retained::cast was deprecated in objc2 0.6).
+                let obs_any = observations.objectAtIndex(line_idx);
+                let obs: Retained<VNRecognizedTextObservation> = Retained::cast_unchecked(obs_any);
                 let candidates = obs.topCandidates(1);
                 if candidates.count() == 0 {
                     continue;
