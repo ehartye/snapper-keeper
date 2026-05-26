@@ -10,7 +10,7 @@ publish.workspace = true
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon", "protocol-asset"] }
+tauri = { version = "2", features = ["tray-icon", "protocol-asset", "devtools"] }
 tauri-plugin-global-shortcut.workspace = true
 tauri-plugin-updater.workspace = true
 tauri-plugin-autostart.workspace = true
