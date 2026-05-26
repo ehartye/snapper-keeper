@@ -42,12 +42,12 @@ fn build_backend() -> Result<Arc<dyn OcrBackend>, OcrError> {
     #[cfg(target_os = "macos")]
     {
         let b = crate::vision::VisionBackend::new()?;
-        return Ok(Arc::new(b) as Arc<dyn OcrBackend>);
+        Ok(Arc::new(b) as Arc<dyn OcrBackend>)
     }
     #[cfg(target_os = "windows")]
     {
         let b = crate::winocr::WinOcrBackend::new()?;
-        return Ok(Arc::new(b) as Arc<dyn OcrBackend>);
+        Ok(Arc::new(b) as Arc<dyn OcrBackend>)
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
