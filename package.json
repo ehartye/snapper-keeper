@@ -9,6 +9,7 @@
     "test": "pnpm -r run test",
     "build": "pnpm -r run build",
     "tauri": "pnpm --filter @snk/app tauri",
+    "build:local": "bash scripts/build-local.sh",
     "test:e2e:windows": "node e2e/windows-smoke.mjs"
   },
   "devDependencies": {

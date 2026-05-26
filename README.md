@@ -67,13 +67,32 @@ Vite starts on `localhost:5173`, the Rust crates compile (~3-5 min cold, seconds
 
 > **Windows note:** Must run from an **interactive desktop session** (not SSH). Windows OpenSSH sessions are non-interactive window stations, causing WebView2 and `RegisterHotKey` failures.
 
-### Build a release bundle
+### Build a local installer (unsigned)
+
+Produce an unsigned installer locally for smoke-testing what end users will receive:
 
 ```bash
-pnpm --filter @snk/app tauri build
+pnpm build:local
 ```
 
-Bundles land in `target/release/bundle/`. See [`docs/release-signing.md`](docs/release-signing.md) for signing setup.
+> **Windows users:** Run from **Git Bash** (or any bash shell) — the underlying script is bash; PowerShell and `cmd.exe` will fail to invoke it. Git Bash ships with [Git for Windows](https://git-scm.com/download/win).
+
+On macOS this produces a `.app` + `.dmg` for your machine's architecture; on Windows it produces an NSIS `*-setup.exe`. The artifact path + SHA-256 are printed when the build completes.
+
+**Differences from production:**
+
+- Not Authenticode-signed (Windows) or codesigned + notarized (macOS) — the OS will warn on first launch (see below).
+- No updater payload (`.app.tar.gz` + `.sig`) — local builds can't sign the updater manifest.
+- Otherwise identical: same target triples, same bundle contents.
+
+**Installing an unsigned build:**
+
+- **Windows:** SmartScreen warns; click "More info" → "Run anyway."
+- **macOS:** Right-click the `.app` → "Open" → "Open anyway", or run `xattr -d com.apple.quarantine "<path-to-app>"` to clear the Gatekeeper flag.
+
+Linux is not a supported installer target — use `pnpm --filter @snk/app tauri dev` for Linux development.
+
+For signed-release setup, see [`docs/release-signing.md`](docs/release-signing.md).
 
 ## Local testing
 
