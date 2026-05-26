@@ -2,7 +2,7 @@ use serde::Serialize;
 use thiserror::Error;
 
 #[derive(Debug, Error, Serialize, Clone)]
-#[serde(tag = "kind")]
+#[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum OcrError {
     #[error("OCR backend unavailable: {reason}")]
     BackendUnavailable { reason: String },
