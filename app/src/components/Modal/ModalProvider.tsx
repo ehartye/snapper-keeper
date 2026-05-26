@@ -17,7 +17,12 @@ export function ModalProvider({ children }: { children: ReactNode }) {
   const inertProp = modal ? { inert: '' as unknown as undefined } : {};
   return (
     <ModalContext.Provider value={{ modal, setModal }}>
-      <div id="modal-app-content" {...inertProp}>
+      {/* h-full so windows that use `<main className="h-full">` for
+          their inner overflow:auto (Settings, Library, etc.) still
+          have a constraining parent — without this, the wrapper div
+          is auto-height and children grow past the viewport instead
+          of scrolling. */}
+      <div id="modal-app-content" className="h-full" {...inertProp}>
         {children}
       </div>
       <Modal />
