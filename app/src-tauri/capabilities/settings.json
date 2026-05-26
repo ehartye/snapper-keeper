@@ -11,6 +11,7 @@
     "core:event:default",
     "snk-library:allow-get-setting",
     "snk-library:allow-set-setting",
+    "snk-clipboard:allow-detect-frontmost-app",
     "snk-updater:default",
     "autostart:default",
     "opener:default",
