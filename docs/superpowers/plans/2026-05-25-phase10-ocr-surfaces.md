@@ -2090,18 +2090,18 @@ git commit -m "feat(ocr): TS bindings — getOcrWords, onOcrReady, OcrStatus"
 
 **Files:**
 - Modify: `crates/snk-ocr/tests/integration_test.rs`
-- Create (if missing): `crates/snk-ocr/tests/fixtures/hello_world.png` (small PNG of the text "hello world")
+- Create (if missing): `crates/snk-ocr/tests/fixtures/hello-world.png` (small PNG of the text "hello world")
 
 **Step 1: Create the fixture image**
 
-A trivial way: open any image editor (Paint, Preview, GIMP), white background, type "hello world" in a clear sans-serif font at ~48pt, save as `hello_world.png`. Keep it under 5 KB.
+A trivial way: open any image editor (Paint, Preview, GIMP), white background, type "hello world" in a clear sans-serif font at ~48pt, save as `hello-world.png`. Keep it under 5 KB.
 
 Alternatively, generate programmatically with `image` crate (one-shot script outside the project, then copy the PNG into the fixtures dir).
 
 ```bash
 ls crates/snk-ocr/tests/fixtures/  # may not exist yet
 mkdir -p crates/snk-ocr/tests/fixtures
-# Place hello_world.png in there.
+# Place hello-world.png in there.
 ```
 
 **Step 2: Rewrite `integration_test.rs`**
@@ -2144,7 +2144,7 @@ fn fixture(name: &str) -> PathBuf {
 #[test]
 fn recognize_hello_world_returns_text_and_words() {
     let b = make_backend();
-    let r = b.recognize(&fixture("hello_world.png")).expect("recognize");
+    let r = b.recognize(&fixture("hello-world.png")).expect("recognize");
     let text_lower = r.text.to_lowercase();
     assert!(text_lower.contains("hello"), "text should contain 'hello'; got {:?}", r.text);
     assert!(text_lower.contains("world"), "text should contain 'world'; got {:?}", r.text);
@@ -2173,7 +2173,7 @@ Expected: passes on Mac (Vision) and on Windows (WinOcr, unless the runner has n
 **Step 4: Commit**
 
 ```bash
-git add crates/snk-ocr/tests/integration_test.rs crates/snk-ocr/tests/fixtures/hello_world.png
+git add crates/snk-ocr/tests/integration_test.rs crates/snk-ocr/tests/fixtures/hello-world.png
 git diff --cached
 git commit -m "test(ocr): integration test against native backend with hello_world fixture"
 ```
