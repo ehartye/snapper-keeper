@@ -155,7 +155,7 @@ SQLite database with WAL mode, 3 migrations (captures + FTS, clipboard, OCR). Ca
 
 Two workflows:
 
-- **CI** (`.github/workflows/ci.yml`) — runs on push to `main` and all PRs. Lint + typecheck + Rust tests on Linux, app build verification on Linux/macOS/Windows.
+- **CI** (`.github/workflows/ci.yml`) — runs on push to `main` and all PRs. Lint + typecheck + Rust tests on Linux, app build verification on Linux/macOS/Windows, plus a Windows `tauri-driver` E2E smoke (uploads app logs + library screenshot artifact).
 - **Release** (`.github/workflows/release.yml`) — runs on `v*` tags. Builds signed bundles for macOS (aarch64 + x86_64) and Windows (x86_64), notarizes macOS builds, generates `latest.json` update manifest, publishes to GitHub Releases.
 
 ## Releasing

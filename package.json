@@ -8,7 +8,8 @@
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
     "build": "pnpm -r run build",
-    "tauri": "pnpm --filter @snk/app tauri"
+    "tauri": "pnpm --filter @snk/app tauri",
+    "test:e2e:windows": "node e2e/windows-smoke.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

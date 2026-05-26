@@ -152,3 +152,79 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @snk/app build
       - run: cargo build -p snapper-keeper-app
+
+  e2e-windows-smoke:
+    # Intentional scope:
+    # - Windows: full WebDriver smoke via tauri-driver + Edge WebDriver.
+    # - macOS/Linux: compile + sign + verify stay in build/release jobs only.
+    # Hosted macOS runners do not provide a stable display/WebKit WebDriver path.
+    needs: [lint-typecheck, rust-test]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: pnpm/action-setup@d15e628ca66d93ee5f352c71671a7bc6a97af5c9 # v6.0.8
+        # version not specified here — pnpm/action-setup v6+ errors when
+        # both `with: version:` AND `packageManager` in package.json
+        # are present. We let packageManager drive the version.
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 20
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+      - name: Install pinned Edge WebDriver matching runner Edge build
+        shell: pwsh
+        run: |
+          $edgeVersion = (Get-Item "$env:ProgramFiles(x86)\Microsoft\Edge\Application\msedge.exe").VersionInfo.ProductVersion
+          $edgeBuild = (($edgeVersion -split '\.')[0..2] -join '.')
+          $driverVersion = (Invoke-RestMethod "https://msedgedriver.azureedge.net/LATEST_RELEASE_$edgeBuild").Trim()
+          Invoke-WebRequest "https://msedgedriver.azureedge.net/$driverVersion/edgedriver_win64.zip" -OutFile "$env:RUNNER_TEMP\edgedriver.zip"
+          Expand-Archive "$env:RUNNER_TEMP\edgedriver.zip" -DestinationPath "$env:RUNNER_TEMP\msedgedriver"
+          "$env:RUNNER_TEMP\msedgedriver" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "EDGE_VERSION=$edgeVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MSEDGEDRIVER_VERSION=$driverVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install tauri-driver
+        run: cargo install --locked tauri-driver
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @snk/app build
+      - run: cargo build -p snapper-keeper-app
+
+      - name: Run Windows E2E smoke
+        shell: pwsh
+        env:
+          APP_BINARY_PATH: ${{ github.workspace }}\target\debug\snapper-keeper-app.exe
+          E2E_ARTIFACT_DIR: ${{ github.workspace }}\e2e-artifacts
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:E2E_ARTIFACT_DIR" | Out-Null
+          node e2e/windows-smoke.mjs
+
+      - name: Collect app logs
+        if: always()
+        shell: pwsh
+        run: |
+          $artifactRoot = "${{ github.workspace }}\e2e-artifacts"
+          New-Item -ItemType Directory -Force -Path "$artifactRoot\app-logs" | Out-Null
+          foreach ($base in @($env:APPDATA, $env:LOCALAPPDATA)) {
+            if (-not $base) { continue }
+            $logsDir = Join-Path $base "com.snapper-keeper.app\logs"
+            if (Test-Path $logsDir) {
+              $target = Join-Path "$artifactRoot\app-logs" ((Split-Path $base -Leaf) + "-logs")
+              New-Item -ItemType Directory -Force -Path $target | Out-Null
+              Copy-Item "$logsDir\*" $target -Recurse -Force -ErrorAction Continue
+            }
+          }
+          Set-Content -Path "$artifactRoot\versions.txt" -Value @(
+            "EDGE_VERSION=$env:EDGE_VERSION"
+            "MSEDGEDRIVER_VERSION=$env:MSEDGEDRIVER_VERSION"
+          )
+
+      - name: Upload Windows runtime artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-windows-runtime-artifacts
+          path: ${{ github.workspace }}/e2e-artifacts
+          if-no-files-found: error
