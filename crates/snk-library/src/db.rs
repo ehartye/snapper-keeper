@@ -25,8 +25,25 @@ impl Db {
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
-        crate::migrate::migrate(&mut conn)?;
+        crate::migrate::migrate(&mut conn, Some(path))?;
         info!(path = %path.display(), "opened db");
+        Ok(Self {
+            conn: Mutex::new(conn),
+        })
+    }
+
+    /// Open the DB without running migrations.  Used after a migration failure
+    /// when a backup has already been restored; the DB is at its pre-migration
+    /// schema and should be readable with the old layout.
+    pub(crate) fn open_no_migrate(path: &Path) -> Result<Self> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| crate::LibraryError::io(parent, e))?;
+        }
+        let conn = Connection::open(path)?;
+        conn.pragma_update(None, "journal_mode", "WAL")?;
+        conn.pragma_update(None, "synchronous", "NORMAL")?;
+        conn.pragma_update(None, "foreign_keys", "ON")?;
+        info!(path = %path.display(), "opened db (no migrate — running at prior schema version)");
         Ok(Self {
             conn: Mutex::new(conn),
         })

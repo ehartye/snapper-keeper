@@ -1,14 +1,22 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use serde::Serialize;
 use tauri::plugin::{Builder, TauriPlugin};
-use tauri::{Manager, Runtime};
+use tauri::{Emitter, Manager, Runtime};
 
 use crate::Db;
 
 pub struct LibraryState {
     pub db: Arc<Db>,
     pub root: PathBuf,
+}
+
+/// Payload emitted as `library:migration-failed` when a DB migration fails
+/// and a backup has been restored.
+#[derive(Serialize, Clone)]
+struct MigrationFailedPayload {
+    backup_path: String,
 }
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
@@ -40,7 +48,28 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
                 .app_data_dir()
                 .map_err(|e| format!("resolve app data dir: {e}"))?;
             let db_path = root.join("snapper-keeper.db");
-            let db = Db::open(&db_path).map_err(|e| format!("open db: {e}"))?;
+
+            let db = match Db::open(&db_path) {
+                Ok(db) => db,
+                Err(crate::LibraryError::Migration {
+                    recoverable: true, ..
+                }) => {
+                    // The backup has been restored; notify the frontend and
+                    // open the DB at its prior (restored) schema version so
+                    // the app can start and show the user an error modal.
+                    let backup_path = crate::migrate::latest_backup_path(&db_path)
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_default();
+                    let _ = app.emit(
+                        "library:migration-failed",
+                        MigrationFailedPayload { backup_path },
+                    );
+                    Db::open_no_migrate(&db_path)
+                        .map_err(|e| format!("reopen db after migration restore: {e}"))?
+                }
+                Err(e) => return Err(format!("open db: {e}").into()),
+            };
+
             app.manage(LibraryState {
                 db: Arc::new(db),
                 root,
