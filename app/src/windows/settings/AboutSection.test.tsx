@@ -183,7 +183,13 @@ describe('<AboutSection />', () => {
     setStatusResponses();
     const { openPath } = await import('@tauri-apps/plugin-opener');
     renderAbout();
-    const openButtons = await screen.findAllByRole('button', { name: /Open/i });
+    // Wait for the data-dir path to render — that signals useQuery has
+    // resolved and the Open button is no longer disabled. Without this,
+    // CI's slower scheduler clicks the button while dataDirQ.data is
+    // still undefined, the onClick short-circuits, and openPath is
+    // never called.
+    await screen.findByText('/mock/data');
+    const openButtons = screen.getAllByRole('button', { name: /Open/i });
     expect(openButtons.length).toBeGreaterThanOrEqual(2);
     fireEvent.click(openButtons[0]!);
     await waitFor(() => {
