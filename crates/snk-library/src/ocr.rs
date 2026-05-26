@@ -115,6 +115,31 @@ pub fn get(db: &Db, capture_id: &str) -> Result<Option<OcrText>> {
     })
 }
 
+/// Find all (non-deleted) captures that don't yet have an `ocr_text`
+/// row. Used by snk-ocr's startup sweep to re-enqueue captures whose
+/// OCR was interrupted by a prior quit-mid-queue. Returns
+/// `(capture_id, file_path)` tuples in arbitrary order.
+pub fn captures_missing_text(db: &Db, limit: usize) -> Result<Vec<(String, String)>> {
+    if limit == 0 {
+        return Ok(Vec::new());
+    }
+    db.with_conn(|conn| {
+        let mut stmt = conn.prepare(
+            "SELECT c.id, c.file_path
+             FROM captures c
+             LEFT JOIN ocr_text o ON o.capture_id = c.id
+             WHERE o.capture_id IS NULL AND c.deleted_at IS NULL
+             LIMIT ?1",
+        )?;
+        let rows = stmt
+            .query_map([limit as i64], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -226,5 +251,41 @@ mod tests {
             "legacy upsert must leave words_json NULL"
         );
         assert_eq!(row.engine, "");
+    }
+
+    #[test]
+    fn captures_missing_text_returns_captures_without_ocr() {
+        let (_tmp, db) = fresh_db();
+        let cap_with_ocr = insert_capture(&db);
+        let cap_without_ocr = insert_capture(&db);
+        upsert(&db, &cap_with_ocr, "hello", "eng", 0.9).unwrap();
+
+        let missing = captures_missing_text(&db, 10).unwrap();
+        assert_eq!(missing.len(), 1, "exactly one capture lacks ocr");
+        assert_eq!(missing[0].0, cap_without_ocr);
+    }
+
+    #[test]
+    fn captures_missing_text_excludes_deleted_captures() {
+        let (_tmp, db) = fresh_db();
+        let cap = insert_capture(&db);
+        crate::captures::soft_delete(&db, &cap).unwrap();
+
+        let missing = captures_missing_text(&db, 10).unwrap();
+        assert!(
+            !missing.iter().any(|(id, _)| id == &cap),
+            "soft-deleted captures must NOT appear in the sweep list"
+        );
+    }
+
+    #[test]
+    fn captures_missing_text_respects_limit() {
+        let (_tmp, db) = fresh_db();
+        let _cap1 = insert_capture(&db);
+        let _cap2 = insert_capture(&db);
+        let _cap3 = insert_capture(&db);
+
+        let missing = captures_missing_text(&db, 2).unwrap();
+        assert_eq!(missing.len(), 2, "query should only return up to the limit");
     }
 }
