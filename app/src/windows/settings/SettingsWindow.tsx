@@ -188,6 +188,7 @@ export function SettingsWindow() {
 
   const [autoCopy, setAutoCopy] = useSetting('capture.auto_copy', true);
   const [jpgQuality, setJpgQuality] = useSetting('capture.jpg_quality', 90);
+  const [hideOwnWindows, setHideOwnWindows] = useSetting('capture.hide_own_windows', true);
   const [historySize, setHistorySize] = useSetting('clipboard.history_size', 200);
   const [trackImages, setTrackImages] = useSetting('clipboard.track_images', true);
   const [trackFiles, setTrackFiles] = useSetting('clipboard.track_files', true);
@@ -246,6 +247,12 @@ export function SettingsWindow() {
               />
             </SettingRow>
           )}
+          <SettingRow
+            label="Hide snapper-keeper windows during capture"
+            description="Prevents the app's own windows from appearing in screen captures."
+          >
+            <Toggle value={hideOwnWindows as boolean} onChange={setHideOwnWindows} />
+          </SettingRow>
         </SettingsSection>
 
         <SettingsSection title="Clipboard">
