@@ -33,12 +33,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest          # Apple Silicon, native arm64 build
+          - os: macos-latest          # Universal binary (arm64 + x86_64 via lipo) — release artifact
+            target: universal-apple-darwin
+            label: macOS-universal
+            bundles: 'app'
+            store_edition: false
+          - os: macos-latest          # Apple Silicon, native arm64 — test exercise (TT6)
             target: aarch64-apple-darwin
             label: macOS-arm64
             bundles: 'app'
             store_edition: false
-          - os: macos-15-intel        # native Intel runner — no cross-compile, no Rosetta
+          - os: macos-15-intel        # native Intel runner — test exercise (TT6)
             target: x86_64-apple-darwin
             label: macOS-x64
             bundles: 'app'
@@ -73,7 +78,9 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
-          targets: ${{ matrix.target }}
+          # universal-apple-darwin is not a real Rust target; Tauri uses lipo
+          # to merge aarch64 + x86_64 slices, so both targets must be installed.
+          targets: ${{ matrix.target == 'universal-apple-darwin' && 'aarch64-apple-darwin,x86_64-apple-darwin' || matrix.target }}
 
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
@@ -112,9 +119,13 @@ jobs:
             "${extra_flags[@]}" \
             --config '{"bundle":{"createUpdaterArtifacts":false}}'
 
-      # macOS: upload the .app directory. The sign job will codesign the .app,
-      # then rebuild .dmg from the signed .app, tar the signed .app to make
-      # .app.tar.gz, then minisign the tar.
+      # macOS universal: upload the .app directory. The sign job will codesign
+      # the universal .app (which contains both arm64 and x86_64 slices), then
+      # rebuild a single .dmg from the signed .app, tar the signed .app to
+      # make .app.tar.gz, then minisign the tar.
+      #
+      # Per-arch builds (macOS-arm64, macOS-x64) run for test exercise only
+      # (TT6) and do not upload artifacts here.
       #
       # Path glob is `macos/**` rather than `macos/Snapper Keeper.app/**`:
       # upload-artifact uses the common ancestor of matched files as the
@@ -126,7 +137,7 @@ jobs:
       # unsigned .app.tar.gz that the bundler emits for the updater; the
       # sign job ignores that and recreates it post-codesign).
       - name: Upload unsigned macOS artifacts
-        if: runner.os == 'macOS'
+        if: matrix.target == 'universal-apple-darwin'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: unsigned-artifacts-${{ matrix.label }}
@@ -179,20 +190,21 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Review this table before approving the production-release environment gate." >> "$GITHUB_STEP_SUMMARY"
 
-  sign-mac-arm:
+  sign-mac-universal:
     needs: artifact-verify
     runs-on: macos-latest
     environment: production-release
     permissions:
       contents: read
     env:
-      LABEL: macOS-arm64
-      ARCH: aarch64
+      LABEL: macOS-universal
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
+          # smoke-sign-roundtrip.sh runs `cargo build` for the host arch only;
+          # the universal .app was already built in the build job.
           targets: aarch64-apple-darwin
 
       - name: Install minisign, jq, create-dmg
@@ -242,7 +254,7 @@ jobs:
             --volname "Snapper Keeper" \
             --window-size 600 400 \
             --icon-size 100 \
-            "artifacts/signed/Snapper Keeper.dmg" \
+            "artifacts/signed/Snapper.Keeper.dmg" \
             "artifacts/unsigned/Snapper Keeper.app"
 
       - name: Notarize .dmg
@@ -251,7 +263,7 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          DMG="artifacts/signed/Snapper Keeper.dmg"
+          DMG="artifacts/signed/Snapper.Keeper.dmg"
           xcrun notarytool submit "$DMG" \
             --apple-id "$APPLE_ID" \
             --password "$APPLE_PASSWORD" \
@@ -262,7 +274,7 @@ jobs:
       - name: Tar signed .app for updater payload
         run: |
           cd artifacts/unsigned
-          tar -czf "../signed/Snapper.Keeper_${{ env.ARCH }}.app.tar.gz" "Snapper Keeper.app"
+          tar -czf "../signed/Snapper.Keeper.app.tar.gz" "Snapper Keeper.app"
 
       - name: Minisign the updater payload
         env:
@@ -275,131 +287,9 @@ jobs:
           # spurious CRs). No-op on Linux/macOS.
           echo "$TAURI_SIGNING_PRIVATE_KEY" | tr -d '\r' | base64 -d > "$WORK/priv.key"
           echo "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" | minisign -S -s "$WORK/priv.key" \
-            -m "artifacts/signed/Snapper.Keeper_${{ env.ARCH }}.app.tar.gz" \
-            -x "artifacts/signed/Snapper.Keeper_${{ env.ARCH }}.app.tar.gz.sig"
+            -m "artifacts/signed/Snapper.Keeper.app.tar.gz" \
+            -x "artifacts/signed/Snapper.Keeper.app.tar.gz.sig"
           rm -rf "$WORK"
-
-      - name: Rename .dmg per-arch
-        run: |
-          cd artifacts/signed
-          mv "Snapper Keeper.dmg" "Snapper.Keeper_${{ env.ARCH }}.dmg"
-
-      - name: Upload signed artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: signed-artifacts-${{ env.LABEL }}
-          path: |
-            artifacts/signed/*.dmg
-            artifacts/signed/*.app.tar.gz
-            artifacts/signed/*.app.tar.gz.sig
-          if-no-files-found: error
-
-      - name: Clean up certificates
-        if: always()
-        run: rm -f certificate.p12
-
-  sign-mac-x64:
-    needs: artifact-verify
-    runs-on: macos-15-intel
-    environment: production-release
-    permissions:
-      contents: read
-    env:
-      LABEL: macOS-x64
-      ARCH: x86_64
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-        with:
-          targets: x86_64-apple-darwin
-
-      - name: Install minisign, jq, create-dmg
-        run: brew install minisign jq create-dmg
-
-      - name: Download unsigned artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: unsigned-artifacts-${{ env.LABEL }}
-          path: artifacts/unsigned
-
-      - name: Import Apple certificate
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-        run: |
-          echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
-          security create-keychain -p actions build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p actions build.keychain
-          security set-keychain-settings -t 7200 build.keychain
-          security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions build.keychain
-          rm certificate.p12
-
-      - name: Smoke-test signing toolchain
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-        run: ./scripts/smoke-sign-roundtrip.sh macos
-
-      - name: Codesign .app
-        env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-        run: |
-          APP_PATH="artifacts/unsigned/Snapper Keeper.app"
-          codesign --sign "$APPLE_SIGNING_IDENTITY" --options runtime --timestamp --deep "$APP_PATH"
-          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
-
-      - name: Rebuild .dmg from signed .app
-        run: |
-          mkdir -p artifacts/signed
-          create-dmg \
-            --volname "Snapper Keeper" \
-            --window-size 600 400 \
-            --icon-size 100 \
-            "artifacts/signed/Snapper Keeper.dmg" \
-            "artifacts/unsigned/Snapper Keeper.app"
-
-      - name: Notarize .dmg
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          DMG="artifacts/signed/Snapper Keeper.dmg"
-          xcrun notarytool submit "$DMG" \
-            --apple-id "$APPLE_ID" \
-            --password "$APPLE_PASSWORD" \
-            --team-id "$APPLE_TEAM_ID" \
-            --wait
-          xcrun stapler staple "$DMG"
-
-      - name: Tar signed .app for updater payload
-        run: |
-          cd artifacts/unsigned
-          tar -czf "../signed/Snapper.Keeper_${{ env.ARCH }}.app.tar.gz" "Snapper Keeper.app"
-
-      - name: Minisign the updater payload
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          WORK=$(mktemp -d)
-          # tr -d '\r' before base64 -d: portable defense against CR
-          # mangling (Git Bash on Windows surfaces secret env vars with
-          # spurious CRs). No-op on Linux/macOS.
-          echo "$TAURI_SIGNING_PRIVATE_KEY" | tr -d '\r' | base64 -d > "$WORK/priv.key"
-          echo "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" | minisign -S -s "$WORK/priv.key" \
-            -m "artifacts/signed/Snapper.Keeper_${{ env.ARCH }}.app.tar.gz" \
-            -x "artifacts/signed/Snapper.Keeper_${{ env.ARCH }}.app.tar.gz.sig"
-          rm -rf "$WORK"
-
-      - name: Rename .dmg per-arch
-        run: |
-          cd artifacts/signed
-          mv "Snapper Keeper.dmg" "Snapper.Keeper_${{ env.ARCH }}.dmg"
 
       - name: Upload signed artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -522,7 +412,7 @@ jobs:
           if-no-files-found: error
 
   publish-release:
-    needs: [sign-mac-arm, sign-mac-x64, sign-win-x64]
+    needs: [sign-mac-universal, sign-win-x64]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -549,22 +439,17 @@ jobs:
           # Collect platform entries
           PLATFORMS='{}'
 
-          # macOS aarch64
-          MAC_ARM_TAR=$(find artifacts -name "*.app.tar.gz" -path "*aarch64*" | head -1)
-          MAC_ARM_SIG=$(find artifacts -name "*.app.tar.gz.sig" -path "*aarch64*" | head -1)
-          if [ -n "$MAC_ARM_TAR" ] && [ -n "$MAC_ARM_SIG" ]; then
-            SIG=$(cat "$MAC_ARM_SIG")
-            URL="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/$(basename "$MAC_ARM_TAR")"
-            PLATFORMS=$(echo "$PLATFORMS" | jq --arg url "$URL" --arg sig "$SIG" '. + {"darwin-aarch64": {"url": $url, "signature": $sig}}')
-          fi
-
-          # macOS x86_64
-          MAC_X64_TAR=$(find artifacts -name "*.app.tar.gz" -path "*x86_64*" | head -1)
-          MAC_X64_SIG=$(find artifacts -name "*.app.tar.gz.sig" -path "*x86_64*" | head -1)
-          if [ -n "$MAC_X64_TAR" ] && [ -n "$MAC_X64_SIG" ]; then
-            SIG=$(cat "$MAC_X64_SIG")
-            URL="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/$(basename "$MAC_X64_TAR")"
-            PLATFORMS=$(echo "$PLATFORMS" | jq --arg url "$URL" --arg sig "$SIG" '. + {"darwin-x86_64": {"url": $url, "signature": $sig}}')
+          # macOS universal — both darwin-aarch64 and darwin-x86_64 point to
+          # the same universal binary so the Tauri updater serves all Mac
+          # architectures from a single artifact.
+          MAC_TAR=$(find artifacts -name "*.app.tar.gz" | head -1)
+          MAC_SIG=$(find artifacts -name "*.app.tar.gz.sig" | head -1)
+          if [ -n "$MAC_TAR" ] && [ -n "$MAC_SIG" ]; then
+            SIG=$(cat "$MAC_SIG")
+            URL="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/$(basename "$MAC_TAR")"
+            PLATFORMS=$(echo "$PLATFORMS" | jq \
+              --arg url "$URL" --arg sig "$SIG" \
+              '. + {"darwin-aarch64": {"url": $url, "signature": $sig}, "darwin-x86_64": {"url": $url, "signature": $sig}}')
           fi
 
           # Windows x86_64 — Tauri 2 attaches the signature directly to the
