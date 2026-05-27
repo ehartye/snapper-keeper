@@ -427,7 +427,7 @@ mod tests {
 
     /// Build a minimal 2×2 RGBA byte vec (4 bytes per pixel, solid red).
     fn red_2x2_rgba() -> Vec<u8> {
-        vec![255, 0, 0, 255].repeat(4) // 4 pixels × 4 channels
+        vec![255, 0, 0, 255].repeat(4) // 16 bytes total: 4 pixels × 4 bytes/pixel (RGBA)
     }
 
     #[test]

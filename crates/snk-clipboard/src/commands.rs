@@ -55,7 +55,7 @@ pub fn paste_item<R: Runtime>(
         }
 
         ClipboardItemKind::Image => {
-            // Honour the image_paste_enabled setting (default: true).
+            // Honor the image_paste_enabled setting (default: true).
             let enabled = settings::get(&state.db, IMAGE_PASTE_ENABLED_KEY)
                 .ok()
                 .flatten()
