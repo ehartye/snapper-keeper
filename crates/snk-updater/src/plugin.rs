@@ -2,7 +2,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use snk_library::plugin::LibraryState;
+use snk_library::LibraryState;
 use tauri::plugin::{Builder, TauriPlugin};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tauri_plugin_updater::UpdaterExt;
@@ -35,6 +35,12 @@ pub struct UpdaterState {
 }
 
 impl UpdaterState {
+    // `new()` is only used by the test suite — production code uses
+    // `with_status(...)` so the initial status can reflect a policy
+    // suppression at app startup. Gate to #[cfg(test)] so the
+    // workspace-wide `cargo clippy -- -D warnings` (which doesn't pass
+    // --all-targets) doesn't flag the function as dead code.
+    #[cfg(test)]
     fn new() -> Self {
         Self::with_status(UpdateStatus::Idle)
     }
@@ -214,7 +220,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         ])
         .setup(|app, _api| {
             let initial_status =
-                suppressed_by_policy_status(&app.app_handle()).unwrap_or(UpdateStatus::Idle);
+                suppressed_by_policy_status(app.app_handle()).unwrap_or(UpdateStatus::Idle);
             app.manage(UpdaterState::with_status(initial_status));
 
             let handle = app.app_handle().clone();
