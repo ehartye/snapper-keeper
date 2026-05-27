@@ -44,6 +44,7 @@ export default defineConfig({
   define: {
     __GIT_SHA__: JSON.stringify(gitShortSha()),
     __UPDATER_FINGERPRINT__: JSON.stringify(updaterFingerprint()),
+    __STORE_EDITION__: JSON.stringify(process.env.SNK_STORE_EDITION === '1'),
   },
   build: {
     target: 'es2022',

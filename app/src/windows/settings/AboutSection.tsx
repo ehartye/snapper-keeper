@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getVersion } from '@tauri-apps/api/app';
 import { appDataDir, appLogDir } from '@tauri-apps/api/path';
@@ -17,6 +17,8 @@ import { SettingsSection } from '../../components/SettingsSection';
 import { SettingRow } from '../../components/SettingRow';
 import { Button } from '../../components/Button';
 import { useModal } from '../../components/Modal';
+import { isStoreEdition } from '../../lib/storeEdition';
+import { useSetting } from './useSetting';
 
 const PRIVACY_URL =
   'https://github.com/ehartye/snapper-keeper/blob/main/PRIVACY.md';
@@ -42,7 +44,14 @@ function formatStatus(s: UpdateStatus): string {
     case 'rejected-by-signature':
       return 'Update rejected: signature verification failed';
     case 'suppressed-by-policy':
-      return `Update checks suppressed (${s.reason})`;
+      switch (s.reason) {
+        case 'user-disabled':
+          return 'Update checks disabled in Settings';
+        case 'store-edition':
+          return 'Updates are managed by Microsoft Store';
+        default:
+          return `Update checks suppressed (${s.reason})`;
+      }
     case 'skipped':
       return `Skipped until ${new Date(s.until_epoch_ms).toLocaleString()}`;
     default: {
@@ -66,6 +75,8 @@ function formatRelative(ts: number | null): string {
 
 export function AboutSection() {
   const modal = useModal();
+  const storeEdition = isStoreEdition();
+  const [updaterEnabled] = useSetting('updater.enabled', true);
 
   const versionQ = useQuery({
     queryKey: ['app-version'],
@@ -85,6 +96,8 @@ export function AboutSection() {
   const [restartPrompted, setRestartPrompted] = useState(false);
 
   useEffect(() => {
+    if (storeEdition) return;
+
     let cancelled = false;
     void getUpdateStatus().then((s) => {
       if (!cancelled) setStatus(s);
@@ -109,27 +122,39 @@ export function AboutSection() {
       cancelled = true;
       void unlistenPromise.then((fn) => fn());
     };
-  }, []);
+  }, [storeEdition]);
+
+  const effectiveStatus = useMemo<UpdateStatus>(() => {
+    if (storeEdition) {
+      return { kind: 'suppressed-by-policy', reason: 'store-edition' };
+    }
+
+    if (!updaterEnabled) {
+      return { kind: 'suppressed-by-policy', reason: 'user-disabled' };
+    }
+
+    return status;
+  }, [status, storeEdition, updaterEnabled]);
 
   useEffect(() => {
-    if (status.kind === 'ready' && !restartPrompted) {
+    if (effectiveStatus.kind === 'ready' && !restartPrompted) {
       setRestartPrompted(true);
       modal.confirm({
         title: 'Update ready',
-        body: `Update v${status.version} is ready. Restart now to install?`,
+        body: `Update v${effectiveStatus.version} is ready. Restart now to install?`,
         confirmLabel: 'Restart',
         cancelLabel: 'Later',
         onConfirm: () => restart(),
       });
     }
-  }, [status, restartPrompted, modal]);
+  }, [effectiveStatus, restartPrompted, modal]);
 
   const isChecking =
-    status.kind === 'checking' ||
-    status.kind === 'downloading' ||
-    status.kind === 'installing';
+    effectiveStatus.kind === 'checking' ||
+    effectiveStatus.kind === 'downloading' ||
+    effectiveStatus.kind === 'installing';
   const sha = __GIT_SHA__;
-  const fingerprint = __UPDATER_FINGERPRINT__;
+  const fingerprint = storeEdition ? 'not bundled in store edition' : __UPDATER_FINGERPRINT__;
 
   return (
     <SettingsSection title="About">
@@ -170,9 +195,12 @@ export function AboutSection() {
           {formatRelative(lastCheck)}
         </span>
       </SettingRow>
-      <SettingRow label="Status" description={formatStatus(status)}>
-        <Button onClick={() => void checkForUpdate()} disabled={isChecking}>
-          Check Now
+      <SettingRow label="Status" description={formatStatus(effectiveStatus)}>
+        <Button
+          onClick={() => void checkForUpdate()}
+          disabled={isChecking || storeEdition || !updaterEnabled}
+        >
+          {storeEdition ? 'Managed by Store' : 'Check Now'}
         </Button>
       </SettingRow>
       <SettingRow label="Privacy">

@@ -5,6 +5,7 @@ import { listen } from '@tauri-apps/api/event';
 import { getVersion } from '@tauri-apps/api/app';
 
 import { ModalProvider } from '../../components/Modal';
+import { isStoreEdition } from '../../lib/storeEdition';
 import { AboutSection } from './AboutSection';
 import { renderWithQuery } from '../../test/renderWithQuery';
 
@@ -22,12 +23,18 @@ vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('../../lib/storeEdition', () => ({
+  isStoreEdition: vi.fn(() => false),
+}));
+
 const mockedInvoke = vi.mocked(invoke);
 const mockedListen = vi.mocked(listen);
+const mockedIsStoreEdition = vi.mocked(isStoreEdition);
 
 beforeEach(() => {
   mockedInvoke.mockReset();
   mockedListen.mockReset().mockResolvedValue(() => {});
+  mockedIsStoreEdition.mockReturnValue(false);
   vi.mocked(getVersion).mockClear();
 
   const existing = document.getElementById('modal-root');
@@ -41,9 +48,10 @@ function setStatusResponses(
   opts: {
     lastCheckedAt?: number | null;
     status?: { kind: string; [k: string]: unknown };
+    updaterEnabled?: boolean;
   } = {},
 ) {
-  mockedInvoke.mockImplementation((cmd: string) => {
+  mockedInvoke.mockImplementation((cmd: string, args: unknown) => {
     if (cmd === 'plugin:snk-updater|get_update_status') {
       return Promise.resolve(opts.status ?? { kind: 'idle' });
     }
@@ -55,6 +63,13 @@ function setStatusResponses(
     }
     if (cmd === 'plugin:snk-updater|restart_app') {
       return Promise.resolve(undefined);
+    }
+    if (cmd === 'plugin:snk-library|get_setting') {
+      const key = (args as { key: string }).key;
+      if (key === 'updater.enabled') {
+        return Promise.resolve(opts.updaterEnabled ?? true);
+      }
+      return Promise.resolve(null);
     }
     return Promise.resolve(null);
   });
@@ -143,6 +158,31 @@ describe('<AboutSection />', () => {
     renderAbout();
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /Check/i })).toBeDisabled();
+    });
+  });
+
+  it('renders policy suppression text when update checks are disabled in settings', async () => {
+    setStatusResponses({ updaterEnabled: false });
+    renderAbout();
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Update checks disabled in Settings/i),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Check Now/i })).toBeDisabled();
+    });
+  });
+
+  it('renders Microsoft Store suppression text when updater is compiled out', async () => {
+    mockedIsStoreEdition.mockReturnValue(true);
+    setStatusResponses();
+    renderAbout();
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Updates are managed by Microsoft Store/i),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /Managed by Store/i }),
+      ).toBeDisabled();
     });
   });
 

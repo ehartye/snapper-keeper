@@ -19,6 +19,7 @@ export default [
         ...globals.browser,
         __GIT_SHA__: 'readonly',
         __UPDATER_FINGERPRINT__: 'readonly',
+        __STORE_EDITION__: 'readonly',
       },
     },
     plugins: { '@typescript-eslint': tsPlugin },

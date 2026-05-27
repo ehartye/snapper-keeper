@@ -4,6 +4,7 @@ export default defineConfig({
   define: {
     __GIT_SHA__: JSON.stringify('test'),
     __UPDATER_FINGERPRINT__: JSON.stringify('testfingerprint'),
+    __STORE_EDITION__: JSON.stringify(false),
   },
   test: {
     environment: 'happy-dom',

@@ -33,6 +33,18 @@ describe('@snk/updater bindings', () => {
     });
     expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-updater|get_update_status');
   });
+
+  it('getUpdateStatus surfaces suppressed-by-policy with reason', async () => {
+    mockedInvoke.mockResolvedValue({
+      kind: 'suppressed-by-policy',
+      reason: 'user-disabled',
+    });
+    const s = await getUpdateStatus();
+    expect(s).toEqual({
+      kind: 'suppressed-by-policy',
+      reason: 'user-disabled',
+    });
+  });
 });
 
 describe('@snk/updater extended bindings', () => {

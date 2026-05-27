@@ -7,33 +7,14 @@ import {
   disable as disableAutostart,
 } from '@tauri-apps/plugin-autostart';
 
-import { getSetting, setSetting } from '@snk/library';
-
-import { queryKeys } from '../../lib/queryKeys';
 import { THEMES, THEME_FAMILIES, familyOf, useTheme, type ThemeId } from '../../lib/theme';
 import { AboutSection } from './AboutSection';
 import { ClipboardSettings } from './ClipboardSettings';
+import { UpdateSettings } from './UpdateSettings';
+import { useSetting } from './useSetting';
 import { SettingRow } from '../../components/SettingRow';
 import { SettingsSection } from '../../components/SettingsSection';
 import { Toggle } from '../../components/Toggle';
-
-function useSetting<T>(key: string, defaultValue: T): [T, (v: T) => void, boolean] {
-  const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({
-    queryKey: queryKeys.settings.one(key),
-    queryFn: () => getSetting(key),
-  });
-
-  const value = data !== null && data !== undefined ? (data as T) : defaultValue;
-
-  const update = (v: T) => {
-    setSetting(key, v).then(() => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.settings.one(key) });
-    });
-  };
-
-  return [value, update, isLoading];
-}
 
 // Launch-at-login is managed by the autostart plugin, not the settings table,
 // so it has its own little hook.
@@ -305,6 +286,7 @@ export function SettingsWindow() {
           </SettingRow>
         </SettingsSection>
 
+        <UpdateSettings />
         <AboutSection />
       </div>
     </main>

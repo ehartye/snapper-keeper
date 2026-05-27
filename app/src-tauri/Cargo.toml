@@ -9,6 +9,9 @@ publish.workspace = true
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
+[features]
+store-edition = []
+
 [dependencies]
 # `devtools` is intentionally enabled for release builds too: open-source
 # dev-facing app — end users may need to inspect issues for bug reports.

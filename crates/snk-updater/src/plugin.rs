@@ -2,6 +2,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
+use snk_library::LibraryState;
 use tauri::plugin::{Builder, TauriPlugin};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tauri_plugin_updater::UpdaterExt;
@@ -21,6 +22,8 @@ pub enum UpdaterError {
 }
 
 pub type Result<T> = std::result::Result<T, UpdaterError>;
+
+const UPDATER_ENABLED_KEY: &str = "updater.enabled";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
@@ -85,9 +88,19 @@ pub struct UpdaterState {
 }
 
 impl UpdaterState {
+    // `new()` is only used by the test suite — production code uses
+    // `with_status(...)` so the initial status can reflect a policy
+    // suppression at app startup. Gate to #[cfg(test)] so the
+    // workspace-wide `cargo clippy -- -D warnings` (which doesn't pass
+    // --all-targets) doesn't flag the function as dead code.
+    #[cfg(test)]
     fn new() -> Self {
+        Self::with_status(UpdateStatus::Idle)
+    }
+
+    fn with_status(status: UpdateStatus) -> Self {
         Self {
-            status: Mutex::new(UpdateStatus::Idle),
+            status: Mutex::new(status),
             last_check_at: Mutex::new(None),
         }
     }
@@ -121,6 +134,26 @@ impl UpdaterState {
     }
 }
 
+fn updater_enabled(db: &snk_library::Db) -> bool {
+    snk_library::settings::get(db, UPDATER_ENABLED_KEY)
+        .ok()
+        .flatten()
+        .and_then(|value| value.as_bool())
+        .unwrap_or(true)
+}
+
+fn suppressed_by_policy_status<R: Runtime>(app: &AppHandle<R>) -> Option<UpdateStatus> {
+    let lib = app.try_state::<LibraryState>()?;
+    (!updater_enabled(&lib.db)).then_some(UpdateStatus::SuppressedByPolicy {
+        reason: SuppressionReason::UserDisabled,
+    })
+}
+
+fn set_and_emit_status<R: Runtime>(app: &AppHandle<R>, status: UpdateStatus) {
+    app.state::<UpdaterState>().set_status(status.clone());
+    let _ = app.emit("updater:status-changed", status);
+}
+
 #[tauri::command]
 pub async fn check_for_update<R: Runtime>(app: AppHandle<R>) -> Result<UpdateStatus> {
     do_update_check(app).await
@@ -128,7 +161,18 @@ pub async fn check_for_update<R: Runtime>(app: AppHandle<R>) -> Result<UpdateSta
 
 #[tauri::command]
 pub fn get_update_status<R: Runtime>(app: AppHandle<R>) -> UpdateStatus {
-    app.state::<UpdaterState>().get_status()
+    if let Some(status) = suppressed_by_policy_status(&app) {
+        app.state::<UpdaterState>().set_status(status.clone());
+        return status;
+    }
+
+    let status = app.state::<UpdaterState>().get_status();
+    match status {
+        UpdateStatus::SuppressedByPolicy {
+            reason: SuppressionReason::UserDisabled,
+        } => UpdateStatus::Idle,
+        other => other,
+    }
 }
 
 #[tauri::command]
@@ -145,6 +189,11 @@ pub fn restart_app<R: Runtime>(app: AppHandle<R>) {
 }
 
 async fn do_update_check<R: Runtime>(app: AppHandle<R>) -> Result<UpdateStatus> {
+    if let Some(status) = suppressed_by_policy_status(&app) {
+        set_and_emit_status(&app, status.clone());
+        return Ok(status);
+    }
+
     let state = app.state::<UpdaterState>();
     state.set_status(UpdateStatus::Checking);
     state.set_last_check_at(chrono::Utc::now().timestamp_millis());
@@ -162,8 +211,7 @@ async fn do_update_check<R: Runtime>(app: AppHandle<R>) -> Result<UpdateStatus> 
                 version: version.clone(),
                 urgency: Urgency::Normal,
             };
-            state.set_status(status.clone());
-            let _ = app.emit("updater:status-changed", status.clone());
+            set_and_emit_status(&app, status.clone());
 
             let dl_handle = app.app_handle().clone();
             let done_handle = app.app_handle().clone();
@@ -213,8 +261,7 @@ async fn do_update_check<R: Runtime>(app: AppHandle<R>) -> Result<UpdateStatus> 
         }
         Ok(None) => {
             info!("no update available");
-            state.set_status(UpdateStatus::Idle);
-            let _ = app.emit("updater:status-changed", UpdateStatus::Idle);
+            set_and_emit_status(&app, UpdateStatus::Idle);
             Ok(UpdateStatus::Idle)
         }
         Err(e) => {
@@ -223,8 +270,7 @@ async fn do_update_check<R: Runtime>(app: AppHandle<R>) -> Result<UpdateStatus> 
                 reason: UpdateErrorKind::CheckFailed,
                 retryable: true,
             };
-            state.set_status(status.clone());
-            let _ = app.emit("updater:status-changed", status.clone());
+            set_and_emit_status(&app, status.clone());
             Ok(status)
         }
     }
@@ -239,7 +285,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             restart_app
         ])
         .setup(|app, _api| {
-            app.manage(UpdaterState::new());
+            let initial_status =
+                suppressed_by_policy_status(app.app_handle()).unwrap_or(UpdateStatus::Idle);
+            app.manage(UpdaterState::with_status(initial_status));
 
             let handle = app.app_handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -330,6 +378,20 @@ mod tests {
     }
 
     #[test]
+    fn set_policy_suppressed_status() {
+        let state = UpdaterState::new();
+        state.set_status(UpdateStatus::SuppressedByPolicy {
+            reason: SuppressionReason::UserDisabled,
+        });
+        assert_eq!(
+            state.get_status(),
+            UpdateStatus::SuppressedByPolicy {
+                reason: SuppressionReason::UserDisabled
+            }
+        );
+    }
+
+    #[test]
     fn status_transitions() {
         let state = UpdaterState::new();
         assert_eq!(state.get_status(), UpdateStatus::Idle);
@@ -377,6 +439,18 @@ mod tests {
     }
 
     #[test]
+    fn serde_roundtrip_policy_suppression_variant() {
+        let suppressed = UpdateStatus::SuppressedByPolicy {
+            reason: SuppressionReason::UserDisabled,
+        };
+        let json = serde_json::to_string(&suppressed).unwrap();
+        assert!(json.contains("\"kind\":\"suppressed-by-policy\""));
+        assert!(json.contains("\"reason\":\"user-disabled\""));
+        let parsed: UpdateStatus = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, suppressed);
+    }
+
+    #[test]
     fn rejected_by_signature_is_terminal_for_process_lifetime() {
         let state = UpdaterState::new();
         state.set_status(UpdateStatus::RejectedBySignature);
@@ -395,5 +469,21 @@ mod tests {
         let state = UpdaterState::new();
         state.set_last_check_at(1716662400000);
         assert_eq!(state.get_last_check_at(), Some(1716662400000));
+    }
+
+    #[test]
+    fn updater_enabled_defaults_true() {
+        let temp = tempfile::tempdir().unwrap();
+        let db = snk_library::Db::open(&temp.path().join("snapper-keeper.db")).unwrap();
+        assert!(updater_enabled(&db));
+    }
+
+    #[test]
+    fn updater_enabled_reads_false_setting() {
+        let temp = tempfile::tempdir().unwrap();
+        let db = snk_library::Db::open(&temp.path().join("snapper-keeper.db")).unwrap();
+        snk_library::settings::set(&db, UPDATER_ENABLED_KEY, &serde_json::Value::Bool(false))
+            .unwrap();
+        assert!(!updater_enabled(&db));
     }
 }
