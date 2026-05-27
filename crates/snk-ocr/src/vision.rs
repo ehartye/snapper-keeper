@@ -28,12 +28,14 @@ impl OcrBackend for VisionBackend {
     }
 
     fn engine_version(&self) -> String {
-        let pi = objc2_foundation::NSProcessInfo::processInfo();
-        let os = pi.operatingSystemVersion();
-        let v = format!(
-            "{}.{}.{}",
-            os.majorVersion, os.minorVersion, os.patchVersion
-        );
+        let v = unsafe {
+            let pi = objc2_foundation::NSProcessInfo::processInfo();
+            let os = pi.operatingSystemVersion();
+            format!(
+                "{}.{}.{}",
+                os.majorVersion, os.minorVersion, os.patchVersion
+            )
+        };
         format!("Vision (macOS {v})")
     }
 

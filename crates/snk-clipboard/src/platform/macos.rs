@@ -14,11 +14,14 @@ const CONCEALED_TYPES: &[&str] = &[
 ];
 
 pub(crate) fn is_sensitive() -> bool {
-    let pasteboard: Retained<NSPasteboard> = NSPasteboard::generalPasteboard();
+    // SAFETY: NSPasteboard generalPasteboard is a thread-safe singleton
+    // accessor; objc2-app-kit's binding is `unsafe` because it crosses
+    // the Objective-C boundary but the call itself has no preconditions.
+    let pasteboard: Retained<NSPasteboard> = unsafe { NSPasteboard::generalPasteboard() };
     // types() returns Option<Retained<NSArray<NSPasteboardType>>> in
     // objc2-app-kit 0.3 — None == nothing on the pasteboard right now,
     // which we treat as "not sensitive" (nothing to leak).
-    let Some(types) = pasteboard.types() else {
+    let Some(types) = (unsafe { pasteboard.types() }) else {
         return false;
     };
     for i in 0..types.len() {
@@ -35,11 +38,14 @@ pub(crate) fn is_sensitive() -> bool {
 }
 
 pub(crate) fn current_source_app() -> Option<SourceApp> {
-    let workspace: Retained<NSWorkspace> = NSWorkspace::sharedWorkspace();
-    let app: Retained<NSRunningApplication> = workspace.frontmostApplication()?;
+    // SAFETY: NSWorkspace::sharedWorkspace and frontmostApplication are
+    // thread-safe Cocoa singletons. The returned NSRunningApplication may
+    // be nil (returned as Option) during fast app switches.
+    let workspace: Retained<NSWorkspace> = unsafe { NSWorkspace::sharedWorkspace() };
+    let app: Retained<NSRunningApplication> = unsafe { workspace.frontmostApplication() }?;
 
-    let bundle_id: String = app.bundleIdentifier()?.to_string();
-    let display_name: String = app.localizedName()
+    let bundle_id: String = unsafe { app.bundleIdentifier() }?.to_string();
+    let display_name: String = unsafe { app.localizedName() }
         .map(|s| s.to_string())
         .unwrap_or_else(|| bundle_id.clone());
 
