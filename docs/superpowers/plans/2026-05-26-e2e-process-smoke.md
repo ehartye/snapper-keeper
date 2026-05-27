@@ -256,7 +256,7 @@ Substitute `<plugin_crate>` with the crate's snake_case name as it appears in th
 - `snk-clipboard` → `snk_clipboard`
 - `snk-hotkeys` → `snk_hotkeys`
 - `snk-ocr` → `snk_ocr`
-- `snk-updater` → `snk_updater`
+- `snk-updater` → **`snk_releaser`** (NOT `snk_updater`) — the lib name diverges from the package name to evade Windows UAC's installer-detection heuristic on test-binary filenames; see `crates/snk-updater/Cargo.toml` header comment + issue #94.
 
 **Step 2: Run test**
 
