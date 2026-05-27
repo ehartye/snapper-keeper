@@ -164,7 +164,11 @@ pub mod windows {
         let event = match ctx.clipboard.get_text() {
             Ok(t) if !t.is_empty() => ClipboardEvent::Text(t),
             _ => match ctx.clipboard.get_image() {
-                Ok(img) if !img.bytes.is_empty() => ClipboardEvent::Image(img.bytes.into_owned()),
+                Ok(img) if !img.bytes.is_empty() => {
+                    let width = img.width;
+                    let height = img.height;
+                    ClipboardEvent::Image { bytes: img.bytes.into_owned(), width, height }
+                }
                 _ => return,
             },
         };
