@@ -28,7 +28,10 @@ fn select_monitor(monitor_id: Option<u32>) -> Result<Monitor> {
     }
 
     if let Some(id) = monitor_id {
-        let monitor_ids: Vec<u32> = monitors.iter().map(|m| m.id().unwrap_or(u32::MAX)).collect();
+        let monitor_ids: Vec<u32> = monitors
+            .iter()
+            .map(|m| m.id().unwrap_or(u32::MAX))
+            .collect();
         if let Some(pos) = resolve_requested_monitor_position(&monitor_ids, id) {
             return Ok(monitors.swap_remove(pos));
         }
