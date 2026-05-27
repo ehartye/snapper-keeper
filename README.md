@@ -67,13 +67,32 @@ Vite starts on `localhost:5173`, the Rust crates compile (~3-5 min cold, seconds
 
 > **Windows note:** Must run from an **interactive desktop session** (not SSH). Windows OpenSSH sessions are non-interactive window stations, causing WebView2 and `RegisterHotKey` failures.
 
-### Build a release bundle
+### Build a local installer (unsigned)
+
+Produce an unsigned installer locally for smoke-testing what end users will receive:
 
 ```bash
-pnpm --filter @snk/app tauri build
+pnpm build:local
 ```
 
-Bundles land in `target/release/bundle/`. See [`docs/release-signing.md`](docs/release-signing.md) for signing setup.
+> **Windows users:** Run from **Git Bash** (or any bash shell) — the underlying script is bash; PowerShell and `cmd.exe` will fail to invoke it. Git Bash ships with [Git for Windows](https://git-scm.com/download/win).
+
+On macOS this produces a `.app` + `.dmg` for your machine's architecture; on Windows it produces an NSIS `*-setup.exe`. The artifact path + SHA-256 are printed when the build completes.
+
+**Differences from production:**
+
+- Not Authenticode-signed (Windows) or codesigned + notarized (macOS) — the OS will warn on first launch (see below).
+- No updater payload (`.app.tar.gz` + `.sig`) — local builds can't sign the updater manifest.
+- Otherwise identical: same target triples, same bundle contents.
+
+**Installing an unsigned build:**
+
+- **Windows:** SmartScreen warns; click "More info" → "Run anyway."
+- **macOS:** Right-click the `.app` → "Open" → "Open anyway", or run `xattr -d com.apple.quarantine "<path-to-app>"` to clear the Gatekeeper flag.
+
+Linux is not a supported installer target — use `pnpm --filter @snk/app tauri dev` for Linux development.
+
+For signed-release setup, see [`docs/release-signing.md`](docs/release-signing.md).
 
 ## Local testing
 
@@ -155,8 +174,16 @@ SQLite database with WAL mode, 3 migrations (captures + FTS, clipboard, OCR). Ca
 
 Two workflows:
 
-- **CI** (`.github/workflows/ci.yml`) — runs on push to `main` and all PRs. Lint + typecheck + Rust tests on Linux, app build verification on Linux/macOS/Windows.
+- **CI** (`.github/workflows/ci.yml`) — runs on push to `main` and all PRs. Lint + typecheck + Rust tests on Linux, app build verification on Linux/macOS/Windows, plus an `e2e-process-smoke` matrix job on Windows + macOS that runs the packaged binary and scrapes for known-bad signatures (see [design doc](docs/superpowers/specs/2026-05-26-e2e-process-smoke-design.md)).
 - **Release** (`.github/workflows/release.yml`) — runs on `v*` tags. Builds signed bundles for macOS (aarch64 + x86_64) and Windows (x86_64), notarizes macOS builds, generates `latest.json` update manifest, publishes to GitHub Releases.
+
+### E2E process-smoke
+
+The `e2e-process-smoke` CI job runs on every PR against `windows-latest` and `macos-latest`. It builds an unsigned packaged binary via `scripts/build-local.sh`, launches it, waits for the `snk::smoke` `app_ready` log marker (emitted from `main.rs` at the end of `setup()`), then scrapes stdout/stderr/app-log for known-bad signatures: CSP violations, asset-protocol load failures, Rust panics, Tauri ACL rejections, plugin setup failures. Per-OS artifact bundles upload on every run (success or failure) with `process-stdout.log`, `process-stderr.log`, `screenshot.png`, copied `app-logs/`, and `result.json`.
+
+Layer 1 of the same strategy runs in the `rust-test` job: each plugin crate has a `tests/command_acl_smoke.rs` asserting the plugin's `init` function exists with the expected `fn() -> TauriPlugin<R>` signature — a compile-time API-surface check.
+
+UI interactivity (clicks, typing, search results) is intentionally out of scope for the per-PR gate.
 
 ## Releasing
 

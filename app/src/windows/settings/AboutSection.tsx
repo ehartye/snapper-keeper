@@ -32,17 +32,28 @@ function formatStatus(s: UpdateStatus): string {
     case 'checking':
       return 'Checking…';
     case 'available':
-      return `Update available: v${s.version}`;
+      return `Update available: v${s.version} (${s.urgency})`;
     case 'downloading':
-      return `Downloading ${Math.round(s.percent)}%`;
+      return `Downloading ${Math.round(s.progress)}%`;
     case 'ready':
       return `Ready to install v${s.version}`;
-    case 'suppressed-by-policy':
-      return s.reason === 'user-disabled'
-        ? 'Update checks disabled in Settings'
-        : 'Updates are managed by Microsoft Store';
+    case 'installing':
+      return 'Installing update…';
     case 'error':
-      return `Error: ${s.detail}`;
+      return `Error (${s.reason})${s.retryable ? ', retry scheduled' : ''}`;
+    case 'rejected-by-signature':
+      return 'Update rejected: signature verification failed';
+    case 'suppressed-by-policy':
+      switch (s.reason) {
+        case 'user-disabled':
+          return 'Update checks disabled in Settings';
+        case 'store-edition':
+          return 'Updates are managed by Microsoft Store';
+        default:
+          return `Update checks suppressed (${s.reason})`;
+      }
+    case 'skipped':
+      return `Skipped until ${new Date(s.until_epoch_ms).toLocaleString()}`;
     default: {
       // Exhaustiveness guard — also satisfies TS's "function lacks
       // ending return statement" check. If a new variant is added,
@@ -98,7 +109,11 @@ export function AboutSection() {
       'updater:status-changed',
       (e) => {
         setStatus(e.payload);
-        if (e.payload.kind === 'checking' || e.payload.kind === 'idle') {
+        if (
+          e.payload.kind === 'checking' ||
+          e.payload.kind === 'idle' ||
+          e.payload.kind === 'error'
+        ) {
           void lastCheckedAt().then((ts) => setLastCheck(ts));
         }
       },
@@ -135,7 +150,9 @@ export function AboutSection() {
   }, [effectiveStatus, restartPrompted, modal]);
 
   const isChecking =
-    effectiveStatus.kind === 'checking' || effectiveStatus.kind === 'downloading';
+    effectiveStatus.kind === 'checking' ||
+    effectiveStatus.kind === 'downloading' ||
+    effectiveStatus.kind === 'installing';
   const sha = __GIT_SHA__;
   const fingerprint = storeEdition ? 'not bundled in store edition' : __UPDATER_FINGERPRINT__;
 

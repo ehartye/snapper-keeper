@@ -8,7 +8,9 @@
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
     "build": "pnpm -r run build",
-    "tauri": "pnpm --filter @snk/app tauri"
+    "build:local": "bash scripts/build-local.sh",
+    "tauri": "pnpm --filter @snk/app tauri",
+    "test:e2e:smoke": "node e2e/process-smoke.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

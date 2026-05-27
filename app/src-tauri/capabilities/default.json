@@ -26,7 +26,17 @@
     "snk-updater:default",
     "autostart:default",
     "opener:default",
-    "opener:allow-open-path",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [
+        { "path": "$APPDATA" },
+        { "path": "$APPDATA/**" },
+        { "path": "$APPLOCALDATA" },
+        { "path": "$APPLOCALDATA/**" },
+        { "path": "$APPLOG" },
+        { "path": "$APPLOG/**" }
+      ]
+    },
     "opener:allow-open-url"
   ]
 }

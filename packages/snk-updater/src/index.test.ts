@@ -21,6 +21,21 @@ describe('@snk/updater bindings', () => {
 
   it('getUpdateStatus returns the status struct', async () => {
     mockedInvoke.mockResolvedValue({
+      kind: 'available',
+      version: '1.2.3',
+      urgency: 'normal',
+    });
+    const s = await getUpdateStatus();
+    expect(s).toEqual({
+      kind: 'available',
+      version: '1.2.3',
+      urgency: 'normal',
+    });
+    expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-updater|get_update_status');
+  });
+
+  it('getUpdateStatus surfaces suppressed-by-policy with reason', async () => {
+    mockedInvoke.mockResolvedValue({
       kind: 'suppressed-by-policy',
       reason: 'user-disabled',
     });
@@ -29,7 +44,6 @@ describe('@snk/updater bindings', () => {
       kind: 'suppressed-by-policy',
       reason: 'user-disabled',
     });
-    expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-updater|get_update_status');
   });
 });
 

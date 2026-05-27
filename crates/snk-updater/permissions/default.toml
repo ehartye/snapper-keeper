@@ -1,3 +1,8 @@
 [default]
 description = "Default permissions for snk-updater plugin"
-permissions = ["allow-check-for-update", "allow-get-update-status"]
+permissions = [
+    "allow-check-for-update",
+    "allow-get-update-status",
+    "allow-get-last-check-at",
+    "allow-restart-app",
+]

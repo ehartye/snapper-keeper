@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod logging;
+
 use std::{any::Any, panic::AssertUnwindSafe};
 
 use serde::Serialize;
@@ -12,7 +14,6 @@ use tauri::{
     AppHandle, Emitter, Manager, RunEvent, Runtime, Url, Webview, Window,
 };
 use tracing::{error, info, warn};
-use tracing_subscriber::EnvFilter;
 
 const TRAY_HOLO_PNG: &[u8] = include_bytes!("../icons/sk-holo.png");
 const TRAY_MEMPHIS_PNG: &[u8] = include_bytes!("../icons/sk-memphis.png");
@@ -176,21 +177,15 @@ fn set_tray_theme<R: tauri::Runtime>(
 }
 
 fn main() {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_env("SNK_LOG").unwrap_or_else(|_| EnvFilter::new("info,snk=debug")),
-        )
-        .init();
-
     let builder = tauri::Builder::default()
-    .plugin(safe_setup(
-        tauri_plugin_global_shortcut::Builder::new().build(),
-    ))
-    // Launch-at-login support. The plugin manages the platform-specific
-    // bits (registry entry on Windows, LaunchAgent on macOS). The user
-    // toggles it from Settings → Startup.
-    .plugin(safe_setup(tauri_plugin_autostart::init(
-        tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+        .plugin(safe_setup(
+            tauri_plugin_global_shortcut::Builder::new().build(),
+        ))
+        // Launch-at-login support. The plugin manages the platform-specific
+        // bits (registry entry on Windows, LaunchAgent on macOS). The user
+        // toggles it from Settings → Startup.
+        .plugin(safe_setup(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             // No extra args — the app reads its own state to decide whether
             // to start hidden or focused.
             None,
@@ -212,6 +207,22 @@ fn main() {
     builder
         .invoke_handler(tauri::generate_handler![set_tray_theme])
         .setup(|app| {
+            // Initialize file-based tracing (general + security logs +
+            // panic-dump hook) per crates/snk-library/src/logging.rs.
+            // The returned LoggingHandle holds tracing-appender's
+            // background worker guards; leaking it keeps the workers
+            // alive for the program's lifetime — the OS reaps them at
+            // exit. (Tauri's app.manage requires Send+Sync; WorkerGuard
+            // is Send but not Sync, so leak is simpler than wrapping.)
+            let log_dir = app
+                .path()
+                .app_log_dir()
+                .map_err(|e| std::io::Error::other(format!("resolve log dir: {e}")))?;
+            let logging_handle = logging::init(&log_dir).map_err(|e| {
+                std::io::Error::other(format!("init logging at {}: {e}", log_dir.display()))
+            })?;
+            std::mem::forget(logging_handle);
+
             let capture_region = MenuItem::with_id(
                 app,
                 "tray:capture-region",
@@ -347,6 +358,7 @@ fn main() {
             }
 
             info!("snapper-keeper started");
+            tracing::info!(target: "snk::smoke", event = "app_ready", "app reached steady state");
             Ok(())
         })
         .run(tauri::generate_context!())
