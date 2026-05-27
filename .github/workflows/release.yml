@@ -254,7 +254,7 @@ jobs:
             --volname "Snapper Keeper" \
             --window-size 600 400 \
             --icon-size 100 \
-            "artifacts/signed/Snapper.Keeper_universal.dmg" \
+            "artifacts/signed/Snapper.Keeper.dmg" \
             "artifacts/unsigned/Snapper Keeper.app"
 
       - name: Notarize .dmg
@@ -263,7 +263,7 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          DMG="artifacts/signed/Snapper.Keeper_universal.dmg"
+          DMG="artifacts/signed/Snapper.Keeper.dmg"
           xcrun notarytool submit "$DMG" \
             --apple-id "$APPLE_ID" \
             --password "$APPLE_PASSWORD" \
