@@ -9,7 +9,7 @@
 // Design: docs/superpowers/specs/2026-05-26-e2e-process-smoke-design.md
 
 import { spawn } from 'node:child_process';
-import { createWriteStream, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, createWriteStream, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { platform, tmpdir } from 'node:os';
@@ -55,6 +55,81 @@ async function waitForReady(collected, timeoutMs) {
     await delay(200);
   }
   return { ok: false, detail: `no app_ready within ${timeoutMs}ms` };
+}
+
+function screenshotCommand() {
+  const out = join(ARTIFACT_DIR, 'screenshot.png');
+  if (platform() === 'darwin') {
+    return { bin: 'screencapture', args: ['-x', out], outPath: out };
+  }
+  if (platform() === 'win32') {
+    // PowerShell + System.Drawing. Hosted Windows runners may not have
+    // an active GUI session; this then captures a black image or fails.
+    // Either way it is non-fatal for the smoke.
+    const escapedOut = out.replace(/\\/g, '\\\\');
+    const ps = [
+      "$ErrorActionPreference = 'Stop'",
+      'Add-Type -AssemblyName System.Windows.Forms',
+      'Add-Type -AssemblyName System.Drawing',
+      '$bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds',
+      '$bmp = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height',
+      '$g = [System.Drawing.Graphics]::FromImage($bmp)',
+      '$g.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)',
+      `$bmp.Save('${escapedOut}', [System.Drawing.Imaging.ImageFormat]::Png)`,
+    ].join('; ');
+    return { bin: 'powershell', args: ['-NoProfile', '-Command', ps], outPath: out };
+  }
+  return null;
+}
+
+async function captureScreenshot() {
+  const cmd = screenshotCommand();
+  if (!cmd) {
+    logCheck('screenshot', true, 'platform not supported; skipping');
+    return;
+  }
+  await new Promise((resolve) => {
+    const child = spawn(cmd.bin, cmd.args, { stdio: 'ignore' });
+    child.on('exit', (code) => {
+      if (code === 0 && existsSync(cmd.outPath)) {
+        logCheck('screenshot', true, cmd.outPath);
+      } else {
+        logCheck('screenshot', true, `non-fatal capture failure (exit ${code})`);
+      }
+      resolve();
+    });
+    child.on('error', () => {
+      logCheck('screenshot', true, `non-fatal: ${cmd.bin} not found`);
+      resolve();
+    });
+  });
+}
+
+function copyAppLogs() {
+  // The app writes via tracing to `app_log_dir`. Because we overrode
+  // APPDATA / LOCALAPPDATA / XDG_DATA_HOME to APP_DATA_DIR, the logs
+  // land somewhere under that tree. Search a few likely subpaths.
+  const candidates = [
+    join(APP_DATA_DIR, 'com.snapper-keeper.app', 'logs'),
+    join(APP_DATA_DIR, 'Logs', 'com.snapper-keeper.app'),
+    join(APP_DATA_DIR, 'logs'),
+  ];
+  const dest = join(ARTIFACT_DIR, 'app-logs');
+  mkdirSync(dest, { recursive: true });
+  let copied = 0;
+  for (const src of candidates) {
+    if (!existsSync(src)) continue;
+    for (const entry of readdirSync(src)) {
+      const srcPath = join(src, entry);
+      try {
+        if (statSync(srcPath).isFile()) {
+          copyFileSync(srcPath, join(dest, entry));
+          copied++;
+        }
+      } catch {}
+    }
+  }
+  logCheck('app-logs copied', true, `${copied} file(s)`);
 }
 
 function scanForKnownBad(output) {
@@ -165,6 +240,8 @@ async function main() {
   await delay(STEADY_HOLD_MS);
   logCheck('steady-state hold completed', true, `${STEADY_HOLD_MS}ms`);
 
+  await captureScreenshot();
+
   const scan = scanForKnownBad(collected.stdout + '\n' + collected.stderr);
   for (const finding of scan.findings) {
     logCheck(`scrape: ${finding.category}`, false, finding.evidence);
@@ -176,6 +253,8 @@ async function main() {
 
   await terminate();
   logCheck('graceful termination', true, '');
+
+  copyAppLogs();
 }
 
 try {
