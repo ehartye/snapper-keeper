@@ -863,11 +863,10 @@ Open `.github/workflows/ci.yml`. Append a new job at the end of the `jobs:` map:
 
       - name: Build packaged binary (unsigned)
         shell: bash
-        env:
-          # Tell build-local.sh to skip signing — it gates on these env vars.
-          # See scripts/build-local.sh for the gate logic.
-          SNK_SKIP_SIGNING: '1'
         run: bash scripts/build-local.sh
+        # Note: scripts/build-local.sh produces unsigned bundles by
+        # default — no env-gate needed. Signing only happens in the
+        # release.yml workflow when run with signing secrets.
 
       - name: Resolve built binary path
         id: resolve
@@ -895,17 +894,7 @@ Open `.github/workflows/ci.yml`. Append a new job at the end of the `jobs:` map:
           if-no-files-found: error
 ```
 
-**Step 2: Verify `scripts/build-local.sh` actually supports the `SNK_SKIP_SIGNING` env**
-
-Read `scripts/build-local.sh`. If `SNK_SKIP_SIGNING` is NOT respected, two options:
-1. **Add a `--no-sign` flag or env-gate** to `build-local.sh` (small edit; keeps the script as the single build entrypoint), commit as a separate precursor task.
-2. **Use a different build command** in the CI step — call `pnpm tauri build` directly with a config overlay (`--config '{"bundle":{"...":"..."}}'`) that disables signing.
-
-Pick option 1 if `build-local.sh` already has a recognizable signing gate (look for `codesign`, `notarize`, `signtool`); add the env check just above where signing runs. Pick option 2 if `build-local.sh` is tightly coupled to signing without an existing toggle.
-
-Document the chosen path in the commit message.
-
-**Step 3: Commit**
+**Step 2: Commit**
 
 ```bash
 git add .github/workflows/ci.yml
@@ -922,17 +911,7 @@ Design: docs/superpowers/specs/2026-05-26-e2e-process-smoke-design.md
 Issue: #47"
 ```
 
-If Step 2 required a precursor commit (option 1 above), commit that FIRST with message:
-
-```bash
-git commit -m "feat(scripts): build-local.sh honors SNK_SKIP_SIGNING
-
-Needed so CI's e2e-process-smoke job can produce an unsigned bundle
-without code-signing certs in the environment.
-
-Design: docs/superpowers/specs/2026-05-26-e2e-process-smoke-design.md
-Issue: #47"
-```
+**Implementation discovery (2026-05-26):** the original plan included an `SNK_SKIP_SIGNING` env var for `build-local.sh`. Inspection of the script shows it produces unsigned bundles by default — no signing gate exists, so no env var is needed. Plan revised.
 
 ---
 
