@@ -72,7 +72,11 @@ fn prune_backups(backups_dir: &Path) {
 ///
 /// Does NOT perform restore on failure — that is the caller's responsibility
 /// (`Db::open`) so the connection can be closed before the file is replaced.
-fn migrate_inner(conn: &mut Connection, db_path: Option<&Path>, m: &Migrations<'static>) -> Result<()> {
+fn migrate_inner(
+    conn: &mut Connection,
+    db_path: Option<&Path>,
+    m: &Migrations<'static>,
+) -> Result<()> {
     let prior = m.current_version(conn).unwrap_or(SchemaVersion::NoneSet);
     let prior_v = schema_version_as_u32(&prior);
     let target_v = MIGRATION_STRS.len() as u32;
@@ -100,13 +104,15 @@ fn migrate_inner(conn: &mut Connection, db_path: Option<&Path>, m: &Migrations<'
         None
     };
 
-    let result = m.to_latest(conn).map_err(|e| crate::LibraryError::Migration {
-        from: prior_v,
-        to: target_v,
-        recoverable: false,
-        backup_path: backup_path_opt.as_ref().map(|p| p.display().to_string()),
-        detail: e.to_string(),
-    });
+    let result = m
+        .to_latest(conn)
+        .map_err(|e| crate::LibraryError::Migration {
+            from: prior_v,
+            to: target_v,
+            recoverable: false,
+            backup_path: backup_path_opt.as_ref().map(|p| p.display().to_string()),
+            detail: e.to_string(),
+        });
 
     match result {
         Ok(()) => {
@@ -354,7 +360,8 @@ mod tests {
         // Create a minimal v1 DB (one table, user_version = 1).
         {
             let conn = Connection::open(&db_path).unwrap();
-            conn.execute_batch("CREATE TABLE t (id INTEGER PRIMARY KEY)").unwrap();
+            conn.execute_batch("CREATE TABLE t (id INTEGER PRIMARY KEY)")
+                .unwrap();
             conn.pragma_update(None, "user_version", 1u32).unwrap();
         }
 
@@ -369,14 +376,31 @@ mod tests {
             .expect_err("broken migration must fail");
 
         match err {
-            crate::LibraryError::Migration { backup_path, detail, recoverable, .. } => {
-                assert!(!recoverable, "migrate_with does not restore; restore is Db::open's job");
+            crate::LibraryError::Migration {
+                backup_path,
+                detail,
+                recoverable,
+                ..
+            } => {
+                assert!(
+                    !recoverable,
+                    "migrate_with does not restore; restore is Db::open's job"
+                );
                 assert!(backup_path.is_some(), "backup_path must be set in error");
-                assert!(!detail.is_empty(), "detail must contain the rusqlite_migration error");
+                assert!(
+                    !detail.is_empty(),
+                    "detail must contain the rusqlite_migration error"
+                );
                 let bp = backup_path.unwrap();
-                assert!(bp.contains("pre-v1-"), "backup name must encode prior version; got {bp}");
+                assert!(
+                    bp.contains("pre-v1-"),
+                    "backup name must encode prior version; got {bp}"
+                );
                 // Backup file must exist on disk.
-                assert!(std::path::Path::new(&bp).exists(), "backup file must exist at {bp}");
+                assert!(
+                    std::path::Path::new(&bp).exists(),
+                    "backup file must exist at {bp}"
+                );
             }
             other => panic!("expected Migration error, got {other:?}"),
         }

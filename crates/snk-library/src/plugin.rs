@@ -61,7 +61,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
                     // the app can start and show the user an error modal.
                     let _ = app.emit(
                         "library:migration-failed",
-                        MigrationFailedPayload { backup_path: backup_path.unwrap_or_default() },
+                        MigrationFailedPayload {
+                            backup_path: backup_path.unwrap_or_default(),
+                        },
                     );
                     Db::open_no_migrate(&db_path)
                         .map_err(|e| format!("reopen db after migration restore: {e}"))?

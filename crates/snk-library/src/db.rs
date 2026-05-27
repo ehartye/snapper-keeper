@@ -34,7 +34,9 @@ impl Db {
         match crate::migrate::migrate(&mut conn, Some(path)) {
             Ok(()) => {
                 info!(path = %path.display(), "opened db");
-                Ok(Self { conn: Mutex::new(conn) })
+                Ok(Self {
+                    conn: Mutex::new(conn),
+                })
             }
             Err(crate::LibraryError::Migration {
                 backup_path: Some(backup),
@@ -42,7 +44,9 @@ impl Db {
                 to,
                 detail,
                 ..
-            }) => Err(restore_after_migration_failure(conn, path, backup, from, to, detail)),
+            }) => Err(restore_after_migration_failure(
+                conn, path, backup, from, to, detail,
+            )),
             Err(e) => Err(e),
         }
     }
@@ -79,14 +83,18 @@ impl Db {
         conn.pragma_update(None, "foreign_keys", "ON")?;
 
         match crate::migrate::migrate_with(&mut conn, Some(path), m) {
-            Ok(()) => Ok(Self { conn: Mutex::new(conn) }),
+            Ok(()) => Ok(Self {
+                conn: Mutex::new(conn),
+            }),
             Err(crate::LibraryError::Migration {
                 backup_path: Some(backup),
                 from,
                 to,
                 detail,
                 ..
-            }) => Err(restore_after_migration_failure(conn, path, backup, from, to, detail)),
+            }) => Err(restore_after_migration_failure(
+                conn, path, backup, from, to, detail,
+            )),
             Err(e) => Err(e),
         }
     }
@@ -153,7 +161,8 @@ mod tests {
         // Build a minimal v1 DB: one table, user_version = 1.
         {
             let conn = Connection::open(&db_path).unwrap();
-            conn.execute_batch("CREATE TABLE t (id INTEGER PRIMARY KEY)").unwrap();
+            conn.execute_batch("CREATE TABLE t (id INTEGER PRIMARY KEY)")
+                .unwrap();
             conn.pragma_update(None, "user_version", 1u32).unwrap();
         }
 
@@ -167,9 +176,16 @@ mod tests {
             .expect_err("broken migration must fail");
 
         let backup_path_str = match err {
-            crate::LibraryError::Migration { recoverable, ref backup_path, .. } => {
+            crate::LibraryError::Migration {
+                recoverable,
+                ref backup_path,
+                ..
+            } => {
                 assert!(recoverable, "restore should succeed; got recoverable=false");
-                assert!(backup_path.is_some(), "backup_path must be present in error");
+                assert!(
+                    backup_path.is_some(),
+                    "backup_path must be present in error"
+                );
                 backup_path.clone().unwrap()
             }
             other => panic!("expected Migration error, got {other:?}"),
