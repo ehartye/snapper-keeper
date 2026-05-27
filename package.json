@@ -9,8 +9,7 @@
     "test": "pnpm -r run test",
     "build": "pnpm -r run build",
     "build:local": "bash scripts/build-local.sh",
-    "tauri": "pnpm --filter @snk/app tauri",
-    "test:e2e:windows": "node e2e/windows-smoke.mjs"
+    "tauri": "pnpm --filter @snk/app tauri"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
