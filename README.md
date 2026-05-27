@@ -174,8 +174,16 @@ SQLite database with WAL mode, 3 migrations (captures + FTS, clipboard, OCR). Ca
 
 Two workflows:
 
-- **CI** (`.github/workflows/ci.yml`) — runs on push to `main` and all PRs. Lint + typecheck + Rust tests on Linux, app build verification on Linux/macOS/Windows.
+- **CI** (`.github/workflows/ci.yml`) — runs on push to `main` and all PRs. Lint + typecheck + Rust tests on Linux, app build verification on Linux/macOS/Windows, plus an `e2e-process-smoke` matrix job on Windows + macOS that runs the packaged binary and scrapes for known-bad signatures (see [design doc](docs/superpowers/specs/2026-05-26-e2e-process-smoke-design.md)).
 - **Release** (`.github/workflows/release.yml`) — runs on `v*` tags. Builds signed bundles for macOS (aarch64 + x86_64) and Windows (x86_64), notarizes macOS builds, generates `latest.json` update manifest, publishes to GitHub Releases.
+
+### E2E process-smoke
+
+The `e2e-process-smoke` CI job runs on every PR against `windows-latest` and `macos-latest`. It builds an unsigned packaged binary via `scripts/build-local.sh`, launches it, waits for the `snk::smoke` `app_ready` log marker (emitted from `main.rs` at the end of `setup()`), then scrapes stdout/stderr/app-log for known-bad signatures: CSP violations, asset-protocol load failures, Rust panics, Tauri ACL rejections, plugin setup failures. Per-OS artifact bundles upload on every run (success or failure) with `process-stdout.log`, `process-stderr.log`, `screenshot.png`, copied `app-logs/`, and `result.json`.
+
+Layer 1 of the same strategy runs in the `rust-test` job: each plugin crate has a `tests/command_acl_smoke.rs` asserting the plugin's `init` function exists with the expected `fn() -> TauriPlugin<R>` signature — a compile-time API-surface check.
+
+UI interactivity (clicks, typing, search results) is intentionally out of scope for the per-PR gate.
 
 ## Releasing
 
