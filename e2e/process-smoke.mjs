@@ -57,6 +57,53 @@ async function waitForReady(collected, timeoutMs) {
   return { ok: false, detail: `no app_ready within ${timeoutMs}ms` };
 }
 
+function scanForKnownBad(output) {
+  const lines = output.split('\n');
+  const patterns = [
+    {
+      category: 'CSP violation',
+      // The CLAUDE.md line-47 gotcha: WebView2 routes through http://
+      // for asset.localhost / ipc.localhost in packaged builds; if CSP
+      // lists only one scheme, the browser logs a Content Security
+      // Policy violation.
+      regex: /Content[- ]Security[- ]Policy/i,
+    },
+    {
+      category: 'asset.localhost load failure',
+      regex: /asset\.localhost.*(failed|refused|blocked|error)/i,
+    },
+    {
+      category: 'ipc.localhost load failure',
+      regex: /ipc\.localhost.*(failed|refused|blocked|error)/i,
+    },
+    {
+      category: 'Rust panic',
+      regex: /thread '[^']+' panicked/i,
+    },
+    {
+      category: 'Tauri ACL rejection',
+      regex: /not allowed by ACL|not allowed by the ACL/i,
+    },
+    {
+      category: 'plugin setup failed',
+      // main.rs emits this via the SafeSetupPlugin wrapper when a
+      // plugin's initialize() panics.
+      regex: /plugin setup panicked|plugin:setup-failed/i,
+    },
+  ];
+
+  const findings = [];
+  for (const line of lines) {
+    for (const { category, regex } of patterns) {
+      if (regex.test(line)) {
+        findings.push({ category, evidence: line.trim().slice(0, 500) });
+      }
+    }
+  }
+
+  return { findings, linesScanned: lines.length };
+}
+
 async function terminate() {
   if (!proc || proc.exitCode !== null) return;
   if (platform() === 'win32') {
@@ -117,6 +164,15 @@ async function main() {
 
   await delay(STEADY_HOLD_MS);
   logCheck('steady-state hold completed', true, `${STEADY_HOLD_MS}ms`);
+
+  const scan = scanForKnownBad(collected.stdout + '\n' + collected.stderr);
+  for (const finding of scan.findings) {
+    logCheck(`scrape: ${finding.category}`, false, finding.evidence);
+  }
+  if (scan.findings.length > 0) {
+    throw new Error(`scrape found ${scan.findings.length} bad-signature match(es)`);
+  }
+  logCheck('no bad-signature matches', true, `${scan.linesScanned} lines scanned`);
 
   await terminate();
   logCheck('graceful termination', true, '');
