@@ -128,7 +128,7 @@ jobs:
         # foreground) — those need a real Tauri runtime or live monitors/keyboard.
         run: |
           cargo llvm-cov --workspace --exclude snapper-keeper-app \
-            --ignore-filename-regex '(plugin\.rs|commands\.rs|caret\.rs|paste\.rs|watcher\.rs|hotkeys.src.lib\.rs|queue\.rs|build\.rs|foreground\.rs|capture.src.grab\.rs|capture.src.orchestrate\.[...]
+            --ignore-filename-regex '(plugin\.rs|commands\.rs|caret\.rs|paste\.rs|watcher\.rs|hotkeys\.src\.lib\.rs|queue\.rs|build\.rs|foreground\.rs|capture\.src\.grab\.rs|capture\.src\.orchestrate\.rs)' \
             --fail-under-lines 90 --summary-only
       - name: IPC-surface coverage (report only — no gate)
         # Inverse of the logic-coverage filter: only the files excluded
@@ -138,7 +138,7 @@ jobs:
         # decision: report honest IPC numbers instead of hiding them.
         run: |
           cargo llvm-cov --workspace --exclude snapper-keeper-app \
-            --ignore-filename-regex '^(?!.*(plugin\.rs|commands\.rs|caret\.rs|paste\.rs|watcher\.rs|hotkeys.src.lib\.rs|queue\.rs|build\.rs|foreground\.rs|capture.src.grab\.rs|capture.src.orchest[...]
+            --ignore-filename-regex '^(?!.*(plugin\.rs|commands\.rs|caret\.rs|paste\.rs|watcher\.rs|hotkeys\.src\.lib\.rs|queue\.rs|build\.rs|foreground\.rs|capture\.src\.grab\.rs|capture\.src\.orchestrate\.rs)).*$' \
             --summary-only || echo "::warning::IPC-surface coverage tool returned non-zero (likely no matching files); not gating"
 
   build-app:
@@ -197,25 +197,11 @@ jobs:
       - name: Install pinned Edge WebDriver matching runner Edge build
         shell: pwsh
         run: |
-          $edgeCandidates = @(
-            "$env:ProgramFiles(x86)\Microsoft\Edge\Application\msedge.exe",
-            "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe"
-          )
-
-          $edgePath = $edgeCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-
-          if (-not $edgePath) {
-            $edgeCmd = Get-Command msedge.exe -ErrorAction SilentlyContinue
-            if ($edgeCmd) {
-              $edgePath = $edgeCmd.Source
-            }
+          $edgeVersion = (& "${env:ProgramFiles(x86)}\Microsoft\EdgeWebView\Application\msedgewebview2.exe" --version)
+          if (-not $edgeVersion) {
+            throw "Could not determine WebView2 runtime version on this runner."
           }
-
-          if (-not $edgePath) {
-            throw "Could not locate msedge.exe on this runner."
-          }
-
-          $edgeVersion = (Get-Item $edgePath).VersionInfo.ProductVersion
+          $edgeVersion = $edgeVersion.Trim()
           $edgeBuild = (($edgeVersion -split '\.')[0..2] -join '.')
           $driverVersion = (Invoke-RestMethod "https://msedgedriver.azureedge.net/LATEST_RELEASE_$edgeBuild").Trim()
           Invoke-WebRequest "https://msedgedriver.azureedge.net/$driverVersion/edgedriver_win64.zip" -OutFile "$env:RUNNER_TEMP\edgedriver.zip"
