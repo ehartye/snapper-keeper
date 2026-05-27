@@ -54,6 +54,8 @@ fn migration_variant_wire_shape() {
         from: 3,
         to: 4,
         recoverable: true,
+        backup_path: None,
+        detail: String::new(),
     };
     let actual = serde_json::to_value(&e).expect("serialize");
     assert_eq!(
@@ -63,6 +65,28 @@ fn migration_variant_wire_shape() {
             "from": 3,
             "to": 4,
             "recoverable": true,
+        })
+    );
+}
+
+#[test]
+fn migration_variant_wire_shape_with_backup_path() {
+    let e = LibraryError::Migration {
+        from: 1,
+        to: 6,
+        recoverable: false,
+        backup_path: Some("/data/backups/pre-v1-20260101T000000Z.db".into()),
+        detail: String::new(),
+    };
+    let actual = serde_json::to_value(&e).expect("serialize");
+    assert_eq!(
+        actual,
+        json!({
+            "kind": "migration",
+            "from": 1,
+            "to": 6,
+            "recoverable": false,
+            "backup_path": "/data/backups/pre-v1-20260101T000000Z.db",
         })
     );
 }
