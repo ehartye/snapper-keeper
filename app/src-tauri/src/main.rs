@@ -350,6 +350,7 @@ fn main() {
             }
 
             info!("snapper-keeper started");
+            tracing::info!(target: "snk::smoke", event = "app_ready", "app reached steady state");
             Ok(())
         })
         .run(tauri::generate_context!())
