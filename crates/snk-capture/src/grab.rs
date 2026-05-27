@@ -13,6 +13,14 @@ pub struct GrabResult {
     pub monitor_name: String,
 }
 
+fn resolve_requested_monitor_position(monitor_ids: &[u32], requested: u32) -> Option<usize> {
+    let index = requested as usize;
+    if index < monitor_ids.len() {
+        return Some(index);
+    }
+    monitor_ids.iter().position(|id| *id == requested)
+}
+
 fn select_monitor(monitor_id: Option<u32>) -> Result<Monitor> {
     let mut monitors = Monitor::all()?;
     if monitors.is_empty() {
@@ -20,15 +28,12 @@ fn select_monitor(monitor_id: Option<u32>) -> Result<Monitor> {
     }
 
     if let Some(id) = monitor_id {
-        if let Some(pos) = monitors
+        let monitor_ids: Vec<u32> = monitors
             .iter()
-            .position(|m| m.id().unwrap_or(u32::MAX) == id)
-        {
+            .map(|m| m.id().unwrap_or(u32::MAX))
+            .collect();
+        if let Some(pos) = resolve_requested_monitor_position(&monitor_ids, id) {
             return Ok(monitors.swap_remove(pos));
-        }
-        let index = id as usize;
-        if index < monitors.len() {
-            return Ok(monitors.swap_remove(index));
         }
     }
 
@@ -251,5 +256,19 @@ mod tests {
         for px in img.pixels() {
             assert_eq!(px.0, [0, 0, 255, 255]);
         }
+    }
+
+    #[test]
+    fn resolve_requested_monitor_position_prefers_index_over_id_match() {
+        let ids = vec![1, 2];
+        // requested=1 could mean index 1 (second monitor) or id 1 (first monitor).
+        // We prefer index semantics for frontend callers that pass monitor index.
+        assert_eq!(resolve_requested_monitor_position(&ids, 1), Some(1));
+    }
+
+    #[test]
+    fn resolve_requested_monitor_position_falls_back_to_id_when_index_is_out_of_range() {
+        let ids = vec![42, 77];
+        assert_eq!(resolve_requested_monitor_position(&ids, 77), Some(1));
     }
 }
