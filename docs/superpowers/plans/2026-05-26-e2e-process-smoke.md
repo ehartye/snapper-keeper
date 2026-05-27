@@ -33,95 +33,65 @@ Confirmed by grep of `pub fn init<R: Runtime>() -> TauriPlugin<R>` + `tauri::gen
 
 ---
 
-### Task 1: Pre-flight — prove `tauri::test::mock_builder` works for one plugin
+### Task 1: Pre-flight — prove plugin-init smoke pattern for one plugin
 
-This task de-risks the spec's Risk 1 ("Tauri 2 `tauri::test` API surface stability") on a single plugin (`snk-library`) before fanning out to all 7. If the API surface turns out to differ from what's documented here, fix this task in-place and the rest of the plan follows the corrected pattern.
+This task de-risks the spec's Risk 1 ("Tauri 2 `tauri::test` API surface stability") on a single plugin (`snk-library`) before fanning out to all 7.
+
+**Implementation discovery (2026-05-26):** During pre-flight, the full `mock_builder().plugin(...).build(mock_context(noop_assets()))` chain produced `STATUS_ENTRYPOINT_NOT_FOUND` (0xc0000139) on the implementer's Windows + OneDrive environment — `tauri::Wry`/`MockRuntime` monomorphization pulls in a windowing-system DLL chain (comctl32, ole32, gdi32, dwmapi, shell32, user32) that fails to load before the test entrypoint runs. The function-pointer-only variant works cleanly. Plan revised to use that variant — matches the spec's Risk 1 mitigation ("fallback is per-plugin command unit tests without a full mock app — lower fidelity, still catches the wiring"). The deeper ACL gotcha coverage moves to Layer 2 (the real packaged binary exercises all plugins' ACL at startup).
 
 **Files:**
-- Modify: `crates/snk-library/Cargo.toml` (add `tauri` to `[dev-dependencies]` with `test` feature)
 - Create: `crates/snk-library/tests/command_acl_smoke.rs`
 
-**Step 1: Verify the `test` feature exists on Tauri 2's `tauri` crate**
+(No `Cargo.toml` change needed — the function-pointer variant uses only `tauri` symbols already in `[dependencies]`.)
 
-Run:
-```bash
-cargo metadata --format-version 1 --manifest-path crates/snk-library/Cargo.toml --no-deps 2>/dev/null | jq -r '.packages[0].dependencies[] | select(.name == "tauri") | .features[]' || true
-cargo doc --package tauri --no-deps 2>&1 | head -1  # warm cache so the next step is fast
-```
-Then check the Tauri version's test API:
-```bash
-cargo search tauri --limit 1
-```
-Then verify the feature exists by attempting to enable it:
-```bash
-cargo check --package snk-library --tests
-```
-
-Expected: the `tauri` crate version pinned by the workspace exposes a `test` feature and a `tauri::test::mock_builder`, `tauri::test::mock_context`, and `tauri::test::noop_assets` symbols. If any of these names differ in the pinned version, find the equivalents (`cargo doc --package tauri --open`) and adjust this plan.
-
-**Step 2: Add dev-dep with `test` feature**
-
-Edit `crates/snk-library/Cargo.toml`. The `[dev-dependencies]` section currently has only `tempfile`. Add:
-
-```toml
-[dev-dependencies]
-tempfile = "3"
-tauri = { workspace = true, features = ["test"] }
-```
-
-Cargo unifies dev-dep features over normal-dep features only for test builds, so this does not pull the `test` feature into the production binary.
-
-**Step 3: Write the failing test**
+**Step 1: Write the test**
 
 Create `crates/snk-library/tests/command_acl_smoke.rs`:
 
 ```rust
-//! Layer 1 ACL smoke: assert that snk-library's plugin loads under
-//! tauri::test::MockRuntime. Catches the "three coordinated entries"
-//! gotcha (CLAUDE.md line 48) — a command in `invoke_handler!` that
-//! tauri-build's `COMMANDS` array missed will fail here at plugin load
-//! time, because the generated per-command permission TOML won't exist
-//! and the plugin's permission set won't parse cleanly.
+//! Layer 1 plugin-init smoke for snk-library.
 //!
-//! See docs/superpowers/specs/2026-05-26-e2e-process-smoke-design.md
-//! § "Layer 1" for the broader story.
-
-use tauri::test::{mock_builder, mock_context, noop_assets};
-use tauri::Manager;
+//! Asserts that `snk_library::init` exists with the expected signature
+//! and monomorphizes for `tauri::Wry`. Catches:
+//!   * accidental removal/rename of `init`
+//!   * accidental signature drift away from `fn() -> TauriPlugin<R>`
+//!   * compile errors anywhere in the plugin's code path
+//!
+//! Does NOT catch the deeper "three coordinated entries" ACL gotcha
+//! (CLAUDE.md line 48) — the cheap way to catch that (mock_builder +
+//! build + invoke) requires monomorphizing the runtime, which pulls in
+//! a Windows DLL chain that fails to load in some local environments
+//! (see plan task 1's "Implementation discovery"). Layer 2's real
+//! packaged-binary smoke covers that surface.
+//!
+//! Design: docs/superpowers/specs/2026-05-26-e2e-process-smoke-design.md
 
 #[test]
-fn plugin_loads_under_mock_runtime() {
-    let _app = mock_builder()
-        .plugin(snk_library::init())
-        .build(mock_context(noop_assets()))
-        .expect("snk-library plugin should build under MockRuntime");
+fn init_symbol_exists() {
+    let _: fn() -> tauri::plugin::TauriPlugin<tauri::Wry> = snk_library::init;
 }
 ```
 
-Note: `snk_library::init()` is generic over `R: Runtime`. Using `mock_builder()` infers `R = MockRuntime`. If the compiler can't infer (e.g. error E0282), change to `snk_library::init::<tauri::test::MockRuntime>()`.
-
-**Step 4: Run test and verify behavior**
+**Step 2: Run test**
 
 ```bash
 cargo test --package snk-library --test command_acl_smoke
 ```
 
-Expected: **PASSES** on a healthy main. The point of this test is to fail when the three-entries discipline is broken, so on a green tree it should pass cleanly.
+Expected: **PASSES**. The test is a compile-time API-surface assertion plus a no-op runtime entrypoint, so it passes trivially on a healthy main and fails to compile only when `init` is renamed/removed or its signature changes.
 
-If it fails with a build error referencing `tauri::test` symbols: the test feature is gated differently in this Tauri version. Fix the imports (look at `cargo doc --package tauri --open` → search "test") and update this plan's Task 1 + the per-plugin tasks below to match.
-
-If it fails with a runtime error like "permission not found" or "command X not allowed": **that's the three-entries gotcha existing in main right now**. Surface it to the user; don't suppress the test.
-
-**Step 5: Commit**
+**Step 3: Commit**
 
 ```bash
-git add crates/snk-library/Cargo.toml crates/snk-library/tests/command_acl_smoke.rs
-git commit -m "test(snk-library): add Layer 1 ACL smoke under tauri::test::MockRuntime
+git add crates/snk-library/tests/command_acl_smoke.rs
+git commit -m "test(snk-library): add Layer 1 plugin-init smoke
 
-Asserts the plugin loads cleanly under MockRuntime — catches the
-three-coordinated-entries gotcha (CLAUDE.md line 48) where a command
-registered in invoke_handler! but missing from build.rs::COMMANDS
-fails plugin load.
+Asserts snk_library::init exists with the expected fn() -> TauriPlugin<R>
+signature. Compile-time API-surface check; deeper ACL gotcha coverage
+moves to Layer 2 — the full mock_builder().build() chain triggered a
+Windows DLL load failure (STATUS_ENTRYPOINT_NOT_FOUND) in the
+implementer's environment, and per the spec's Risk 1 mitigation we
+fall back to the cheaper variant rather than fight the DLL chain.
 
 Design: docs/superpowers/specs/2026-05-26-e2e-process-smoke-design.md
 Issue: #47"
@@ -258,39 +228,25 @@ Issue: #47"
 
 ---
 
-### Tasks 4–10: Layer 1 ACL smoke for the remaining 6 plugins
+### Tasks 4–10: Layer 1 plugin-init smoke for the remaining 6 plugins
 
-These follow Task 1's template exactly, varying only the crate name and import path. Each plugin gets its own task because each commits separately (matches CLAUDE.md's "one task = one commit" convention).
+These mirror Task 1's pattern exactly, varying only the crate name. Each plugin gets its own task / commit (matches CLAUDE.md's "one task = one commit" convention). No `Cargo.toml` changes needed.
 
 **For each of: `snk-annotate`, `snk-capture`, `snk-clipboard`, `snk-hotkeys`, `snk-ocr`, `snk-updater`:**
 
-**Step 1: Add dev-dep with `test` feature**
-
-Edit `crates/<plugin>/Cargo.toml`. Add to `[dev-dependencies]` (creating the section if absent):
-
-```toml
-[dev-dependencies]
-tauri = { workspace = true, features = ["test"] }
-```
-
-If the section already exists, just add the `tauri` line without disturbing existing entries.
-
-**Step 2: Create the test file**
+**Step 1: Create the test file**
 
 Create `crates/<plugin>/tests/command_acl_smoke.rs`:
 
 ```rust
-//! Layer 1 ACL smoke for <plugin>. See snk-library/tests/command_acl_smoke.rs
-//! for the design rationale.
-
-use tauri::test::{mock_builder, mock_context, noop_assets};
+//! Layer 1 plugin-init smoke for <plugin>. See snk-library/tests/command_acl_smoke.rs
+//! for the design rationale and the discovery that drove this variant.
+//!
+//! Design: docs/superpowers/specs/2026-05-26-e2e-process-smoke-design.md
 
 #[test]
-fn plugin_loads_under_mock_runtime() {
-    let _app = mock_builder()
-        .plugin(<plugin_crate>::init())
-        .build(mock_context(noop_assets()))
-        .expect("<plugin> plugin should build under MockRuntime");
+fn init_symbol_exists() {
+    let _: fn() -> tauri::plugin::TauriPlugin<tauri::Wry> = <plugin_crate>::init;
 }
 ```
 
@@ -302,42 +258,22 @@ Substitute `<plugin_crate>` with the crate's snake_case name as it appears in th
 - `snk-ocr` → `snk_ocr`
 - `snk-updater` → `snk_updater`
 
-**Step 3: Run test**
+**Step 2: Run test**
 
 ```bash
 cargo test --package <crate-name> --test command_acl_smoke
 ```
 
-Expected: PASS. If it fails with "command not registered" / "permission not found", that means the gotcha exists in main today — DO NOT suppress; report to user. If it fails with `setup(...)` panic (because the plugin's setup requires real `AppHandle` state — e.g., `snk-library`'s DB open, `snk-hotkeys`' global-hotkey registration), that's expected on hosted runners. Mitigations:
+Expected: PASS. If it fails with a compile error like `cannot find function 'init' in crate`, the plugin's init function is missing or renamed — surface to user.
 
-- For plugins whose `setup(...)` reaches for real OS resources, the mock context may panic. Two options:
-  1. **Move the runtime-only state out of `setup`**: refactor so `setup` only registers state lazily (preferred but invasive — defer to a future PR).
-  2. **Accept the test must run on a CI runner where the resources exist**, or mark `#[ignore]` with a clear comment. Layer 2 covers the real-runtime path anyway.
-
-If a plugin can't build under `mock_context(noop_assets())`, write the test with a more permissive expectation:
-
-```rust
-use tauri::test::{mock_builder, mock_context, noop_assets};
-
-#[test]
-fn plugin_init_returns_plugin() {
-    // <plugin>'s setup() reaches for real OS state (e.g., global hotkey
-    // registration), which the MockRuntime can't provide. Smoke just
-    // verifies init() returns without panic; ACL surface is exercised
-    // by Layer 2's real-binary smoke.
-    let _plugin = <plugin_crate>::init::<tauri::test::MockRuntime>();
-}
-```
-
-Pick whichever variant compiles + passes for the specific plugin. Both variants catch the three-entries gotcha (the strict variant catches more — permission TOML parsing — but the lenient variant still catches `invoke_handler!` symbol issues at compile time).
-
-**Step 4: Commit**
+**Step 3: Commit**
 
 ```bash
-git add crates/<plugin>/Cargo.toml crates/<plugin>/tests/command_acl_smoke.rs
-git commit -m "test(<plugin>): add Layer 1 ACL smoke under tauri::test::MockRuntime
+git add crates/<plugin>/tests/command_acl_smoke.rs
+git commit -m "test(<plugin>): add Layer 1 plugin-init smoke
 
-Mirrors snk-library Layer 1 test pattern.
+Mirrors snk-library Layer 1 pattern — compile-time assertion that
+<plugin_crate>::init exists with the expected signature.
 
 Design: docs/superpowers/specs/2026-05-26-e2e-process-smoke-design.md
 Issue: #47"
