@@ -54,6 +54,8 @@ fn migration_variant_wire_shape() {
         from: 3,
         to: 4,
         recoverable: true,
+        backup_path: None,
+        detail: String::new(),
     };
     let actual = serde_json::to_value(&e).expect("serialize");
     assert_eq!(

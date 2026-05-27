@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.tauri.app/capabilities/2",
+  "identifier": "annotate",
+  "description": "Permissions for annotation window operations",
+  "windows": ["annotate"],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-focus",
+    "core:event:default",
+    "core:path:default",
+    "snk-annotate:default",
+    "snk-library:allow-get-capture"
+  ]
+}

@@ -80,12 +80,10 @@ pub fn init(log_dir: &Path) -> Result<LoggingHandle, std::io::Error> {
     // (or any other level with that target) route here in addition to
     // the general log.
     let security_appender = tracing_appender::rolling::never(log_dir, SECURITY_LOG_FILENAME);
-    let (security_non_blocking, security_guard) =
-        tracing_appender::non_blocking(security_appender);
+    let (security_non_blocking, security_guard) = tracing_appender::non_blocking(security_appender);
 
-    let env_filter = || {
-        EnvFilter::try_from_env("SNK_LOG").unwrap_or_else(|_| EnvFilter::new("info,snk=debug"))
-    };
+    let env_filter =
+        || EnvFilter::try_from_env("SNK_LOG").unwrap_or_else(|_| EnvFilter::new("info,snk=debug"));
 
     // Filter that matches events emitted with target = SECURITY_LOG_TARGET.
     let security_only = filter_fn(|meta| meta.target() == SECURITY_LOG_TARGET);
@@ -138,10 +136,7 @@ fn install_panic_hook(crash_dir: PathBuf) {
     }));
 }
 
-fn write_crash_dump(
-    crash_dir: &Path,
-    info: &std::panic::PanicHookInfo<'_>,
-) -> std::io::Result<()> {
+fn write_crash_dump(crash_dir: &Path, info: &std::panic::PanicHookInfo<'_>) -> std::io::Result<()> {
     use std::io::Write;
 
     let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%S%.3fZ");

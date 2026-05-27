@@ -1,0 +1,18 @@
+{
+  "$schema": "https://schema.tauri.app/capabilities/2",
+  "identifier": "clipboard-popup",
+  "description": "Permissions for clipboard popup read and paste operations",
+  "windows": ["clipboard-popup"],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-focus",
+    "core:window:allow-start-dragging",
+    "core:event:default",
+    "snk-library:allow-list-clipboard-items",
+    "snk-library:allow-toggle-clipboard-pin",
+    "snk-clipboard:allow-paste-item"
+  ]
+}

@@ -10,6 +10,12 @@ pub struct Db {
     conn: Mutex<Connection>,
 }
 
+impl std::fmt::Debug for Db {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Db").finish_non_exhaustive()
+    }
+}
+
 impl Db {
     // VERIFIED: privacy-md/local-only-storage
     // All persistence is to a local SQLite file. No remote DB, no network
@@ -150,7 +156,6 @@ mod tests {
             conn.execute_batch("CREATE TABLE t (id INTEGER PRIMARY KEY)").unwrap();
             conn.pragma_update(None, "user_version", 1u32).unwrap();
         }
-        let original_bytes = std::fs::read(&db_path).unwrap();
 
         // Migrations: step 1 already applied (user_version=1), step 2 is broken.
         let broken = Migrations::new(vec![
@@ -161,18 +166,20 @@ mod tests {
         let err = Db::open_with_custom_migrations(&db_path, &broken)
             .expect_err("broken migration must fail");
 
-        match err {
-            crate::LibraryError::Migration { recoverable, backup_path, .. } => {
+        let backup_path_str = match err {
+            crate::LibraryError::Migration { recoverable, ref backup_path, .. } => {
                 assert!(recoverable, "restore should succeed; got recoverable=false");
                 assert!(backup_path.is_some(), "backup_path must be present in error");
+                backup_path.clone().unwrap()
             }
             other => panic!("expected Migration error, got {other:?}"),
-        }
+        };
 
-        // The DB file must be restored to the exact pre-migration bytes.
+        // The DB file must be byte-identical to the backup after restore.
+        let backup_bytes = std::fs::read(&backup_path_str).unwrap();
         let restored_bytes = std::fs::read(&db_path).unwrap();
         assert_eq!(
-            original_bytes, restored_bytes,
+            backup_bytes, restored_bytes,
             "DB must be byte-identical to backup after restore"
         );
     }
