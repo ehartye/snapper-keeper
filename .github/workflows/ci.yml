@@ -125,10 +125,14 @@ jobs:
       - name: Logic coverage (gated at 90%)
         # Excludes Tauri integration glue (plugins, command wrappers) and
         # platform-bound code (hotkeys, watcher, paste, caret, grab, orchestrate,
-        # foreground) — those need a real Tauri runtime or live monitors/keyboard.
+        # foreground, window_hider, platform/mod) — those need a real Tauri
+        # runtime or live monitors/keyboard and cannot run in headless CI.
+        # NOTE: path separators in llvm-cov filenames are '/' on all platforms;
+        # use '.' (any char) rather than '\.' (literal dot) between path
+        # components so the substring patterns actually match.
         run: |
           cargo llvm-cov --workspace --exclude snapper-keeper-app \
-            --ignore-filename-regex '(plugin\.rs|commands\.rs|caret\.rs|paste\.rs|watcher\.rs|hotkeys\.src\.lib\.rs|queue\.rs|build\.rs|foreground\.rs|capture\.src\.grab\.rs|capture\.src\.orchestrate\.rs)' \
+            --ignore-filename-regex '(plugin\.rs|commands\.rs|caret\.rs|paste\.rs|watcher\.rs|hotkeys.src.lib\.rs|queue\.rs|build\.rs|foreground\.rs|capture.src.grab\.rs|capture.src.orchestrate\.rs|window_hider\.rs|platform.mod\.rs)' \
             --fail-under-lines 90 --summary-only
       - name: IPC-surface coverage (report only — no gate)
         # Inverse of the logic-coverage filter: only the files excluded
@@ -138,7 +142,7 @@ jobs:
         # decision: report honest IPC numbers instead of hiding them.
         run: |
           cargo llvm-cov --workspace --exclude snapper-keeper-app \
-            --ignore-filename-regex '^(?!.*(plugin\.rs|commands\.rs|caret\.rs|paste\.rs|watcher\.rs|hotkeys\.src\.lib\.rs|queue\.rs|build\.rs|foreground\.rs|capture\.src\.grab\.rs|capture\.src\.orchestrate\.rs)).*$' \
+            --ignore-filename-regex '^(?!.*(plugin\.rs|commands\.rs|caret\.rs|paste\.rs|watcher\.rs|hotkeys.src.lib\.rs|queue\.rs|build\.rs|foreground\.rs|capture.src.grab\.rs|capture.src.orchestrate\.rs|window_hider\.rs|platform.mod\.rs))' \
             --summary-only || echo "::warning::IPC-surface coverage tool returned non-zero (likely no matching files); not gating"
 
   build-app:
