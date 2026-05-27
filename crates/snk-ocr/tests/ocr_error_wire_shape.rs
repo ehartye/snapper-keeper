@@ -42,3 +42,21 @@ fn image_load_kebab_case() {
         json!({"kind": "image-load", "path": "x", "detail": "y"})
     );
 }
+
+#[test]
+fn library_kebab_case() {
+    let e = OcrError::Library { detail: "x".into() };
+    assert_eq!(
+        serde_json::to_value(&e).unwrap(),
+        json!({"kind": "library", "detail": "x"})
+    );
+}
+
+#[test]
+fn state_unavailable_kebab_case() {
+    let e = OcrError::StateUnavailable { reason: "x".into() };
+    assert_eq!(
+        serde_json::to_value(&e).unwrap(),
+        json!({"kind": "state-unavailable", "reason": "x"})
+    );
+}
