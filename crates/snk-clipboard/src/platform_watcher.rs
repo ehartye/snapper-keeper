@@ -167,7 +167,11 @@ pub mod windows {
                 Ok(img) if !img.bytes.is_empty() => {
                     let width = img.width;
                     let height = img.height;
-                    ClipboardEvent::Image { bytes: img.bytes.into_owned(), width, height }
+                    ClipboardEvent::Image {
+                        bytes: img.bytes.into_owned(),
+                        width,
+                        height,
+                    }
                 }
                 _ => return,
             },

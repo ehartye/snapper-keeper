@@ -32,11 +32,12 @@ pub fn paste_item<R: Runtime>(
 
     match item.kind {
         ClipboardItemKind::Text => {
-            let text = item.text_content.as_deref().ok_or_else(|| {
-                ClipboardError::PasteFailed {
+            let text = item
+                .text_content
+                .as_deref()
+                .ok_or_else(|| ClipboardError::PasteFailed {
                     reason: "text item has no text_content".into(),
-                }
-            })?;
+                })?;
 
             let mut clip = Clipboard::new()?;
             // Mark this content as self-emitted so the watcher's skip_set
@@ -56,14 +57,14 @@ pub fn paste_item<R: Runtime>(
 
         ClipboardItemKind::Image => {
             // Honor the image_paste_enabled setting (default: true).
-            let enabled = settings::get(&state.db, IMAGE_PASTE_ENABLED_KEY)
-                .ok()
-                .flatten()
-                .and_then(|v| v.as_bool())
-                .unwrap_or(true);
+            let enabled = match settings::get(&state.db, IMAGE_PASTE_ENABLED_KEY)? {
+                Some(v) => v.as_bool().unwrap_or(true),
+                None => true,
+            };
             if !enabled {
                 return Err(ClipboardError::PasteFailed {
-                    reason: "image paste is disabled (clipboard.image_paste_enabled = false)".into(),
+                    reason: "image paste is disabled (clipboard.image_paste_enabled = false)"
+                        .into(),
                 });
             }
 
@@ -77,9 +78,10 @@ pub fn paste_item<R: Runtime>(
             })?;
 
             // Decode PNG → raw RGBA so arboard can place it on the clipboard.
-            let img = image::load_from_memory(&png_bytes).map_err(|e| ClipboardError::PasteFailed {
-                reason: format!("decode image: {e}"),
-            })?;
+            let img =
+                image::load_from_memory(&png_bytes).map_err(|e| ClipboardError::PasteFailed {
+                    reason: format!("decode image: {e}"),
+                })?;
             let rgba = img.to_rgba8();
             let (width, height) = rgba.dimensions();
             let rgba_bytes = rgba.into_raw();
