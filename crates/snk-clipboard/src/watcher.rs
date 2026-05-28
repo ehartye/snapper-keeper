@@ -17,8 +17,13 @@ use crate::source_app::SourceApp;
 pub(crate) enum ClipboardEvent {
     /// Text content was on the clipboard at the time of observation.
     Text(String),
-    /// Image bytes were on the clipboard (already PNG-encoded by arboard).
-    Image(Vec<u8>),
+    /// Raw RGBA image bytes from the clipboard, with pixel dimensions.
+    /// worker_step encodes these to PNG before writing to disk.
+    Image {
+        bytes: Vec<u8>,
+        width: usize,
+        height: usize,
+    },
 }
 
 /// Why the watcher did not record a particular event.
@@ -116,7 +121,13 @@ pub(crate) fn start_polling(
                 if img.bytes.is_empty() {
                     continue;
                 }
-                ClipboardEvent::Image(img.bytes.into_owned())
+                let width = img.width;
+                let height = img.height;
+                ClipboardEvent::Image {
+                    bytes: img.bytes.into_owned(),
+                    width,
+                    height,
+                }
             } else {
                 continue;
             };
@@ -142,7 +153,7 @@ pub(crate) fn worker_step(
     // skip ONE next event regardless of which event matched.
     let event_bytes: &[u8] = match &event {
         ClipboardEvent::Text(t) => t.as_bytes(),
-        ClipboardEvent::Image(bytes) => bytes,
+        ClipboardEvent::Image { bytes, .. } => bytes,
     };
     let event_hash_u64 = skip_set::hash_content(event_bytes);
     if skip_set::should_skip(event_hash_u64) {
@@ -201,10 +212,16 @@ pub(crate) fn worker_step(
                 }
             }
         }
-        ClipboardEvent::Image(bytes) => {
+        ClipboardEvent::Image {
+            bytes,
+            width,
+            height,
+        } => {
             if bytes.is_empty() {
                 return StepResult::Skipped(SkipReason::EmptyContent);
             }
+            // Hash the raw RGBA bytes — consistent with skip_set usage in
+            // paste_item, which also hashes the decoded RGBA before set_image.
             let hash = crate::hasher::hash_image_bytes(&bytes);
             if state.last_hash.as_deref() == Some(&hash) {
                 return StepResult::Skipped(SkipReason::DuplicateHash);
@@ -221,7 +238,13 @@ pub(crate) fn worker_step(
                 _ => {
                     let id = uuid::Uuid::now_v7();
                     let relative = files::clipboard_image_relative_path(&id);
-                    if files::write_atomic(library_root, &relative, &bytes).is_err() {
+                    // Encode raw RGBA → PNG so stored files are valid images
+                    // (usable by paste_item and the library "View image" feature).
+                    let png_bytes = match encode_rgba_to_png(&bytes, width, height) {
+                        Some(b) => b,
+                        None => return StepResult::Skipped(SkipReason::PersistFailed),
+                    };
+                    if files::write_atomic(library_root, &relative, &png_bytes).is_err() {
                         return StepResult::Skipped(SkipReason::PersistFailed);
                     }
                     let new_item = NewClipboardItem {
@@ -248,8 +271,31 @@ pub(crate) fn worker_step(
 fn hash_of_event(event: &ClipboardEvent) -> String {
     match event {
         ClipboardEvent::Text(t) => crate::hasher::hash_text(t),
-        ClipboardEvent::Image(b) => crate::hasher::hash_image_bytes(b),
+        ClipboardEvent::Image { bytes, .. } => crate::hasher::hash_image_bytes(bytes),
     }
+}
+
+/// Encode raw RGBA bytes (as returned by arboard) to a PNG byte vector.
+/// Returns `None` if the dimensions don't match the byte length or encoding fails.
+pub(crate) fn encode_rgba_to_png(bytes: &[u8], width: usize, height: usize) -> Option<Vec<u8>> {
+    use image::codecs::png::PngEncoder;
+    use image::ImageEncoder;
+
+    let expected = (width as u64).checked_mul(height as u64)?.checked_mul(4)?;
+    if bytes.len() as u64 != expected {
+        return None;
+    }
+
+    let mut out = Vec::new();
+    PngEncoder::new(&mut out)
+        .write_image(
+            bytes,
+            width as u32,
+            height as u32,
+            image::ExtendedColorType::Rgba8,
+        )
+        .ok()?;
+    Some(out)
 }
 
 #[cfg(test)]
@@ -393,5 +439,111 @@ mod tests {
             None,
         );
         assert_eq!(result, StepResult::Skipped(SkipReason::EmptyContent));
+    }
+
+    /// Build a minimal 2×2 RGBA byte vec (4 bytes per pixel, solid red).
+    fn red_2x2_rgba() -> Vec<u8> {
+        vec![255, 0, 0, 255].repeat(4) // 16 bytes total: 4 pixels × 4 bytes/pixel (RGBA)
+    }
+
+    #[test]
+    fn encode_rgba_to_png_produces_valid_png() {
+        let rgba = red_2x2_rgba();
+        let png = encode_rgba_to_png(&rgba, 2, 2).expect("encode should succeed");
+        // PNG magic bytes: 0x89 50 4E 47 0D 0A 1A 0A
+        assert_eq!(
+            &png[0..8],
+            b"\x89PNG\r\n\x1a\n",
+            "should start with PNG header"
+        );
+    }
+
+    #[test]
+    fn encode_then_decode_round_trips_pixels() {
+        let rgba = red_2x2_rgba();
+        let png = encode_rgba_to_png(&rgba, 2, 2).expect("encode");
+        let img = image::load_from_memory(&png).expect("decode");
+        let decoded = img.to_rgba8().into_raw();
+        assert_eq!(decoded, rgba, "decoded pixels must match original RGBA");
+    }
+
+    #[test]
+    fn encode_rgba_to_png_rejects_mismatched_dimensions() {
+        // 3 bytes cannot form a 2×2 RGBA image (needs 16 bytes).
+        let result = encode_rgba_to_png(&[1, 2, 3], 2, 2);
+        assert!(result.is_none(), "should return None for bad dimensions");
+    }
+
+    #[test]
+    fn image_event_is_saved_as_valid_png_on_disk() {
+        let (tmp, db) = fresh_db();
+        let mut state = WatcherState::new();
+        let rgba = red_2x2_rgba();
+        let result = worker_step(
+            ClipboardEvent::Image {
+                bytes: rgba,
+                width: 2,
+                height: 2,
+            },
+            &mut state,
+            &db,
+            tmp.path(),
+            &FakeProbe { answer: false },
+            None,
+        );
+        let item_id = match result {
+            StepResult::Saved { item_id } => item_id,
+            other => panic!("expected Saved, got {other:?}"),
+        };
+
+        let item = snk_library::clipboard::get(&db, &item_id).unwrap();
+        assert_eq!(item.kind, snk_library::clipboard::ClipboardItemKind::Image);
+
+        // The file must exist and contain a valid PNG.
+        let file_path = item.file_path.expect("image item must have file_path");
+        let full = tmp.path().join(file_path);
+        assert!(full.exists(), "PNG file should be on disk");
+        let bytes = std::fs::read(&full).unwrap();
+        assert_eq!(
+            &bytes[0..8],
+            b"\x89PNG\r\n\x1a\n",
+            "stored file must be a PNG"
+        );
+    }
+
+    #[test]
+    fn duplicate_image_event_deduplicates() {
+        let (tmp, db) = fresh_db();
+        let mut state = WatcherState::new();
+        let rgba = red_2x2_rgba();
+
+        let first = worker_step(
+            ClipboardEvent::Image {
+                bytes: rgba.clone(),
+                width: 2,
+                height: 2,
+            },
+            &mut state,
+            &db,
+            tmp.path(),
+            &FakeProbe { answer: false },
+            None,
+        );
+        assert!(matches!(first, StepResult::Saved { .. }));
+
+        // Same pixels again — should be skipped as DuplicateHash, not insert a second row.
+        let second = worker_step(
+            ClipboardEvent::Image {
+                bytes: rgba,
+                width: 2,
+                height: 2,
+            },
+            &mut state,
+            &db,
+            tmp.path(),
+            &FakeProbe { answer: false },
+            None,
+        );
+        assert_eq!(second, StepResult::Skipped(SkipReason::DuplicateHash));
     }
 }

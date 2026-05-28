@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::thread;
 use std::time::Duration;
 
@@ -5,8 +6,8 @@ use arboard::Clipboard;
 use tauri::{Runtime, State};
 use tracing::info;
 
-use snk_library::clipboard;
-use snk_library::LibraryState;
+use snk_library::clipboard::{self, ClipboardItemKind};
+use snk_library::{settings, LibraryState};
 
 use crate::caret;
 use crate::paste;
@@ -19,6 +20,8 @@ use crate::{ClipboardError, Result};
 /// the paste keystroke arrives.
 const PASTE_SETTLE: Duration = Duration::from_millis(50);
 
+const IMAGE_PASTE_ENABLED_KEY: &str = "clipboard.image_paste_enabled";
+
 #[tauri::command]
 pub fn paste_item<R: Runtime>(
     state: State<'_, LibraryState>,
@@ -27,28 +30,82 @@ pub fn paste_item<R: Runtime>(
 ) -> Result<()> {
     let item = clipboard::get(&state.db, &id)?;
 
-    let text = item.text_content.as_deref().ok_or_else(|| {
-        // Image paste needs PNG decode + arboard::ImageData (raw RGBA);
-        // deferred until the popup can handle image rows end-to-end.
-        ClipboardError::PasteFailed {
-            reason: format!("paste for kind '{}' not yet supported", item.kind),
+    match item.kind {
+        ClipboardItemKind::Text => {
+            let text = item
+                .text_content
+                .as_deref()
+                .ok_or_else(|| ClipboardError::PasteFailed {
+                    reason: "text item has no text_content".into(),
+                })?;
+
+            let mut clip = Clipboard::new()?;
+            // Mark this content as self-emitted so the watcher's skip_set
+            // recognizes the next observed event with this hash and ignores
+            // it (within SKIP_TTL). Replaces the old SKIP_NEXT AtomicBool.
+            skip_set::mark_emitted(skip_set::hash_content(text.as_bytes()));
+            clip.set_text(text)?;
+
+            thread::sleep(PASTE_SETTLE);
+
+            paste::synthesize_paste()?;
+            clipboard::bump_timestamp(&state.db, &id)?;
+
+            info!(id = %id, kind = "text", "pasted clipboard item");
+            Ok(())
         }
-    })?;
 
-    let mut clip = Clipboard::new()?;
-    // Mark this content as self-emitted so the watcher's skip_set
-    // recognizes the next observed event with this hash and ignores
-    // it (within SKIP_TTL). Replaces the old SKIP_NEXT AtomicBool.
-    skip_set::mark_emitted(skip_set::hash_content(text.as_bytes()));
-    clip.set_text(text)?;
+        ClipboardItemKind::Image => {
+            // Honor the image_paste_enabled setting (default: true).
+            let enabled = match settings::get(&state.db, IMAGE_PASTE_ENABLED_KEY)? {
+                Some(v) => v.as_bool().unwrap_or(true),
+                None => true,
+            };
+            if !enabled {
+                return Err(ClipboardError::PasteFailed {
+                    reason: "image paste is disabled (clipboard.image_paste_enabled = false)"
+                        .into(),
+                });
+            }
 
-    thread::sleep(PASTE_SETTLE);
+            let file_path = item.file_path.ok_or_else(|| ClipboardError::PasteFailed {
+                reason: "image item has no file_path".into(),
+            })?;
 
-    paste::synthesize_paste()?;
-    clipboard::bump_timestamp(&state.db, &id)?;
+            let full_path = state.root.join(&file_path);
+            let png_bytes = std::fs::read(&full_path).map_err(|e| ClipboardError::PasteFailed {
+                reason: format!("read image file: {e}"),
+            })?;
 
-    info!(id = %id, "pasted clipboard item");
-    Ok(())
+            // Decode PNG → raw RGBA so arboard can place it on the clipboard.
+            let img =
+                image::load_from_memory(&png_bytes).map_err(|e| ClipboardError::PasteFailed {
+                    reason: format!("decode image: {e}"),
+                })?;
+            let rgba = img.to_rgba8();
+            let (width, height) = rgba.dimensions();
+            let rgba_bytes = rgba.into_raw();
+
+            // Mark the RGBA bytes hash so the watcher skips its own
+            // re-observation of what we're about to write.
+            skip_set::mark_emitted(skip_set::hash_content(&rgba_bytes));
+
+            let mut clip = Clipboard::new()?;
+            clip.set_image(arboard::ImageData {
+                width: width as usize,
+                height: height as usize,
+                bytes: Cow::Owned(rgba_bytes),
+            })?;
+
+            thread::sleep(PASTE_SETTLE);
+
+            paste::synthesize_paste()?;
+            clipboard::bump_timestamp(&state.db, &id)?;
+
+            info!(id = %id, kind = "image", width, height, "pasted clipboard item");
+            Ok(())
+        }
+    }
 }
 
 #[tauri::command]
