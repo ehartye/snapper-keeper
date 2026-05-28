@@ -266,8 +266,8 @@ fn hash_of_event(event: &ClipboardEvent) -> String {
 /// Encode raw RGBA bytes (as returned by arboard) to a PNG byte vector.
 /// Returns `None` if the dimensions don't match the byte length or encoding fails.
 pub(crate) fn encode_rgba_to_png(bytes: &[u8], width: usize, height: usize) -> Option<Vec<u8>> {
-    use image::{ImageEncoder, RgbaImage};
     use image::codecs::png::PngEncoder;
+    use image::{ImageEncoder, RgbaImage};
 
     let img = RgbaImage::from_raw(width as u32, height as u32, bytes.to_vec())?;
     let mut out = Vec::new();
@@ -460,7 +460,11 @@ mod tests {
         let mut state = WatcherState::new();
         let rgba = red_2x2_rgba();
         let result = worker_step(
-            ClipboardEvent::Image { bytes: rgba, width: 2, height: 2 },
+            ClipboardEvent::Image {
+                bytes: rgba,
+                width: 2,
+                height: 2,
+            },
             &mut state,
             &db,
             tmp.path(),
@@ -490,7 +494,11 @@ mod tests {
         let rgba = red_2x2_rgba();
 
         let first = worker_step(
-            ClipboardEvent::Image { bytes: rgba.clone(), width: 2, height: 2 },
+            ClipboardEvent::Image {
+                bytes: rgba.clone(),
+                width: 2,
+                height: 2,
+            },
             &mut state,
             &db,
             tmp.path(),
@@ -501,7 +509,11 @@ mod tests {
 
         // Same pixels again — should bump timestamp, not insert a second row.
         let second = worker_step(
-            ClipboardEvent::Image { bytes: rgba, width: 2, height: 2 },
+            ClipboardEvent::Image {
+                bytes: rgba,
+                width: 2,
+                height: 2,
+            },
             &mut state,
             &db,
             tmp.path(),
