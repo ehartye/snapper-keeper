@@ -211,7 +211,7 @@ fn backup_pruning_keeps_at_most_five() {
     for i in 0..7u8 {
         std::fs::write(
             backups.join(format!("pre-v{i}-2025010{i}T000000000000000Z.db")),
-            &[i],
+            [i],
         )
         .unwrap();
     }
