@@ -25,9 +25,15 @@ const IMAGE_PASTE_ENABLED_KEY: &str = "clipboard.image_paste_enabled";
 #[tauri::command]
 pub fn paste_item<R: Runtime>(
     state: State<'_, LibraryState>,
-    _app: tauri::AppHandle<R>,
+    window: tauri::WebviewWindow<R>,
     id: String,
 ) -> Result<()> {
+    snk_library::authz::authorize(
+        &window,
+        "paste_item",
+        snk_library::authz::PASTE_ITEM_WINDOWS,
+        &id,
+    )?;
     let item = clipboard::get(&state.db, &id)?;
 
     match item.kind {

@@ -20,11 +20,23 @@ pub enum ClipboardError {
 
     #[error("not found: {what}")]
     NotFound { what: String },
+
+    #[error("window '{window}' is not authorized to call '{command}'")]
+    Unauthorized { window: String, command: String },
 }
 
 impl From<snk_library::LibraryError> for ClipboardError {
     fn from(e: snk_library::LibraryError) -> Self {
         ClipboardError::Library(e)
+    }
+}
+
+impl From<snk_library::authz::AuthzDenied> for ClipboardError {
+    fn from(d: snk_library::authz::AuthzDenied) -> Self {
+        ClipboardError::Unauthorized {
+            window: d.window,
+            command: d.command,
+        }
     }
 }
 
