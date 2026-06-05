@@ -5,6 +5,7 @@ pub mod caret;
 pub mod commands;
 pub mod error;
 pub mod hasher;
+pub mod health;
 pub mod paste;
 mod platform;
 pub mod platform_watcher;

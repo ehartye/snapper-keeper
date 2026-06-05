@@ -117,3 +117,13 @@ pub fn show_popup<R: Runtime>(_app: tauri::AppHandle<R>) -> Result<crate::caret:
 pub fn detect_frontmost_app<R: Runtime>(_app: tauri::AppHandle<R>) -> Option<SourceApp> {
     source_app::current()
 }
+
+/// Report whether the clipboard watcher currently has the OS clipboard open,
+/// and the last open error if it is offline. Lets the popup render a banner
+/// instead of silently showing an empty history.
+#[tauri::command]
+pub fn clipboard_status(
+    health: State<'_, crate::health::ClipboardHealth>,
+) -> crate::health::ClipboardStatus {
+    health.snapshot()
+}

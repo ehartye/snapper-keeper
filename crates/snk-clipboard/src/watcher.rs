@@ -1,13 +1,13 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use arboard::Clipboard;
-use tracing::{debug, error};
+use tracing::debug;
 
 use snk_library::clipboard::{ClipboardItemKind, NewClipboardItem};
 use snk_library::{files, Db};
 
 use crate::blocklist;
+use crate::health::HealthSink;
 use crate::sensitivity::SensitivityProbe;
 use crate::skip_set;
 use crate::source_app::SourceApp;
@@ -74,15 +74,20 @@ pub fn mark_skip_next() {
     // Callers should compute the hash and call skip_set::mark_emitted.
 }
 
-pub fn start_watcher(db: Arc<Db>, library_root: std::path::PathBuf) {
+pub fn start_watcher(db: Arc<Db>, library_root: std::path::PathBuf, sink: Arc<dyn HealthSink>) {
     #[cfg(target_os = "windows")]
     {
-        crate::platform_watcher::windows::start(db, library_root);
+        crate::platform_watcher::windows::start(db, library_root, sink);
     }
 
     #[cfg(not(target_os = "windows"))]
     {
-        start_polling(db, library_root, std::time::Duration::from_millis(100));
+        start_polling(
+            db,
+            library_root,
+            std::time::Duration::from_millis(100),
+            sink,
+        );
     }
 }
 
@@ -90,18 +95,15 @@ pub(crate) fn start_polling(
     db: Arc<Db>,
     library_root: std::path::PathBuf,
     interval: std::time::Duration,
+    sink: Arc<dyn HealthSink>,
 ) {
     use crate::sensitivity::OsProbe;
     use crate::source_app;
 
     std::thread::spawn(move || {
-        let mut clip = match Clipboard::new() {
-            Ok(c) => c,
-            Err(e) => {
-                error!(error = %e, "failed to open clipboard for watching");
-                return;
-            }
-        };
+        // Retry-with-backoff instead of dying silently on the first failure;
+        // reports availability through the sink so the UI can show a banner.
+        let mut clip = crate::health::open_clipboard_with_backoff(&*sink);
         let mut state = WatcherState::new();
         let probe = OsProbe;
 
@@ -443,7 +445,7 @@ mod tests {
 
     /// Build a minimal 2×2 RGBA byte vec (4 bytes per pixel, solid red).
     fn red_2x2_rgba() -> Vec<u8> {
-        vec![255, 0, 0, 255].repeat(4) // 16 bytes total: 4 pixels × 4 bytes/pixel (RGBA)
+        [255, 0, 0, 255].repeat(4) // 16 bytes total: 4 pixels × 4 bytes/pixel (RGBA)
     }
 
     #[test]

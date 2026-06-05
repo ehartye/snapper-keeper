@@ -1,13 +1,20 @@
 import { invoke } from '@tauri-apps/api/core';
 
 import type { ClipboardItem, ListClipboardQuery, CaretPosition, SourceApp } from './types';
+import type { ClipboardStatus } from './generated/clipboard-status';
 
 export * from './types';
 export * from './generated/errors';
+export type { ClipboardStatus } from './generated/clipboard-status';
 
 export const CLIPBOARD_HISTORY_EVENT = 'hotkey:clipboard-history';
 export const CLIPBOARD_POPUP_SHOW_EVENT = 'clipboard-popup:show';
 export const APP_BLOCKLIST_SETTING_KEY = 'clipboard.app_blocklist';
+
+// Emitted when the clipboard watcher cannot open the OS clipboard; the popup
+// renders an offline banner. CLIPBOARD_AVAILABLE_EVENT fires on recovery.
+export const CLIPBOARD_UNAVAILABLE_EVENT = 'clipboard:unavailable';
+export const CLIPBOARD_AVAILABLE_EVENT = 'clipboard:available';
 
 export function listClipboardItems(query?: ListClipboardQuery): Promise<ClipboardItem[]> {
   return invoke<ClipboardItem[]>('plugin:snk-library|list_clipboard_items', { query });
@@ -31,4 +38,8 @@ export function showPopup(): Promise<CaretPosition> {
 
 export function detectFrontmostApp(): Promise<SourceApp | null> {
   return invoke<SourceApp | null>('plugin:snk-clipboard|detect_frontmost_app');
+}
+
+export function clipboardStatus(): Promise<ClipboardStatus> {
+  return invoke<ClipboardStatus>('plugin:snk-clipboard|clipboard_status');
 }

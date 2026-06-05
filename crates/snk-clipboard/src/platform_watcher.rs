@@ -10,6 +10,8 @@ pub mod windows {
     use arboard::Clipboard;
     use snk_library::Db;
     use tracing::{debug, error};
+
+    use crate::health::HealthSink;
     use windows::core::w;
     use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
     use windows::Win32::System::DataExchange::{
@@ -35,32 +37,30 @@ pub mod windows {
         library_root: PathBuf,
         state: WatcherState,
         clipboard: Clipboard,
+        sink: Arc<dyn HealthSink>,
     }
 
     // arboard::Clipboard on Windows is a ZST (pub(crate) struct Clipboard(())),
     // so WatcherCtx is Send+Sync automatically. Mutex<WatcherCtx> works.
     static CTX: OnceLock<Mutex<WatcherCtx>> = OnceLock::new();
 
-    pub fn start(db: Arc<Db>, library_root: PathBuf) {
+    pub fn start(db: Arc<Db>, library_root: PathBuf, sink: Arc<dyn HealthSink>) {
         // Spin up a dedicated thread that owns the message-only window.
         // The watcher must run on this thread because WM_CLIPBOARDUPDATE
         // is dispatched into the thread that owns the listener handle.
         std::thread::Builder::new()
             .name("snk-clipboard-listener".into())
             .spawn(move || {
-                let clipboard = match Clipboard::new() {
-                    Ok(c) => c,
-                    Err(e) => {
-                        error!(error = %e, "failed to open clipboard for watching");
-                        return;
-                    }
-                };
+                // Retry-with-backoff instead of dying silently on the first
+                // failure; reports availability through the sink for the UI.
+                let clipboard = crate::health::open_clipboard_with_backoff(&*sink);
                 if CTX
                     .set(Mutex::new(WatcherCtx {
                         db,
                         library_root,
                         state: WatcherState::new(),
                         clipboard,
+                        sink,
                     }))
                     .is_err()
                 {
@@ -119,6 +119,7 @@ pub mod windows {
                         ctx.db.clone(),
                         ctx.library_root.clone(),
                         std::time::Duration::from_millis(500),
+                        ctx.sink.clone(),
                     );
                 }
                 return;
