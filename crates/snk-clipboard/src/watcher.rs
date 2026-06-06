@@ -61,6 +61,10 @@ impl WatcherState {
     }
 }
 
+// VERIFIED: privacy-md/clipboard-retention
+// Clipboard history keeps at most this many unpinned items; older unpinned
+// entries are evicted as new ones arrive (pinned items are exempt). Backs the
+// retention claim in PRIVACY.md.
 const MAX_UNPINNED: u32 = 200;
 
 /// Shim retained for source compatibility during the SKIP_NEXT → skip_set

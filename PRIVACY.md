@@ -43,6 +43,26 @@ The application does NOT:
 This policy applies to all distribution channels — GitHub Releases,
 Microsoft Store, winget, and Homebrew Cask.
 
+## Data retention
+
+All retention is local and bounded by your own activity — nothing expires on a
+server because there is no server.
+
+- **Captures** (screenshots and their annotations) are kept until you delete
+  them. Deleting moves a capture to Trash; emptying Trash removes it and its
+  image files permanently. There is no automatic expiry.
+- **OCR text** is stored alongside its capture and is removed when that capture
+  is permanently deleted.
+- **Clipboard history** keeps your most-recent *unpinned* entries (currently up
+  to 200) and evicts older unpinned entries as new ones arrive; *pinned* entries
+  are kept until you unpin or delete them. <!-- CLAIM: privacy-md/clipboard-retention -->
+  Clipboard content the OS marks sensitive (e.g. password-manager copies) is
+  never stored.
+
+Data at rest is stored unencrypted in a local SQLite database, relying on your
+operating system's user-account isolation. To remove everything, delete the
+application data directory shown in Settings → About.
+
 ---
 
 Source code: <https://github.com/ehartye/snapper-keeper>
