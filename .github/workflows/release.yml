@@ -472,11 +472,17 @@ jobs:
           # macOS universal — both darwin-aarch64 and darwin-x86_64 point to
           # the same universal binary so the Tauri updater serves all Mac
           # architectures from a single artifact.
+          # GitHub Releases rewrites spaces to '.' in stored asset names, but
+          # the local bundle names carry a space (productName "Snapper Keeper").
+          # The updater fetches the manifest URL verbatim, so the URL must use
+          # the *stored* (dotted) name or it 404s ("download failed"). Mirror
+          # GitHub's rewrite with `tr ' ' '.'`. Surfaced post-v0.2.1.
           MAC_TAR=$(find artifacts -name "*.app.tar.gz" | head -1)
           MAC_SIG=$(find artifacts -name "*.app.tar.gz.sig" | head -1)
           if [ -n "$MAC_TAR" ] && [ -n "$MAC_SIG" ]; then
             SIG=$(cat "$MAC_SIG")
-            URL="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/$(basename "$MAC_TAR")"
+            MAC_NAME=$(basename "$MAC_TAR" | tr ' ' '.')
+            URL="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/${MAC_NAME}"
             PLATFORMS=$(echo "$PLATFORMS" | jq \
               --arg url "$URL" --arg sig "$SIG" \
               '. + {"darwin-aarch64": {"url": $url, "signature": $sig}, "darwin-x86_64": {"url": $url, "signature": $sig}}')
@@ -489,7 +495,8 @@ jobs:
           WIN_SIG=$(find artifacts -name "*-setup.exe.sig" | head -1)
           if [ -n "$WIN_EXE" ] && [ -n "$WIN_SIG" ]; then
             SIG=$(cat "$WIN_SIG")
-            URL="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/$(basename "$WIN_EXE")"
+            WIN_NAME=$(basename "$WIN_EXE" | tr ' ' '.')
+            URL="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/${WIN_NAME}"
             PLATFORMS=$(echo "$PLATFORMS" | jq --arg url "$URL" --arg sig "$SIG" '. + {"windows-x86_64": {"url": $url, "signature": $sig}}')
           fi
 
@@ -523,6 +530,25 @@ jobs:
             artifacts/**/*-setup.exe \
             artifacts/**/*-setup.exe.sig \
             latest.json
+
+      - name: Verify update manifest URLs resolve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Guard against the manifest pointing at a non-existent asset (e.g.
+          # a name-normalization mismatch between the local bundle and the
+          # stored release asset). Every platform URL must resolve to a live
+          # download, or the auto-updater fails with "download failed". This
+          # catches the failure class that slipped past v0.2.0/v0.2.1.
+          gh release download "$GITHUB_REF_NAME" --pattern latest.json --output - \
+            | jq -r '.platforms[].url' | sort -u | while read -r url; do
+              code=$(curl -s -o /dev/null -w '%{http_code}' -L "$url")
+              echo "$code  $url"
+              if [ "$code" != "200" ]; then
+                echo "::error::Update manifest URL did not resolve (HTTP $code): $url"
+                exit 1
+              fi
+            done
 
       # --- CycloneDX SBOM generation (#46) ---
       # Generates a merged Rust + npm SBOM and attaches it to the release
