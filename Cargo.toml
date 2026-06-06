@@ -15,7 +15,10 @@ members = [
 
 [workspace.package]
 edition = "2021"
-rust-version = "1.78"
+# 1.81 is the real floor: app/src-tauri/src/logging.rs uses
+# std::panic::PanicHookInfo, stabilized in 1.81 (the pre-1.81 PanicInfo is
+# deprecated on current toolchains). The prior "1.78" was already inaccurate.
+rust-version = "1.81"
 license = "MIT OR Apache-2.0"
 publish = false
 

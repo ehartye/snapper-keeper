@@ -47,3 +47,6 @@ objc2-foundation = { version = "0.3", features = ["NSString", "NSArray", "NSURL"
 serde_json = { workspace = true }
 tempfile = "3"
 serial_test = "3"
+# `test` feature unlocks tauri::test (mock_app / get_ipc_response) for the
+# IPC-contract tests. Resolver 2 keeps this dev-only feature out of normal builds.
+tauri = { workspace = true, features = ["test"] }

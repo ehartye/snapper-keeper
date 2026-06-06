@@ -114,6 +114,10 @@ class ResizeObserverStub {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (window as any).ResizeObserver = ResizeObserverStub;
 
+// happy-dom (bundled with vitest 4) no longer implements window.confirm;
+// provide a default stub so tests can vi.spyOn(window, 'confirm').
+window.confirm = () => false;
+
 // Reset all mocks between tests so call counts don't leak.
 beforeEach(() => {
   vi.clearAllMocks();

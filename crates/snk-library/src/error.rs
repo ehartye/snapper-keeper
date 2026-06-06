@@ -33,6 +33,18 @@ pub enum LibraryError {
 
     #[error("persist error: {detail}")]
     Persist { detail: String },
+
+    #[error("window '{window}' is not authorized to call '{command}'")]
+    Unauthorized { window: String, command: String },
+}
+
+impl From<crate::authz::AuthzDenied> for LibraryError {
+    fn from(d: crate::authz::AuthzDenied) -> Self {
+        LibraryError::Unauthorized {
+            window: d.window,
+            command: d.command,
+        }
+    }
 }
 
 impl LibraryError {

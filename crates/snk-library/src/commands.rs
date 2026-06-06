@@ -47,17 +47,29 @@ pub fn set_capture_pinned<R: Runtime>(
 #[tauri::command]
 pub fn hard_delete_capture<R: Runtime>(
     state: State<'_, LibraryState>,
-    _app: tauri::AppHandle<R>,
+    window: tauri::WebviewWindow<R>,
     id: String,
 ) -> Result<()> {
+    crate::authz::authorize(
+        &window,
+        "hard_delete_capture",
+        crate::authz::HARD_DELETE_CAPTURE_WINDOWS,
+        &id,
+    )?;
     captures::hard_delete(&state.db, &state.root, &id)
 }
 
 #[tauri::command]
 pub fn purge_trash<R: Runtime>(
     state: State<'_, LibraryState>,
-    _app: tauri::AppHandle<R>,
+    window: tauri::WebviewWindow<R>,
 ) -> Result<u32> {
+    crate::authz::authorize(
+        &window,
+        "purge_trash",
+        crate::authz::PURGE_TRASH_WINDOWS,
+        "",
+    )?;
     captures::purge_trash(&state.db, &state.root)
 }
 
@@ -178,9 +190,17 @@ pub fn get_setting<R: Runtime>(
 #[tauri::command]
 pub fn set_setting<R: Runtime>(
     state: State<'_, LibraryState>,
-    _app: tauri::AppHandle<R>,
+    window: tauri::WebviewWindow<R>,
     key: String,
     value: serde_json::Value,
 ) -> Result<()> {
+    // Log the key (non-sensitive) but never the value — values can carry
+    // user data and must not land in security-events.log.
+    crate::authz::authorize(
+        &window,
+        "set_setting",
+        crate::authz::SET_SETTING_WINDOWS,
+        &key,
+    )?;
     crate::settings::set(&state.db, &key, &value)
 }

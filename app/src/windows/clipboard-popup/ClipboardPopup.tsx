@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef, type ChangeEvent } from 'react';
+import { useEffect, useCallback, useRef, useState, type ChangeEvent } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
 
@@ -6,7 +6,10 @@ import {
   listClipboardItems,
   pasteItem,
   toggleClipboardPin,
+  clipboardStatus,
   CLIPBOARD_POPUP_SHOW_EVENT,
+  CLIPBOARD_UNAVAILABLE_EVENT,
+  CLIPBOARD_AVAILABLE_EVENT,
 } from '@snk/clipboard';
 
 import { useClipboardPopupStore } from './store';
@@ -21,6 +24,7 @@ export function ClipboardPopup() {
   const moveSelection = useClipboardPopupStore((s) => s.moveSelection);
   const reset = useClipboardPopupStore((s) => s.reset);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [offline, setOffline] = useState(false);
 
   const loadItems = useCallback(
     async (filterText?: string) => {
@@ -53,6 +57,25 @@ export function ClipboardPopup() {
       .catch((e) => console.error('clipboard popup listen failed', e));
     return () => unlisten?.();
   }, [loadItems, reset]);
+
+  // Track clipboard watcher availability so we can show an offline banner
+  // instead of a silently-empty history. Seed from the current status, then
+  // follow the watcher's transition events.
+  useEffect(() => {
+    let unlisten: Array<() => void> = [];
+    clipboardStatus()
+      .then((s) => setOffline(s ? !s.available : false))
+      .catch(() => {});
+    Promise.all([
+      listen(CLIPBOARD_UNAVAILABLE_EVENT, () => setOffline(true)),
+      listen(CLIPBOARD_AVAILABLE_EVENT, () => setOffline(false)),
+    ])
+      .then((fns) => {
+        unlisten = fns;
+      })
+      .catch((e) => console.error('clipboard status listen failed', e));
+    return () => unlisten.forEach((fn) => fn());
+  }, []);
 
   const dismiss = useCallback(async () => {
     reset();
@@ -174,6 +197,11 @@ export function ClipboardPopup() {
           className="w-full bg-bg-soft text-xs text-fg px-3 py-1.5 rounded-md border border-border outline-none focus:border-primary placeholder:text-fg-muted"
         />
       </div>
+      {offline && (
+        <div className="px-3 py-1.5 bg-accent/10 text-accent text-[10px] font-display uppercase tracking-wider border-b border-border text-center">
+          clipboard offline — retrying…
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto">
         {items.length === 0 ? (
           <div className="px-3 py-6 text-xs text-fg-muted text-center">

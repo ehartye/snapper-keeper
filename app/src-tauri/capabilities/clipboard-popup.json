@@ -13,6 +13,7 @@
     "core:event:default",
     "snk-library:allow-list-clipboard-items",
     "snk-library:allow-toggle-clipboard-pin",
-    "snk-clipboard:allow-paste-item"
+    "snk-clipboard:allow-paste-item",
+    "snk-clipboard:allow-clipboard-status"
   ]
 }

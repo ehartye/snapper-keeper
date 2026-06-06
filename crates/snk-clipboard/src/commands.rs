@@ -25,9 +25,15 @@ const IMAGE_PASTE_ENABLED_KEY: &str = "clipboard.image_paste_enabled";
 #[tauri::command]
 pub fn paste_item<R: Runtime>(
     state: State<'_, LibraryState>,
-    _app: tauri::AppHandle<R>,
+    window: tauri::WebviewWindow<R>,
     id: String,
 ) -> Result<()> {
+    snk_library::authz::authorize(
+        &window,
+        "paste_item",
+        snk_library::authz::PASTE_ITEM_WINDOWS,
+        &id,
+    )?;
     let item = clipboard::get(&state.db, &id)?;
 
     match item.kind {
@@ -116,4 +122,14 @@ pub fn show_popup<R: Runtime>(_app: tauri::AppHandle<R>) -> Result<crate::caret:
 #[tauri::command]
 pub fn detect_frontmost_app<R: Runtime>(_app: tauri::AppHandle<R>) -> Option<SourceApp> {
     source_app::current()
+}
+
+/// Report whether the clipboard watcher currently has the OS clipboard open,
+/// and the last open error if it is offline. Lets the popup render a banner
+/// instead of silently showing an empty history.
+#[tauri::command]
+pub fn clipboard_status(
+    health: State<'_, crate::health::ClipboardHealth>,
+) -> crate::health::ClipboardStatus {
+    health.snapshot()
 }

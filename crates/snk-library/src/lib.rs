@@ -25,6 +25,7 @@
 //! Changing the ID scheme is a project-wide audit — open a design doc
 //! before doing it.
 
+pub mod authz;
 pub mod captures;
 pub mod clipboard;
 pub mod commands;
