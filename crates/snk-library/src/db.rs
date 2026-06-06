@@ -161,7 +161,8 @@ mod tests {
     fn spike_sqlcipher_round_trip_and_plaintext_compat() {
         let dir = tempfile::tempdir().unwrap();
         let enc = dir.path().join("enc.db");
-        let key = "PRAGMA key = \"x'000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f'\"";
+        let key =
+            "PRAGMA key = \"x'000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f'\"";
 
         {
             let conn = Connection::open(&enc).unwrap();
