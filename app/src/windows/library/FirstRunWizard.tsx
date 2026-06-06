@@ -4,6 +4,7 @@ import { setSetting } from '@snk/library';
 
 import { formatShortcutForPlatform } from '../../lib/shortcuts';
 import { THEME_FAMILIES, useTheme, type ThemeFamily, type ThemeId } from '../../lib/theme';
+import { ThemeCard } from '../../components/ThemeCard';
 
 type Step = 'welcome' | 'theme' | 'hotkeys' | 'library' | 'done';
 
@@ -52,8 +53,8 @@ export function FirstRunWizard({ onComplete }: Props) {
               <span>snapper-keeper</span>
             </h1>
             <p className="text-sm text-fg-muted">
-              Screen capture with OCR search, plus clipboard history with instant paste.
-              Let&apos;s get you set up.
+              Screen capture with OCR search, plus clipboard history with instant paste. Let&apos;s
+              get you set up.
             </p>
             <div className="pt-2">
               <PrimaryButton onClick={() => setStep('theme')}>get started</PrimaryButton>
@@ -65,36 +66,19 @@ export function FirstRunWizard({ onComplete }: Props) {
           <div className="space-y-5">
             <h2 className="font-display text-xl">🎨 pick a theme</h2>
             <p className="text-sm text-fg-muted">
-              Choose one — you can change it anytime in Settings.
+              Choose a look — you can change it, and switch light/dark, anytime in Settings.
             </p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 max-h-[55vh] overflow-y-auto pr-1 -mr-1">
               {(Object.keys(THEME_FAMILIES) as ThemeFamily[]).map((family) => {
-                const def = THEME_FAMILIES[family];
                 const id = `${family}-dark` as ThemeId;
-                const active = currentFamily === family;
                 return (
-                  <button
+                  <ThemeCard
                     key={family}
-                    data-testid="theme-card"
-                    onClick={() => setTheme(id)}
-                    className={`text-left p-3 rounded-xl border-2 transition-transform hover:-translate-y-0.5 ${
-                      active ? 'border-primary ring-2 ring-primary' : 'border-border'
-                    }`}
-                    style={{ background: def.preview.bgDark }}
-                  >
-                    <div
-                      className="text-sm"
-                      style={{ fontFamily: def.preview.displayFont, color: def.preview.fgDark }}
-                    >
-                      {def.label}
-                    </div>
-                    <div
-                      className="text-[10px] mt-1 italic"
-                      style={{ fontFamily: def.preview.bodyFont, color: def.preview.mutedDark }}
-                    >
-                      {def.tagline}
-                    </div>
-                  </button>
+                    themeId={id}
+                    label={THEME_FAMILIES[family].label}
+                    active={currentFamily === family}
+                    onSelect={() => setTheme(id)}
+                  />
                 );
               })}
             </div>
@@ -142,8 +126,8 @@ export function FirstRunWizard({ onComplete }: Props) {
           <div className="space-y-5">
             <h2 className="font-display text-xl">💾 library location</h2>
             <p className="text-sm text-fg-muted">
-              Your captures, clipboard history, and settings are stored locally. No cloud,
-              no servers, no telemetry.
+              Your captures, clipboard history, and settings are stored locally. No cloud, no
+              servers, no telemetry.
             </p>
             <div className="bg-bg-soft rounded-xl border border-border px-4 py-3">
               <div className="font-display text-[10px] uppercase tracking-wider text-fg-muted">
@@ -169,8 +153,15 @@ export function FirstRunWizard({ onComplete }: Props) {
               all set!
             </h2>
             <p className="text-sm text-fg-muted">
-              Try pressing <kbd className="font-display text-[10px] bg-bg-soft border border-border px-1.5 py-0.5 rounded">{formatShortcutForPlatform('CmdOrCtrl+Shift+4')}</kbd> for region capture, or{' '}
-              <kbd className="font-display text-[10px] bg-bg-soft border border-border px-1.5 py-0.5 rounded">{formatShortcutForPlatform('CmdOrCtrl+Shift+V')}</kbd> for clipboard history.
+              Try pressing{' '}
+              <kbd className="font-display text-[10px] bg-bg-soft border border-border px-1.5 py-0.5 rounded">
+                {formatShortcutForPlatform('CmdOrCtrl+Shift+4')}
+              </kbd>{' '}
+              for region capture, or{' '}
+              <kbd className="font-display text-[10px] bg-bg-soft border border-border px-1.5 py-0.5 rounded">
+                {formatShortcutForPlatform('CmdOrCtrl+Shift+V')}
+              </kbd>{' '}
+              for clipboard history.
             </p>
             <PrimaryButton onClick={finish}>start using snapper-keeper</PrimaryButton>
           </div>

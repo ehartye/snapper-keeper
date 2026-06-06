@@ -18,6 +18,7 @@ const COMMANDS: &[&str] = &[
     "list_capture_tags",
     "get_setting",
     "set_setting",
+    "get_theme",
 ];
 
 fn main() {

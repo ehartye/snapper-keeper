@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
-import { getSetting, setSetting } from '@snk/library';
+import { getTheme, setSetting } from '@snk/library';
 
 import { queryKeys } from './queryKeys';
 
@@ -69,7 +69,7 @@ export interface FamilyDef {
 export const THEME_FAMILIES = {
   holo: {
     label: 'Holographic Dreamcore',
-    tagline: 'Lisa Frank holographic foil, cotton-candy gradients, peak \'90s sticker book',
+    tagline: "Lisa Frank holographic foil, cotton-candy gradients, peak '90s sticker book",
     preview: {
       swatches: ['#ff2d95', '#c77dff', '#00e5ff', '#7affd7'],
       bgLight: 'linear-gradient(135deg, #fff5f7, #ffe4ec)',
@@ -195,7 +195,7 @@ export const THEME_FAMILIES = {
   },
   atomic: {
     label: 'Mid-Century Atomic',
-    tagline: '\'50s/\'60s googie + jet age. Mustard, teal, brick, atomic green on butter cream.',
+    tagline: "'50s/'60s googie + jet age. Mustard, teal, brick, atomic green on butter cream.",
     preview: {
       swatches: ['#d4a024', '#3a7c9e', '#c5552a', '#8fb055'],
       bgLight: '#f5ebd8',
@@ -224,14 +224,15 @@ export interface ThemeEntry {
   mode: ThemeMode;
 }
 
-export const THEMES: ReadonlyArray<ThemeEntry> = (Object.keys(THEME_FAMILIES) as ThemeFamily[])
-  .flatMap((family): ThemeEntry[] => {
-    const def = THEME_FAMILIES[family];
-    return [
-      { id: `${family}-light` as ThemeId, label: `${def.label} — Light`, family, mode: 'light' },
-      { id: `${family}-dark` as ThemeId, label: `${def.label} — Dark`, family, mode: 'dark' },
-    ];
-  });
+export const THEMES: ReadonlyArray<ThemeEntry> = (
+  Object.keys(THEME_FAMILIES) as ThemeFamily[]
+).flatMap((family): ThemeEntry[] => {
+  const def = THEME_FAMILIES[family];
+  return [
+    { id: `${family}-light` as ThemeId, label: `${def.label} — Light`, family, mode: 'light' },
+    { id: `${family}-dark` as ThemeId, label: `${def.label} — Dark`, family, mode: 'dark' },
+  ];
+});
 
 export const DEFAULT_THEME: ThemeId = 'holo-dark';
 
@@ -262,7 +263,11 @@ export function useTheme() {
   const queryClient = useQueryClient();
   const { data } = useQuery({
     queryKey: queryKeys.settings.one(SETTING_KEY),
-    queryFn: () => getSetting(SETTING_KEY),
+    // Narrow get_theme read: every window applies the theme on load, but only
+    // library/settings may write settings — so themed windows that lack broad
+    // get_setting access (annotate, clipboard popup, capture overlay) still
+    // read the theme through this dedicated command.
+    queryFn: () => getTheme(),
   });
 
   const theme = (typeof data === 'string' ? (data as ThemeId) : null) ?? DEFAULT_THEME;

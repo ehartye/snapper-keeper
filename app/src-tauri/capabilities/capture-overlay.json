@@ -12,6 +12,7 @@
     "core:window:allow-set-position",
     "core:window:allow-set-size",
     "core:event:default",
-    "snk-capture:default"
+    "snk-capture:default",
+    "snk-library:allow-get-theme"
   ]
 }

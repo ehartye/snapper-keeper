@@ -20,4 +20,5 @@ permissions = [
     "allow-list-capture-tags",
     "allow-get-setting",
     "allow-set-setting",
+    "allow-get-theme",
 ]

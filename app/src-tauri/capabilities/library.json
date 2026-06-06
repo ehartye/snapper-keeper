@@ -30,6 +30,7 @@
     "snk-library:allow-list-capture-tags",
     "snk-library:allow-get-setting",
     "snk-library:allow-set-setting",
+    "snk-library:allow-get-theme",
     "snk-library:allow-search-library",
     "snk-library:allow-list-clipboard-items",
     "snk-library:allow-toggle-clipboard-pin",

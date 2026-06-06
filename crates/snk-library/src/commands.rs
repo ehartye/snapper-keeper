@@ -204,3 +204,57 @@ pub fn set_setting<R: Runtime>(
     )?;
     crate::settings::set(&state.db, &key, &value)
 }
+
+/// Settings key the UI persists the active theme under (mirrors
+/// `SETTING_KEY` in app/src/lib/theme.ts).
+const THEME_SETTING_KEY: &str = "theme";
+
+/// Read the persisted theme id, if any. Split out for unit testing.
+pub fn read_theme(db: &crate::Db) -> Result<Option<String>> {
+    Ok(crate::settings::get(db, THEME_SETTING_KEY)?.and_then(|v| v.as_str().map(str::to_string)))
+}
+
+/// Narrow, read-only theme accessor. Every window applies the active theme on
+/// load (App.tsx's WindowRouter calls useTheme for all windows), but only the
+/// library/settings windows may *change* a setting. This command exposes the
+/// theme read alone so non-privileged windows (annotate, clipboard popup,
+/// capture overlay) can theme themselves without being granted broad
+/// `get_setting` access. Writing the theme still goes through `set_setting`,
+/// which is authorization-gated to the library/settings windows.
+#[tauri::command]
+pub fn get_theme(state: State<'_, LibraryState>) -> Result<Option<String>> {
+    read_theme(&state.db)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn read_theme_returns_stored_value_then_none_when_unset() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = crate::Db::open(&dir.path().join("t.db")).unwrap();
+
+        assert_eq!(read_theme(&db).unwrap(), None, "unset theme reads as None");
+
+        crate::settings::set(
+            &db,
+            THEME_SETTING_KEY,
+            &serde_json::Value::String("memphis-dark".into()),
+        )
+        .unwrap();
+        assert_eq!(read_theme(&db).unwrap(), Some("memphis-dark".to_string()));
+    }
+
+    #[test]
+    fn read_theme_ignores_non_string_values() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = crate::Db::open(&dir.path().join("t.db")).unwrap();
+        crate::settings::set(&db, THEME_SETTING_KEY, &serde_json::Value::Bool(true)).unwrap();
+        assert_eq!(
+            read_theme(&db).unwrap(),
+            None,
+            "non-string theme reads as None"
+        );
+    }
+}
