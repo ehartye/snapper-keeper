@@ -12,6 +12,7 @@
     "core:event:default",
     "core:path:default",
     "snk-annotate:default",
-    "snk-library:allow-get-capture"
+    "snk-library:allow-get-capture",
+    "snk-library:allow-get-theme"
   ]
 }

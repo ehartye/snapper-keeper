@@ -68,3 +68,12 @@ export function getSetting(key: string): Promise<unknown | null> {
 export function setSetting(key: string, value: unknown): Promise<void> {
   return invoke<void>('plugin:snk-library|set_setting', { key, value });
 }
+
+/**
+ * Read-only accessor for the active theme id. Narrower than getSetting so every
+ * window can theme itself on load without being granted broad settings-read
+ * access (see crates/snk-library get_theme). Returns null when unset.
+ */
+export function getTheme(): Promise<string | null> {
+  return invoke<string | null>('plugin:snk-library|get_theme');
+}

@@ -41,6 +41,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             crate::commands::list_capture_tags,
             crate::commands::get_setting,
             crate::commands::set_setting,
+            crate::commands::get_theme,
         ])
         .setup(|app, _api| {
             let root = app
