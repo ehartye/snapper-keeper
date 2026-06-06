@@ -1,8 +1,15 @@
 //! Integration test — manipulates the real OS clipboard. Runs serial
 //! against any other env-mutating tests via `serial_test::serial(clipboard)`.
+//!
+//! These are `#[ignore]`-by-default: they read/write the shared system
+//! clipboard, so they flake against any concurrent clipboard activity (managers,
+//! other apps, parallel test processes) and never run in CI (rust-test is
+//! Linux-only, where these are `cfg`-compiled out). Run them deliberately on an
+//! interactive desktop with `cargo test -p snk-clipboard --test sensitivity_integration -- --ignored`.
 
 #[cfg(target_os = "macos")]
 #[test]
+#[ignore = "manipulates the real OS clipboard; racy against concurrent clipboard activity. Run explicitly with `cargo test -- --ignored` on an interactive desktop."]
 #[serial_test::serial(clipboard)]
 fn macos_concealed_type_marks_sensitive() {
     use objc2::rc::Retained;
@@ -28,6 +35,7 @@ fn macos_concealed_type_marks_sensitive() {
 
 #[cfg(target_os = "macos")]
 #[test]
+#[ignore = "manipulates the real OS clipboard; racy against concurrent clipboard activity. Run explicitly with `cargo test -- --ignored` on an interactive desktop."]
 #[serial_test::serial(clipboard)]
 fn macos_plain_text_is_not_sensitive() {
     use objc2::rc::Retained;
@@ -46,6 +54,7 @@ fn macos_plain_text_is_not_sensitive() {
 
 #[cfg(target_os = "windows")]
 #[test]
+#[ignore = "manipulates the real OS clipboard; racy against concurrent clipboard activity. Run explicitly with `cargo test -- --ignored` on an interactive desktop."]
 #[serial_test::serial(clipboard)]
 fn windows_can_include_in_history_zero_marks_sensitive() {
     use windows::core::w;
