@@ -1,0 +1,5 @@
+# ts-rs writes the generated TypeScript bindings with LF line endings. Pin them
+# to LF so Windows core.autocrlf doesn't rewrite the working copy to CRLF, which
+# produced spurious "modified" diffs and false-positive failures in
+# scripts/verify-ts-bindings.sh on Windows developer machines.
+packages/**/generated/*.ts text eol=lf
