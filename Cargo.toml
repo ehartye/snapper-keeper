@@ -37,7 +37,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 tokio = { version = "1", features = ["sync", "rt-multi-thread", "macros"] }
-rusqlite = { version = "0.31", features = ["bundled", "uuid"] }
+rusqlite = { version = "0.31", features = ["bundled-sqlcipher-vendored-openssl", "uuid"] }
 rusqlite_migration = "1"
 uuid = { version = "1", features = ["v7", "serde"] }
 xcap = "0.9"

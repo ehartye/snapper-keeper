@@ -153,6 +153,63 @@ mod tests {
         assert!(path.exists());
     }
 
+    // SPIKE (issue #160): proves the bundled-sqlcipher build actually encrypts,
+    // that a keyless open of an encrypted file is rejected (the basis for
+    // probe-detection), and that plaintext DBs still open keyless (off-by-
+    // default users unaffected). Only meaningful under the sqlcipher feature.
+    #[test]
+    fn spike_sqlcipher_round_trip_and_plaintext_compat() {
+        let dir = tempfile::tempdir().unwrap();
+        let enc = dir.path().join("enc.db");
+        let key = "PRAGMA key = \"x'000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f'\"";
+
+        {
+            let conn = Connection::open(&enc).unwrap();
+            conn.execute_batch(key).unwrap();
+            conn.execute_batch("CREATE TABLE t(x TEXT); INSERT INTO t VALUES('secret-value');")
+                .unwrap();
+        }
+
+        // Encrypted at rest: file must NOT start with the plaintext SQLite magic.
+        let head = std::fs::read(&enc).unwrap();
+        assert_ne!(
+            &head[..16.min(head.len())],
+            b"SQLite format 3\0",
+            "encrypted DB must not have a plaintext SQLite header"
+        );
+
+        // Keyless open of an encrypted DB must fail to read (probe-detection basis).
+        {
+            let conn = Connection::open(&enc).unwrap();
+            assert!(
+                conn.prepare("SELECT count(*) FROM sqlite_master").is_err(),
+                "unkeyed read of an encrypted DB must fail"
+            );
+        }
+
+        // Keyed reopen returns the original data.
+        {
+            let conn = Connection::open(&enc).unwrap();
+            conn.execute_batch(key).unwrap();
+            let v: String = conn.query_row("SELECT x FROM t", [], |r| r.get(0)).unwrap();
+            assert_eq!(v, "secret-value");
+        }
+
+        // Plaintext compat: a keyless DB on a SQLCipher build is normal SQLite.
+        let plain = dir.path().join("plain.db");
+        {
+            let conn = Connection::open(&plain).unwrap();
+            conn.execute_batch("CREATE TABLE t(x TEXT); INSERT INTO t VALUES('plain');")
+                .unwrap();
+        }
+        let phead = std::fs::read(&plain).unwrap();
+        assert_eq!(
+            &phead[..16],
+            b"SQLite format 3\0",
+            "keyless DB on a SQLCipher build must remain plaintext SQLite"
+        );
+    }
+
     #[test]
     fn migration_failure_restores_db_and_returns_recoverable_true() {
         let dir = tempfile::tempdir().unwrap();
