@@ -24,6 +24,8 @@ pub enum UpdaterError {
 pub type Result<T> = std::result::Result<T, UpdaterError>;
 
 const UPDATER_ENABLED_KEY: &str = "updater.enabled";
+const UPDATER_HIGHEST_SEEN_KEY: &str = "updater.highest_seen_version";
+const UPDATER_ALLOW_ROLLBACK_KEY: &str = "updater.allow_rollback";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
@@ -142,6 +144,77 @@ fn updater_enabled(db: &snk_library::Db) -> bool {
         .unwrap_or(true)
 }
 
+fn allow_rollback(db: &snk_library::Db) -> bool {
+    snk_library::settings::get(db, UPDATER_ALLOW_ROLLBACK_KEY)
+        .ok()
+        .flatten()
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+}
+
+fn highest_seen_version(db: &snk_library::Db) -> Option<semver::Version> {
+    snk_library::settings::get(db, UPDATER_HIGHEST_SEEN_KEY)
+        .ok()
+        .flatten()
+        .and_then(|value| value.as_str().map(str::to_string))
+        .and_then(|s| semver::Version::parse(&s).ok())
+}
+
+fn store_highest_seen(db: &snk_library::Db, version: &str) {
+    let _ = snk_library::settings::set(
+        db,
+        UPDATER_HIGHEST_SEEN_KEY,
+        &serde_json::Value::String(version.to_string()),
+    );
+}
+
+/// Outcome of the downgrade-floor check.
+#[derive(Debug, PartialEq, Eq)]
+enum DowngradeDecision {
+    /// Proceed with the update; persist `new_highest` as the highest-seen version.
+    Allow { new_highest: String },
+    /// Refuse: the offered version is below the floor and rollback isn't allowed.
+    Block,
+}
+
+/// Decide whether an offered update is an allowed upgrade or a blocked
+/// downgrade. The floor is the greater of the highest-ever-seen version and
+/// the currently-running version; an offer strictly below the floor is blocked
+/// unless the user opted into rollback. Tauri's updater already refuses offers
+/// at or below the *current* version, so this primarily defends against being
+/// pinned to a stale-but-validly-signed release below one already seen.
+fn evaluate_downgrade(
+    offered: &semver::Version,
+    highest_seen: Option<&semver::Version>,
+    current: &semver::Version,
+    allow_rollback: bool,
+) -> DowngradeDecision {
+    let floor = match highest_seen {
+        Some(h) if h > current => h,
+        _ => current,
+    };
+    if !allow_rollback && offered < floor {
+        DowngradeDecision::Block
+    } else {
+        let new_highest = if offered > floor { offered } else { floor };
+        DowngradeDecision::Allow {
+            new_highest: new_highest.to_string(),
+        }
+    }
+}
+
+/// Whether an updater error is a signature-verification failure — terminal for
+/// the process lifetime — versus a recoverable network/IO error. A bad
+/// signature means the update channel is compromised or misconfigured, so we
+/// stop trying rather than retrying against a hostile/broken endpoint.
+fn is_signature_error(e: &tauri_plugin_updater::Error) -> bool {
+    use tauri_plugin_updater::Error;
+    matches!(
+        e,
+        Error::Minisign(_) | Error::SignatureUtf8(_) | Error::Base64(_)
+    )
+}
+
 fn suppressed_by_policy_status<R: Runtime>(app: &AppHandle<R>) -> Option<UpdateStatus> {
     let lib = app.try_state::<LibraryState>()?;
     (!updater_enabled(&lib.db)).then_some(UpdateStatus::SuppressedByPolicy {
@@ -207,6 +280,47 @@ async fn do_update_check<R: Runtime>(app: AppHandle<R>) -> Result<UpdateStatus> 
         Ok(Some(update)) => {
             let version = update.version.clone();
             info!(%version, "update available");
+
+            // Downgrade floor: refuse an offer below the highest-ever-seen
+            // version (or the running version) unless the user enabled
+            // rollback. Persist the new high-water mark when we accept.
+            if let Some(lib) = app.try_state::<LibraryState>() {
+                match semver::Version::parse(&version) {
+                    Ok(offered) => {
+                        let current = app.package_info().version.clone();
+                        let seen = highest_seen_version(&lib.db);
+                        match evaluate_downgrade(
+                            &offered,
+                            seen.as_ref(),
+                            &current,
+                            allow_rollback(&lib.db),
+                        ) {
+                            DowngradeDecision::Block => {
+                                warn!(
+                                    %version,
+                                    "update blocked: version is below the downgrade floor \
+                                     (enable updater.allow_rollback to override)"
+                                );
+                                let status = UpdateStatus::SuppressedByPolicy {
+                                    reason: SuppressionReason::DowngradeBlocked,
+                                };
+                                set_and_emit_status(&app, status.clone());
+                                return Ok(status);
+                            }
+                            DowngradeDecision::Allow { new_highest } => {
+                                store_highest_seen(&lib.db, &new_highest);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        warn!(
+                            %version, error = %e,
+                            "offered version is not valid semver; skipping downgrade-floor check"
+                        );
+                    }
+                }
+            }
+
             let status = UpdateStatus::Available {
                 version: version.clone(),
                 urgency: Urgency::Normal,
@@ -244,15 +358,28 @@ async fn do_update_check<R: Runtime>(app: AppHandle<R>) -> Result<UpdateStatus> 
                 {
                     Ok(()) => {}
                     Err(e) => {
-                        let status = UpdateStatus::Error {
-                            reason: UpdateErrorKind::DownloadFailed,
-                            retryable: true,
+                        // A signature-verification failure is terminal: the
+                        // update channel is compromised or misconfigured, so
+                        // RejectedBySignature (a one-way state) disables the
+                        // updater for the rest of the process. Network/IO
+                        // errors stay retryable.
+                        let status = if is_signature_error(&e) {
+                            error!(
+                                error = %e,
+                                "update signature verification FAILED — updater disabled for this process"
+                            );
+                            UpdateStatus::RejectedBySignature
+                        } else {
+                            error!(error = %e, "update download failed");
+                            UpdateStatus::Error {
+                                reason: UpdateErrorKind::DownloadFailed,
+                                retryable: true,
+                            }
                         };
                         err_handle
                             .state::<UpdaterState>()
                             .set_status(status.clone());
                         let _ = err_handle.emit("updater:status-changed", status);
-                        error!(error = %e, "update download failed");
                     }
                 }
             });
@@ -485,5 +612,62 @@ mod tests {
         snk_library::settings::set(&db, UPDATER_ENABLED_KEY, &serde_json::Value::Bool(false))
             .unwrap();
         assert!(!updater_enabled(&db));
+    }
+
+    fn v(s: &str) -> semver::Version {
+        semver::Version::parse(s).unwrap()
+    }
+
+    #[test]
+    fn downgrade_allows_a_normal_upgrade_and_advances_high_water_mark() {
+        let d = evaluate_downgrade(&v("1.3.0"), Some(&v("1.2.0")), &v("1.2.0"), false);
+        assert_eq!(
+            d,
+            DowngradeDecision::Allow {
+                new_highest: "1.3.0".into()
+            }
+        );
+    }
+
+    #[test]
+    fn downgrade_blocks_below_highest_seen_without_rollback() {
+        // Saw 1.5.0, running 1.0.0, offered 1.3.0 → below the 1.5.0 floor.
+        let d = evaluate_downgrade(&v("1.3.0"), Some(&v("1.5.0")), &v("1.0.0"), false);
+        assert_eq!(d, DowngradeDecision::Block);
+    }
+
+    #[test]
+    fn downgrade_permitted_when_rollback_enabled() {
+        let d = evaluate_downgrade(&v("1.3.0"), Some(&v("1.5.0")), &v("1.0.0"), true);
+        // Rollback keeps the existing high-water mark rather than lowering it.
+        assert_eq!(
+            d,
+            DowngradeDecision::Allow {
+                new_highest: "1.5.0".into()
+            }
+        );
+    }
+
+    #[test]
+    fn downgrade_floor_falls_back_to_current_when_no_history() {
+        // Offer equal to current is not below the floor → allowed.
+        let d = evaluate_downgrade(&v("2.0.0"), None, &v("2.0.0"), false);
+        assert_eq!(
+            d,
+            DowngradeDecision::Allow {
+                new_highest: "2.0.0".into()
+            }
+        );
+        // Offer below current with no history is blocked.
+        let d = evaluate_downgrade(&v("1.9.0"), None, &v("2.0.0"), false);
+        assert_eq!(d, DowngradeDecision::Block);
+    }
+
+    #[test]
+    fn signature_errors_are_terminal_network_errors_are_not() {
+        use tauri_plugin_updater::Error;
+        assert!(is_signature_error(&Error::SignatureUtf8("bad".into())));
+        assert!(!is_signature_error(&Error::Network("timeout".into())));
+        assert!(!is_signature_error(&Error::ReleaseNotFound));
     }
 }

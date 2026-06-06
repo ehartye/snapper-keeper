@@ -4464,6 +4464,7 @@ name = "snk-updater"
 version = "0.0.1"
 dependencies = [
  "chrono",
+ "semver",
  "serde",
  "serde_json",
  "snk-library",

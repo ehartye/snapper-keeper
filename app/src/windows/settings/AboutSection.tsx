@@ -49,6 +49,8 @@ function formatStatus(s: UpdateStatus): string {
           return 'Update checks disabled in Settings';
         case 'store-edition':
           return 'Updates are managed by Microsoft Store';
+        case 'downgrade-blocked':
+          return 'Update blocked: it would downgrade below the newest version seen (enable rollback in Settings to override)';
         default:
           return `Update checks suppressed (${s.reason})`;
       }

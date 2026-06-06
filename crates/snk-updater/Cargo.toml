@@ -37,6 +37,9 @@ tracing.workspace = true
 tokio.workspace = true
 chrono.workspace = true
 ts-rs.workspace = true
+# Version comparison for the downgrade floor (#27). Already pulled in
+# transitively by tauri-plugin-updater; declared here for direct use.
+semver = "1"
 
 [dev-dependencies]
 tempfile = "3"
