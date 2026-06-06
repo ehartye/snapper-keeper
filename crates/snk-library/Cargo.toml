@@ -26,3 +26,7 @@ tauri-plugin = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"
+serde_json = { workspace = true }
+# `test` feature unlocks tauri::test (mock_app / get_ipc_response) for the
+# IPC-contract tests. Resolver 2 keeps this dev-only feature out of normal builds.
+tauri = { workspace = true, features = ["test"] }
