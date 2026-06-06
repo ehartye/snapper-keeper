@@ -107,7 +107,9 @@ fn paste_item_from_unauthorized_window_is_rejected() {
     let (_tmp, _app, wv) = build("library");
     let err = invoke(&wv, "paste_item", serde_json::json!({ "id": "x" }))
         .expect_err("unauthorized window must be rejected");
+    // ClipboardError serializes with `content = "data"`, so the variant fields
+    // nest under `data` (unlike LibraryError, which is tag-only/top-level).
     assert_eq!(err["kind"], "unauthorized");
-    assert_eq!(err["window"], "library");
-    assert_eq!(err["command"], "paste_item");
+    assert_eq!(err["data"]["window"], "library");
+    assert_eq!(err["data"]["command"], "paste_item");
 }
