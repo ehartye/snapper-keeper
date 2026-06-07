@@ -49,7 +49,9 @@ pub fn status() -> PermissionStatus {
 pub fn open_accessibility_settings() -> Result<()> {
     #[cfg(target_os = "macos")]
     {
-        std::process::Command::new("open")
+        // Absolute path rather than relying on PATH, which a packaged app
+        // can't assume and which the environment could influence.
+        std::process::Command::new("/usr/bin/open")
             .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
             .spawn()
             .map_err(|e| crate::ClipboardError::Access {

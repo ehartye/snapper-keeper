@@ -54,7 +54,9 @@ export function ClipboardPopup() {
       reset();
       await loadItems();
       // Re-check on every open so granting the permission and reopening clears
-      // the banner without a restart.
+      // the banner without a restart. Clear first so a failed or late status
+      // query can't leave a stale banner from a previous session showing.
+      setNeedsAccessibility(false);
       clipboardPermissionStatus()
         .then((s) => setNeedsAccessibility(!s.accessibility_granted))
         .catch(() => {});
