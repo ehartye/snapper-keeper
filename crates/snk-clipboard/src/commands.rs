@@ -133,3 +133,17 @@ pub fn clipboard_status(
 ) -> crate::health::ClipboardStatus {
     health.snapshot()
 }
+
+/// Report whether the process currently holds the OS permission auto-paste
+/// needs (macOS Accessibility). Lets the popup warn up-front instead of having
+/// the paste keystroke silently swallowed. Always granted off macOS.
+#[tauri::command]
+pub fn clipboard_permission_status() -> crate::permissions::PermissionStatus {
+    crate::permissions::status()
+}
+
+/// Open the OS settings pane where the user grants auto-paste permission.
+#[tauri::command]
+pub fn open_accessibility_settings() -> Result<()> {
+    crate::permissions::open_accessibility_settings()
+}

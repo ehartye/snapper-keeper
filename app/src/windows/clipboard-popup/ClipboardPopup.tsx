@@ -7,6 +7,9 @@ import {
   pasteItem,
   toggleClipboardPin,
   clipboardStatus,
+  clipboardPermissionStatus,
+  openAccessibilitySettings,
+  isAccessibilityRequiredError,
   CLIPBOARD_POPUP_SHOW_EVENT,
   CLIPBOARD_UNAVAILABLE_EVENT,
   CLIPBOARD_AVAILABLE_EVENT,
@@ -25,6 +28,10 @@ export function ClipboardPopup() {
   const reset = useClipboardPopupStore((s) => s.reset);
   const inputRef = useRef<HTMLInputElement>(null);
   const [offline, setOffline] = useState(false);
+  // macOS only: auto-paste needs Accessibility (TCC). When it isn't granted the
+  // synthetic Cmd+V is silently dropped, so we surface a banner with a deep-link
+  // to System Settings. Always false off macOS (the status query reports granted).
+  const [needsAccessibility, setNeedsAccessibility] = useState(false);
 
   const loadItems = useCallback(
     async (filterText?: string) => {
@@ -46,6 +53,11 @@ export function ClipboardPopup() {
     listen(CLIPBOARD_POPUP_SHOW_EVENT, async () => {
       reset();
       await loadItems();
+      // Re-check on every open so granting the permission and reopening clears
+      // the banner without a restart.
+      clipboardPermissionStatus()
+        .then((s) => setNeedsAccessibility(!s.accessibility_granted))
+        .catch(() => {});
       const win = getCurrentWindow();
       await win.show();
       await win.setFocus();
@@ -85,11 +97,20 @@ export function ClipboardPopup() {
 
   const handlePaste = useCallback(
     async (id: string) => {
+      // The popup must yield focus before the synthetic paste fires, so the
+      // keystroke lands in the previously-focused app rather than this window.
       try {
         await dismiss();
         await pasteItem(id);
       } catch (e) {
-        console.error('paste failed', e);
+        if (isAccessibilityRequiredError(e)) {
+          // Permission was missing — re-reveal the popup (dismiss hid it) and
+          // show the actionable banner instead of failing silently.
+          setNeedsAccessibility(true);
+          await getCurrentWindow().show();
+        } else {
+          console.error('paste failed', e);
+        }
       }
     },
     [dismiss],
@@ -200,6 +221,22 @@ export function ClipboardPopup() {
       {offline && (
         <div className="px-3 py-1.5 bg-accent/10 text-accent text-[10px] font-display uppercase tracking-wider border-b border-border text-center">
           clipboard offline — retrying…
+        </div>
+      )}
+      {needsAccessibility && (
+        <div className="px-3 py-1.5 bg-accent/10 text-accent text-[10px] font-display uppercase tracking-wider border-b border-border flex items-center justify-between gap-2">
+          <span>accessibility needed to paste</span>
+          <button
+            type="button"
+            onClick={() => {
+              openAccessibilitySettings().catch((e) =>
+                console.error('open accessibility settings failed', e),
+              );
+            }}
+            className="underline whitespace-nowrap hover:text-fg"
+          >
+            open settings
+          </button>
         </div>
       )}
       <div className="flex-1 overflow-y-auto">

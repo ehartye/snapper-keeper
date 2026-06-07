@@ -7,6 +7,12 @@ pub fn synthesize_paste() -> Result<()> {
     }
     #[cfg(target_os = "macos")]
     {
+        // Posting the synthetic Cmd+V is silently dropped by macOS unless the
+        // process holds Accessibility permission. Check first and surface a
+        // typed error the popup can act on, rather than no-op'ing invisibly.
+        if !crate::permissions::accessibility_granted() {
+            return Err(crate::ClipboardError::AccessibilityRequired);
+        }
         synthesize_paste_macos()
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
