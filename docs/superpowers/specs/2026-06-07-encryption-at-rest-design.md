@@ -158,11 +158,15 @@ names must **not** be `kind` — use `reason`/`detail`:
 - `EncryptionUnsupported { reason }` — `enable_encryption` invoked on a non-win/mac build.
 
 `plugin.rs` `setup()` catches `Locked` (parallel to its existing
-`Migration { recoverable: true }` handling): emits `library:locked` and starts the app
-into a **blocking explainer window** rather than crashing. Because the policy is
-warn-only/no-recovery, the only in-app escape is **"Start fresh"** — delete the
-(already-unrecoverable) encrypted DB + keychain entry and create a new empty plaintext
-library. Destructive, behind a confirm; it exists only to unbrick the app.
+`Migration { recoverable: true }` handling): logs a clear diagnosis, emits
+`library:locked`, and surfaces the typed error rather than crashing silently.
+
+**v1 ships fail-fast, not auto-recovery.** A keychain read can fail *transiently*
+(e.g. a locked macOS Keychain before the user authenticates), and auto-"starting fresh"
+on a transient miss would destroy a live session's data. So v1 does **not** auto-delete
+or auto-replace the encrypted DB; it stops with a clear `Locked` reason and documents
+manual remediation (remove the DB file to start over). A guided "Start fresh" recovery
+flow is a deferred enhancement — the user confirmed either approach is acceptable.
 
 ## UI (Settings → Privacy, new section)
 
@@ -230,6 +234,8 @@ The mechanics/storage split is what makes this testable without a keychain in CI
 ## Out of scope (YAGNI for v1)
 
 - Decrypt-back-to-plaintext (one-way only).
+- Guided "Start fresh" locked-state recovery UI (v1 fails fast with a documented
+  manual remediation; auto-recovery is unsafe on transient keychain failures).
 - Recovery keys / passphrases (warn-only key-loss policy).
 - Key rotation.
 - Per-table or field-level encryption.
