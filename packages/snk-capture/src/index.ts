@@ -2,9 +2,6 @@ import { invoke } from '@tauri-apps/api/core';
 
 import type { Capture } from '@snk/library';
 import type { WindowInfo } from './types';
-import type { CapturePermissionStatus } from './generated/permission-status';
-
-export type { CapturePermissionStatus } from './generated/permission-status';
 
 export const CAPTURE_FULL_SCREEN_EVENT = 'hotkey:capture-full-screen';
 export const CAPTURE_REGION_EVENT = 'hotkey:capture-region';
@@ -48,8 +45,8 @@ export function grabScreenPreview(monitorId?: number): Promise<ScreenPreview> {
   return invoke<ScreenPreview>('plugin:snk-capture|grab_screen_preview', { monitorId });
 }
 
-export function capturePermissionStatus(): Promise<CapturePermissionStatus> {
-  return invoke<CapturePermissionStatus>('plugin:snk-capture|capture_permission_status');
+export function capturePermissionStatus(): Promise<boolean> {
+  return invoke<boolean>('plugin:snk-capture|capture_permission_status');
 }
 
 export function openScreenRecordingSettings(): Promise<void> {

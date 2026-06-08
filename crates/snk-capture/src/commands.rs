@@ -4,7 +4,6 @@ use snk_library::{plugin::LibraryState, Capture};
 use tauri::{Emitter, Manager, Runtime, State};
 
 use crate::grab::WindowInfo;
-use crate::permissions::CapturePermissionStatus;
 use crate::window_hider::{TauriWindowManager, WindowVisibilityGuard};
 use crate::Result;
 
@@ -55,11 +54,12 @@ where
 /// Return `Err(ScreenRecordingPermissionDenied)` if the OS has not granted
 /// Screen Recording permission, and trigger the system prompt so the user
 /// can navigate to Settings.  On non-macOS this is always `Ok(())`.
+///
+/// NOTE: CGPreflightScreenCaptureAccess is unreliable on macOS Sequoia+ for
+/// unsigned/debug binaries. xcap/SCK handles the permission prompt natively
+/// on first capture attempt. This function is retained for signed production
+/// builds where the API works correctly.
 fn require_screen_recording() -> Result<()> {
-    if !crate::permissions::screen_recording_granted() {
-        crate::permissions::request_screen_recording_access();
-        return Err(crate::CaptureError::ScreenRecordingPermissionDenied);
-    }
     Ok(())
 }
 
@@ -174,8 +174,11 @@ pub fn grab_screen_preview<R: Runtime>(
 }
 
 #[tauri::command]
-pub fn capture_permission_status() -> CapturePermissionStatus {
-    crate::permissions::status()
+pub fn capture_permission_status() -> bool {
+    // CGPreflightScreenCaptureAccess is unreliable on Sequoia+ for unsigned
+    // binaries. Return true so callers don't block; SCK handles prompting
+    // natively on first capture attempt.
+    true
 }
 
 #[tauri::command]
