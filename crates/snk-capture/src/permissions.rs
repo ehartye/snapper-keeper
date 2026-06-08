@@ -1,37 +1,63 @@
-//! macOS Screen Recording (TCC) helpers for screen capture.
+//! macOS Screen Recording (TCC) permission helpers for screen capture.
 //!
-//! On macOS Sequoia and later, `CGPreflightScreenCaptureAccess()` is
-//! unreliable for unsigned / ad-hoc-signed binaries (debug builds) —
-//! it always returns false even after the user has granted permission.
-//! xcap uses ScreenCaptureKit, which handles the TCC permission prompt
-//! natively when capture is first attempted.
+//! ## Why TCC permission matters
 //!
-//! Our role here is limited to:
-//!   1. Calling `CGRequestScreenCaptureAccess()` at plugin init so the
-//!      app is registered with TCC and the system prompt appears on first
-//!      launch, rather than silently returning black frames.
-//!   2. Providing a deep-link to the Settings pane for the manual fallback.
+//! xcap uses CGWindowListCreateImage under the hood. Without the Screen
+//! Recording TCC grant, that API silently returns black frames — no error,
+//! no prompt — so captures appear blank and the region-overlay backdrop is
+//! a solid black rectangle.
 //!
-//! Off macOS, everything is a no-op.
+//! ## Why CGPreflightScreenCaptureAccess requires a signed binary
+//!
+//! TCC identifies apps by their code-signing identity. An unsigned binary
+//! has no stable identity, so TCC cannot track a grant across launches and
+//! CGPreflightScreenCaptureAccess() always returns false regardless of
+//! what the user has toggled in System Settings.
+//!
+//! The fix is to sign the debug binary with a stable --identifier:
+//!
+//! ```text
+//! ./scripts/dev-sign-macos.sh
+//! ```
+//!
+//! Production builds are signed by the release pipeline and work correctly
+//! without any extra steps.
 
 use crate::Result;
 
-/// Trigger the macOS Screen Recording permission prompt.
-/// Should be called once at plugin init to register the app with TCC.
+/// Whether the process currently holds Screen Recording permission.
+/// Returns true on non-macOS platforms (no TCC).
+pub fn screen_recording_granted() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        // Safe: CGPreflightScreenCaptureAccess takes no arguments, has no
+        // side effects, and returns a Boolean (0/1). Requires a signed
+        // binary with a stable identifier — see module doc.
+        unsafe { cg::CGPreflightScreenCaptureAccess() != 0 }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        true
+    }
+}
+
+/// Trigger the macOS Screen Recording permission prompt so the app is
+/// registered with TCC and appears in System Settings → Screen Recording.
 /// No-op on non-macOS.
 pub fn request_screen_recording_access() {
     #[cfg(target_os = "macos")]
     {
-        // Safety: CGRequestScreenCaptureAccess takes no arguments and has no
-        // memory-safety concerns. Return value is intentionally ignored.
+        // Safe: no arguments, no memory-safety concerns.
+        // Return value intentionally ignored; use screen_recording_granted()
+        // to re-check after the user acts.
         unsafe {
             cg::CGRequestScreenCaptureAccess();
         }
     }
 }
 
-/// Open the OS settings pane where the user grants Screen Recording
-/// permission. No-op off macOS.
+/// Open System Settings → Privacy & Security → Screen Recording.
+/// No-op off macOS.
 pub fn open_screen_recording_settings() -> Result<()> {
     #[cfg(target_os = "macos")]
     {
@@ -53,7 +79,28 @@ mod cg {
 
     #[link(name = "CoreGraphics", kind = "framework")]
     extern "C" {
+        pub fn CGPreflightScreenCaptureAccess() -> c_uchar;
         pub fn CGRequestScreenCaptureAccess() -> c_uchar;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn screen_recording_granted_returns_bool() {
+        // Just verify it doesn't panic. On CI (Linux) this always returns
+        // true; on an unsigned macOS dev binary it returns false until the
+        // binary is signed via scripts/dev-sign-macos.sh.
+        let _ = screen_recording_granted();
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn non_macos_always_granted() {
+        assert!(screen_recording_granted());
+    }
+}
+
 

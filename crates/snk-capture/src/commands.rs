@@ -52,14 +52,14 @@ where
 }
 
 /// Return `Err(ScreenRecordingPermissionDenied)` if the OS has not granted
-/// Screen Recording permission, and trigger the system prompt so the user
-/// can navigate to Settings.  On non-macOS this is always `Ok(())`.
-///
-/// NOTE: CGPreflightScreenCaptureAccess is unreliable on macOS Sequoia+ for
-/// unsigned/debug binaries. xcap/SCK handles the permission prompt natively
-/// on first capture attempt. This function is retained for signed production
-/// builds where the API works correctly.
+/// Screen Recording permission, and trigger the system prompt so the app
+/// is registered with TCC. Requires the binary to be signed with a stable
+/// identifier (see scripts/dev-sign-macos.sh). No-op on non-macOS.
 fn require_screen_recording() -> Result<()> {
+    if !crate::permissions::screen_recording_granted() {
+        crate::permissions::request_screen_recording_access();
+        return Err(crate::CaptureError::ScreenRecordingPermissionDenied);
+    }
     Ok(())
 }
 
@@ -175,10 +175,7 @@ pub fn grab_screen_preview<R: Runtime>(
 
 #[tauri::command]
 pub fn capture_permission_status() -> bool {
-    // CGPreflightScreenCaptureAccess is unreliable on Sequoia+ for unsigned
-    // binaries. Return true so callers don't block; SCK handles prompting
-    // natively on first capture attempt.
-    true
+    crate::permissions::screen_recording_granted()
 }
 
 #[tauri::command]

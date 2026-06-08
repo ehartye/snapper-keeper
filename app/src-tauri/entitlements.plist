@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+        WebKit requires JIT and unsigned executable memory under the
+        Hardened Runtime. Without these the webview process is killed on
+        launch when the app is notarized.
+    -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <!--
+        Tauri loads plugins as dylibs at runtime. Library validation would
+        reject them because they are not signed by the same team cert as the
+        host binary.
+    -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+    <!--
+        Screen Recording (kTCCServiceScreenCapture) is a TCC-only permission
+        for non-sandboxed apps — no dedicated entitlement key is required.
+        What IS required is a stable code-signing identity so TCC can
+        remember the grant across launches. See scripts/dev-sign-macos.sh.
+    -->
+</dict>
+</plist>
