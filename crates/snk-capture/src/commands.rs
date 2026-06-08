@@ -4,6 +4,7 @@ use snk_library::{plugin::LibraryState, Capture};
 use tauri::{Emitter, Manager, Runtime, State};
 
 use crate::grab::WindowInfo;
+use crate::permissions::CapturePermissionStatus;
 use crate::window_hider::{TauriWindowManager, WindowVisibilityGuard};
 use crate::Result;
 
@@ -51,11 +52,23 @@ where
     f()
 }
 
+/// Return `Err(ScreenRecordingPermissionDenied)` if the OS has not granted
+/// Screen Recording permission, and trigger the system prompt so the user
+/// can navigate to Settings.  On non-macOS this is always `Ok(())`.
+fn require_screen_recording() -> Result<()> {
+    if !crate::permissions::screen_recording_granted() {
+        crate::permissions::request_screen_recording_access();
+        return Err(crate::CaptureError::ScreenRecordingPermissionDenied);
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn capture_full_screen<R: Runtime>(
     state: State<'_, LibraryState>,
     app: tauri::AppHandle<R>,
 ) -> Result<Capture> {
+    require_screen_recording()?;
     let capture = with_hidden_own_windows(&app, &state.db, || {
         crate::orchestrate::capture_full_screen(&state.db, &state.root)
     })?;
@@ -69,6 +82,7 @@ pub fn capture_window<R: Runtime>(
     app: tauri::AppHandle<R>,
     window_id: u32,
 ) -> Result<Capture> {
+    require_screen_recording()?;
     let capture = with_hidden_own_windows(&app, &state.db, || {
         crate::orchestrate::capture_window(&state.db, &state.root, window_id)
     })?;
@@ -86,6 +100,7 @@ pub fn capture_region<R: Runtime>(
     w: u32,
     h: u32,
 ) -> Result<Capture> {
+    require_screen_recording()?;
     let capture = with_hidden_own_windows(&app, &state.db, || {
         crate::orchestrate::capture_region(&state.db, &state.root, monitor_id, x, y, w, h)
     })?;
@@ -118,6 +133,7 @@ pub fn grab_screen_preview<R: Runtime>(
     app: tauri::AppHandle<R>,
     monitor_id: Option<u32>,
 ) -> Result<ScreenPreview> {
+    require_screen_recording()?;
     // Hide own windows around the grab — same pattern as the three
     // capture commands above. Without this the preview backdrop the
     // region overlay shows would include the library/settings/etc.,
@@ -155,6 +171,16 @@ pub fn grab_screen_preview<R: Runtime>(
         height: result.height,
         token: mint_preview_token(),
     })
+}
+
+#[tauri::command]
+pub fn capture_permission_status() -> CapturePermissionStatus {
+    crate::permissions::status()
+}
+
+#[tauri::command]
+pub fn open_screen_recording_settings() -> Result<()> {
+    crate::permissions::open_screen_recording_settings()
 }
 
 #[cfg(test)]

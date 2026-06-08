@@ -6,4 +6,6 @@ permissions = [
     "allow-capture-region",
     "allow-list-capturable-windows",
     "allow-grab-screen-preview",
+    "allow-capture-permission-status",
+    "allow-open-screen-recording-settings",
 ]

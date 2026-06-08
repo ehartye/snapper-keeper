@@ -12,6 +12,7 @@ import {
   CAPTURE_TIMED_EVENT,
   captureFullScreen,
   grabScreenPreview,
+  openScreenRecordingSettings,
 } from '@snk/capture';
 import { CLIPBOARD_HISTORY_EVENT, CLIPBOARD_POPUP_SHOW_EVENT, showPopup } from '@snk/clipboard';
 import { getSetting } from '@snk/library';
@@ -146,15 +147,33 @@ export function LibraryWindow() {
     }
   }, []);
 
+  const showScreenRecordingAlert = useCallback(() => {
+    modal.confirm({
+      title: 'Screen Recording Permission Required',
+      body: 'Snapper Keeper needs Screen Recording permission to capture your screen. Open System Settings → Privacy & Security → Screen Recording and enable it for this app, then try again.',
+      confirmLabel: 'Open Settings',
+      cancelLabel: 'Dismiss',
+      onConfirm: () => {
+        openScreenRecordingSettings().catch((e) =>
+          console.error('open screen recording settings failed', e),
+        );
+      },
+    });
+  }, [modal]);
+
   const handleFullScreen = useCallback(async () => {
     try {
       const capture = await captureFullScreen();
       await refreshCaptures();
       await showToolbar(capture.id);
-    } catch (e) {
+    } catch (e: unknown) {
+      if (typeof e === 'object' && e !== null && 'kind' in e && e.kind === 'screen-recording-permission-denied') {
+        showScreenRecordingAlert();
+        return;
+      }
       console.error('capture failed', e);
     }
-  }, [refreshCaptures, showToolbar]);
+  }, [refreshCaptures, showToolbar, showScreenRecordingAlert]);
 
   const handleRegion = useCallback(async () => {
     try {
@@ -192,10 +211,14 @@ export function LibraryWindow() {
         await overlay.show();
         await overlay.setFocus();
       }
-    } catch (e) {
+    } catch (e: unknown) {
+      if (typeof e === 'object' && e !== null && 'kind' in e && e.kind === 'screen-recording-permission-denied') {
+        showScreenRecordingAlert();
+        return;
+      }
       console.error('region overlay failed', e);
     }
-  }, []);
+  }, [showScreenRecordingAlert]);
 
   const handleWindow = useCallback(async () => {
     try {

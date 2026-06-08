@@ -9,6 +9,7 @@ pub mod error;
 pub mod foreground;
 pub mod grab;
 pub mod orchestrate;
+pub mod permissions;
 pub mod plugin;
 pub mod window_hider;
 
