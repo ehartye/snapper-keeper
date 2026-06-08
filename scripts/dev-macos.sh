@@ -29,8 +29,8 @@ BINARY="$ROOT/target/debug/snapper-keeper-app"
 ENTITLEMENTS="$ROOT/app/src-tauri/entitlements.plist"
 IDENTIFIER="com.snapper-keeper.app"
 
-echo "→ Building Rust binary..."
-cargo build --manifest-path "$ROOT/app/src-tauri/Cargo.toml"
+echo "→ Building Rust binary (--no-default-features, matching tauri dev)..."
+cargo build --manifest-path "$ROOT/app/src-tauri/Cargo.toml" --no-default-features
 
 echo "→ Signing with identifier '$IDENTIFIER'..."
 codesign \
