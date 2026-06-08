@@ -2,10 +2,12 @@ import { invoke } from '@tauri-apps/api/core';
 
 import type { ClipboardItem, ListClipboardQuery, CaretPosition, SourceApp } from './types';
 import type { ClipboardStatus } from './generated/clipboard-status';
+import type { PermissionStatus } from './generated/permission-status';
 
 export * from './types';
 export * from './generated/errors';
 export type { ClipboardStatus } from './generated/clipboard-status';
+export type { PermissionStatus } from './generated/permission-status';
 
 export const CLIPBOARD_HISTORY_EVENT = 'hotkey:clipboard-history';
 export const CLIPBOARD_POPUP_SHOW_EVENT = 'clipboard-popup:show';
@@ -42,4 +44,23 @@ export function detectFrontmostApp(): Promise<SourceApp | null> {
 
 export function clipboardStatus(): Promise<ClipboardStatus> {
   return invoke<ClipboardStatus>('plugin:snk-clipboard|clipboard_status');
+}
+
+export function clipboardPermissionStatus(): Promise<PermissionStatus> {
+  return invoke<PermissionStatus>('plugin:snk-clipboard|clipboard_permission_status');
+}
+
+export function openAccessibilitySettings(): Promise<void> {
+  return invoke<void>('plugin:snk-clipboard|open_accessibility_settings');
+}
+
+// True when an invoke rejection is the typed "accessibility permission
+// required" error from paste_item — lets the popup show an actionable banner
+// instead of swallowing the failure.
+export function isAccessibilityRequiredError(e: unknown): boolean {
+  return (
+    typeof e === 'object' &&
+    e !== null &&
+    (e as { kind?: string }).kind === 'accessibility-required'
+  );
 }

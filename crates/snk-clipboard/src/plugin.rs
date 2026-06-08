@@ -37,6 +37,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             crate::commands::show_popup,
             crate::commands::detect_frontmost_app,
             crate::commands::clipboard_status,
+            crate::commands::clipboard_permission_status,
+            crate::commands::open_accessibility_settings,
         ])
         .setup(|app, _api| {
             let state: tauri::State<'_, snk_library::LibraryState> = app.state();

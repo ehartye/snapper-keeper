@@ -79,6 +79,16 @@ fn paste_failed_variant_wire_shape() {
 }
 
 #[test]
+fn accessibility_required_variant_wire_shape() {
+    // Unit variant: adjacent-tag emits just the discriminator, no "data" key.
+    // The popup matches on `kind === "accessibility-required"`, so this shape
+    // is part of the IPC contract.
+    let e = ClipboardError::AccessibilityRequired;
+    let actual = serde_json::to_value(&e).expect("serialize");
+    assert_eq!(actual, json!({ "kind": "accessibility-required" }));
+}
+
+#[test]
 fn own_not_found_variant_wire_shape() {
     // Post-#104: ClipboardError::NotFound has its own discriminator
     // ("not-found") at the TOP level, while a library NotFound nests

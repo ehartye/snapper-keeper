@@ -3,6 +3,8 @@ const COMMANDS: &[&str] = &[
     "show_popup",
     "detect_frontmost_app",
     "clipboard_status",
+    "clipboard_permission_status",
+    "open_accessibility_settings",
 ];
 
 fn main() {

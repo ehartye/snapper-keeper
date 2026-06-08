@@ -18,6 +18,9 @@ pub enum ClipboardError {
     #[error("paste failed: {reason}")]
     PasteFailed { reason: String },
 
+    #[error("accessibility permission required for auto-paste")]
+    AccessibilityRequired,
+
     #[error("not found: {what}")]
     NotFound { what: String },
 

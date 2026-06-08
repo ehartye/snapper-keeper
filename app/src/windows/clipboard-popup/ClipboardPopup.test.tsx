@@ -110,6 +110,31 @@ describe('<ClipboardPopup />', () => {
     });
   });
 
+  it('surfaces an accessibility banner when paste reports accessibility-required', async () => {
+    mockedInvoke.mockReset().mockImplementation((cmd: string) => {
+      if (cmd === 'plugin:snk-clipboard|paste_item') {
+        return Promise.reject({ kind: 'accessibility-required' });
+      }
+      return Promise.resolve([]);
+    });
+    renderWithQuery(<ClipboardPopup />);
+    await act(async () => {
+      fireEvent.keyDown(window, { key: 'Enter' });
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/accessibility needed to paste/i)).toBeInTheDocument();
+    });
+    // The "open settings" affordance invokes the deep-link command.
+    await act(async () => {
+      fireEvent.click(screen.getByText(/open settings/i));
+    });
+    await waitFor(() => {
+      expect(mockedInvoke).toHaveBeenCalledWith(
+        'plugin:snk-clipboard|open_accessibility_settings',
+      );
+    });
+  });
+
   it('Escape dismisses the popup and resets store state', async () => {
     renderWithQuery(<ClipboardPopup />);
     await act(async () => {

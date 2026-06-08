@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { useAnnotateStore, COLORS, STROKE_WIDTHS, type StrokePreset } from './store';
+import { formatShortcutForPlatform } from '../../lib/shortcuts';
 
 import type { AnnotationTool } from '@snk/annotate';
 
@@ -120,7 +121,7 @@ export function AnnotateToolbar() {
           onClick={undo}
           disabled={undoStack.length === 0}
           className="w-10 h-8 rounded-lg text-sm text-fg-muted hover:bg-surface-2 hover:text-fg disabled:opacity-30 disabled:cursor-not-allowed"
-          title="Undo (Ctrl+Z)"
+          title={`Undo (${formatShortcutForPlatform('Ctrl+Z')})`}
         >
           ↶
         </button>
@@ -128,7 +129,7 @@ export function AnnotateToolbar() {
           onClick={redo}
           disabled={redoStack.length === 0}
           className="w-10 h-8 rounded-lg text-sm text-fg-muted hover:bg-surface-2 hover:text-fg disabled:opacity-30 disabled:cursor-not-allowed"
-          title="Redo (Ctrl+Y)"
+          title={`Redo (${formatShortcutForPlatform('Ctrl+Y')})`}
         >
           ↷
         </button>
