@@ -28,7 +28,7 @@ impl OcrBackend for VisionBackend {
     }
 
     fn engine_version(&self) -> String {
-        let v = unsafe {
+        let v = {
             let pi = objc2_foundation::NSProcessInfo::processInfo();
             let os = pi.operatingSystemVersion();
             format!(

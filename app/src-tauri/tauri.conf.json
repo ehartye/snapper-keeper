@@ -25,7 +25,8 @@
       {
         "label": "capture-overlay",
         "title": "",
-        "fullscreen": true,
+        "width": 800,
+        "height": 600,
         "alwaysOnTop": true,
         "decorations": false,
         "resizable": false,
@@ -117,7 +118,8 @@
     "createUpdaterArtifacts": true,
     "icon": ["icons/icon.ico", "icons/icon.png"],
     "macOS": {
-      "minimumSystemVersion": "14.0"
+      "minimumSystemVersion": "14.0",
+      "entitlements": "./entitlements.plist"
     }
   },
   "plugins": {

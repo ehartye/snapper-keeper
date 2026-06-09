@@ -45,4 +45,12 @@ export function grabScreenPreview(monitorId?: number): Promise<ScreenPreview> {
   return invoke<ScreenPreview>('plugin:snk-capture|grab_screen_preview', { monitorId });
 }
 
+export function capturePermissionStatus(): Promise<boolean> {
+  return invoke<boolean>('plugin:snk-capture|capture_permission_status');
+}
+
+export function openScreenRecordingSettings(): Promise<void> {
+  return invoke<void>('plugin:snk-capture|open_screen_recording_settings');
+}
+
 export type { WindowInfo } from './types';
