@@ -51,6 +51,7 @@ echo "→ Building bundled macOS app (debug, unsigned)..."
   cd "$ROOT/app"
   pnpm exec tauri build \
     --debug \
+    --target "$TARGET" \
     --bundles app \
     --no-sign \
     --config '{"bundle":{"createUpdaterArtifacts":false}}'
