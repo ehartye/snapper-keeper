@@ -1,45 +1,81 @@
 #!/usr/bin/env bash
-# dev-macos.sh — macOS dev launcher for snapper-keeper.
+# dev-macos.sh — Build a bundled macOS .app, ad-hoc sign it, and launch via
+#                Launch Services.
 #
 # WHY THIS EXISTS
 # ---------------
 # macOS TCC tracks Screen Recording permission by code-signing identity.
-# An unsigned binary has no stable identity, so CGPreflightScreenCaptureAccess()
-# always returns false and permission grants don't stick.
+# Raw binaries (cargo build output) and tauri dev (unpackaged) have no stable
+# bundle identity, so:
+#   - CGPreflightScreenCaptureAccess() always returns false
+#   - Permission grants don't stick across runs
+#   - The app may not appear reliably in System Settings → Privacy & Security
 #
-# This script:
-#   1. Builds the Rust binary (cargo build)
-#   2. Ad-hoc signs it with a stable --identifier so TCC uses "com.snapper-keeper.app"
-#      as the key instead of the binary hash — the grant survives cargo rebuilds
-#   3. Launches tauri dev (frontend-only hot-reload keeps the signed binary intact)
+# Building a proper .app bundle and ad-hoc signing it with the app's bundle ID
+# as the signing identifier gives TCC a stable key.  Launch Services registers
+# the bundle, making the permission grant durable.
 #
-# NOTE: tauri dev runs with --no-watch (Rust file watcher disabled).
-# Frontend (Vite) still hot-reloads normally. For Rust changes, Ctrl+C
-# and re-run this script.
+# For UI iteration (hot-reload), use:
+#   pnpm --filter @snk/app tauri dev
+#
+# For capture validation (bundled runtime, stable TCC identity), use:
+#   pnpm dev:mac-capture   (which calls this script)
 #
 # FIRST-TIME SETUP
 # ----------------
 # Run this script, then:
-#   System Settings → Privacy & Security → Screen Recording → enable snapper-keeper-app
+#   System Settings → Privacy & Security → Screen Recording → enable Snapper Keeper
 
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
-BINARY="$ROOT/target/debug/snapper-keeper-app"
 ENTITLEMENTS="$ROOT/app/src-tauri/entitlements.plist"
 IDENTIFIER="com.snapper-keeper.app"
+PRODUCT_NAME="Snapper Keeper"
 
-echo "→ Building Rust binary (--no-default-features, matching tauri dev)..."
-cargo build --manifest-path "$ROOT/app/src-tauri/Cargo.toml" --no-default-features
+ARCH_RAW="$(uname -m)"
+case "$ARCH_RAW" in
+  arm64)  TARGET="aarch64-apple-darwin" ;;
+  x86_64) TARGET="x86_64-apple-darwin" ;;
+  *)
+    echo "dev-macos: unsupported architecture: $ARCH_RAW" >&2
+    exit 1
+    ;;
+esac
 
-echo "→ Signing with identifier '$IDENTIFIER'..."
+BUNDLE_PATH="$ROOT/target/$TARGET/debug/bundle/macos/${PRODUCT_NAME}.app"
+EXECUTABLE_PATH="$BUNDLE_PATH/Contents/MacOS/snapper-keeper-app"
+
+echo "→ Building bundled macOS app (debug, unsigned)..."
+(
+  cd "$ROOT/app"
+  pnpm exec tauri build \
+    --debug \
+    --bundles app \
+    --no-sign \
+    --config '{"bundle":{"createUpdaterArtifacts":false}}'
+)
+
+echo "→ Ad-hoc signing app bundle with identifier '$IDENTIFIER'..."
 codesign \
   --force \
+  --deep \
   --sign - \
   --identifier "$IDENTIFIER" \
   --entitlements "$ENTITLEMENTS" \
-  "$BINARY"
+  "$BUNDLE_PATH"
 
-echo "→ Launching tauri dev (Rust watch disabled — re-run this script after Rust changes)..."
-cd "$ROOT"
-exec pnpm --filter @snk/app tauri dev --no-watch
+echo ""
+echo "==================================================================="
+echo "  Bundle info"
+echo "==================================================================="
+printf '  Bundle path:  %s\n' "$BUNDLE_PATH"
+printf '  Executable:   %s\n' "$EXECUTABLE_PATH"
+printf '  Bundle ID:    %s\n' "$IDENTIFIER"
+echo ""
+echo "  Signature:"
+codesign -dv "$BUNDLE_PATH" 2>&1 | sed 's/^/    /'
+
+echo ""
+echo "→ Launching via Launch Services..."
+open -n "$BUNDLE_PATH"

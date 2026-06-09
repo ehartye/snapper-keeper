@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod logging;
+mod runtime_identity;
 
 use std::{any::Any, panic::AssertUnwindSafe};
 
@@ -135,6 +136,11 @@ where
     }
 }
 
+#[tauri::command]
+fn capture_runtime_status() -> runtime_identity::CaptureRuntimeStatus {
+    runtime_identity::classify_capture_runtime()
+}
+
 fn tray_icon_for(family: &str) -> Image<'static> {
     let bytes = match family {
         "memphis" => TRAY_MEMPHIS_PNG,
@@ -213,7 +219,7 @@ fn main() {
     let builder = builder;
 
     builder
-        .invoke_handler(tauri::generate_handler![set_tray_theme])
+        .invoke_handler(tauri::generate_handler![set_tray_theme, capture_runtime_status])
         .setup(|app| {
             // Initialize file-based tracing (general + security logs +
             // panic-dump hook) per crates/snk-library/src/logging.rs.

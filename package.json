@@ -9,6 +9,7 @@
     "test": "pnpm -r run test",
     "build": "pnpm -r run build",
     "build:local": "bash scripts/build-local.sh",
+    "dev:mac-capture": "bash scripts/dev-macos.sh",
     "tauri": "pnpm --filter @snk/app tauri",
     "test:e2e:smoke": "node e2e/process-smoke.mjs"
   },
