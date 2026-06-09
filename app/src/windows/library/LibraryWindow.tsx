@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { LogicalPosition, PhysicalPosition, PhysicalSize } from '@tauri-apps/api/dpi';
@@ -148,17 +149,34 @@ export function LibraryWindow() {
   }, []);
 
   const showScreenRecordingAlert = useCallback(() => {
-    modal.confirm({
-      title: 'Screen Recording Permission Required',
-      body: 'Snapper Keeper needs Screen Recording permission to capture your screen. Open System Settings → Privacy & Security → Screen Recording and enable it for this app, then try again.',
-      confirmLabel: 'Open Settings',
-      cancelLabel: 'Dismiss',
-      onConfirm: () => {
-        openScreenRecordingSettings().catch((e) =>
-          console.error('open screen recording settings failed', e),
-        );
-      },
-    });
+    void (async () => {
+      let isRawDev = false;
+      try {
+        const status = await invoke<string>('capture_runtime_status');
+        isRawDev = status === 'raw-dev';
+      } catch {
+        // If runtime classification fails, fall through to the standard alert.
+      }
+
+      if (isRawDev) {
+        modal.alert({
+          title: 'Screen Recording Unavailable in Dev Mode',
+          body: 'You are running via tauri dev. Stop this session and use pnpm dev:mac-capture instead — it builds and signs a proper .app bundle so macOS grants Screen Recording permission.',
+        });
+      } else {
+        modal.confirm({
+          title: 'Screen Recording Permission Required',
+          body: 'Snapper Keeper needs Screen Recording permission to capture your screen. Open System Settings → Privacy & Security → Screen Recording and enable it for this app, then try again.',
+          confirmLabel: 'Open Settings',
+          cancelLabel: 'Dismiss',
+          onConfirm: () => {
+            openScreenRecordingSettings().catch((e) =>
+              console.error('open screen recording settings failed', e),
+            );
+          },
+        });
+      }
+    })();
   }, [modal]);
 
   const handleFullScreen = useCallback(async () => {
