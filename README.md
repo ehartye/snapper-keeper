@@ -67,6 +67,23 @@ Vite starts on `localhost:5173`, the Rust crates compile (~3-5 min cold, seconds
 
 > **Windows note:** Must run from an **interactive desktop session** (not SSH). Windows OpenSSH sessions are non-interactive window stations, causing WebView2 and `RegisterHotKey` failures.
 
+#### macOS capture validation
+
+`tauri dev` runs the app as an unpackaged binary. macOS TCC grants Screen Recording permission per bundle identity, so the unpackaged binary cannot hold a stable grant — captures may return black frames.
+
+For macOS capture validation use the bundled-app workflow:
+
+```bash
+pnpm dev:mac-capture
+```
+
+This builds a debug `.app` bundle, ad-hoc signs it with the stable bundle ID `com.snapper-keeper.app`, prints bundle path / executable path / bundle ID / signature info, and launches it via Launch Services. First run: grant Screen Recording in **System Settings → Privacy & Security → Screen Recording**.
+
+| Workflow | When to use |
+|---|---|
+| `pnpm --filter @snk/app tauri dev` | Normal UI iteration — Vite hot-reload, fast Rust incremental builds |
+| `pnpm dev:mac-capture` | Authoritative macOS capture validation — stable TCC identity, bundled runtime |
+
 ### Build a local installer (unsigned)
 
 Produce an unsigned installer locally for smoke-testing what end users will receive:

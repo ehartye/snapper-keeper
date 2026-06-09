@@ -53,8 +53,8 @@ where
 
 /// Return `Err(ScreenRecordingPermissionDenied)` if the OS has not granted
 /// Screen Recording permission, and trigger the system prompt so the app
-/// is registered with TCC. Requires the binary to be signed with a stable
-/// identifier (see scripts/dev-sign-macos.sh). No-op on non-macOS.
+/// is registered with TCC. Requires the app to run as a signed .app bundle
+/// (`pnpm dev:mac-capture` for development). No-op on non-macOS.
 fn require_screen_recording() -> Result<()> {
     if !crate::permissions::screen_recording_granted() {
         crate::permissions::request_screen_recording_access();

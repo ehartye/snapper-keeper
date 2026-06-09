@@ -7,19 +7,21 @@
 //! no prompt — so captures appear blank and the region-overlay backdrop is
 //! a solid black rectangle.
 //!
-//! ## Why CGPreflightScreenCaptureAccess requires a signed binary
+//! ## Why CGPreflightScreenCaptureAccess requires a signed bundle
 //!
 //! TCC identifies apps by their code-signing identity. An unsigned binary
 //! has no stable identity, so TCC cannot track a grant across launches and
 //! CGPreflightScreenCaptureAccess() always returns false regardless of
 //! what the user has toggled in System Settings.
 //!
-//! The fix is to sign the debug binary with a stable --identifier:
+//! For capture validation, run the app as a properly signed .app bundle:
 //!
 //! ```text
-//! ./scripts/dev-sign-macos.sh
+//! pnpm dev:mac-capture
 //! ```
 //!
+//! This builds a debug .app bundle, ad-hoc signs it with the stable bundle ID
+//! `com.snapper-keeper.app`, and launches it via Launch Services.
 //! Production builds are signed by the release pipeline and work correctly
 //! without any extra steps.
 
@@ -91,8 +93,8 @@ mod tests {
     #[test]
     fn screen_recording_granted_returns_bool() {
         // Just verify it doesn't panic. On CI (Linux) this always returns
-        // true; on an unsigned macOS dev binary it returns false until the
-        // binary is signed via scripts/dev-sign-macos.sh.
+        // true; on macOS run via `pnpm dev:mac-capture` (bundled app) for
+        // a stable TCC identity that makes this return the real grant state.
         let _ = screen_recording_granted();
     }
 
