@@ -36,7 +36,8 @@ pub(crate) fn current_source_app() -> Option<SourceApp> {
     let app: Retained<NSRunningApplication> = workspace.frontmostApplication()?;
 
     let bundle_id: String = app.bundleIdentifier()?.to_string();
-    let display_name: String = app.localizedName()
+    let display_name: String = app
+        .localizedName()
         .map(|s| s.to_string())
         .unwrap_or_else(|| bundle_id.clone());
 

@@ -138,5 +138,8 @@ fn library_wrapping_io_wire_shape() {
 fn screen_recording_permission_denied_variant_wire_shape() {
     let e = CaptureError::ScreenRecordingPermissionDenied;
     let actual = serde_json::to_value(&e).expect("serialize");
-    assert_eq!(actual, json!({"kind": "screen-recording-permission-denied"}));
+    assert_eq!(
+        actual,
+        json!({"kind": "screen-recording-permission-denied"})
+    );
 }

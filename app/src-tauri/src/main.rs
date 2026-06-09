@@ -219,7 +219,10 @@ fn main() {
     let builder = builder;
 
     builder
-        .invoke_handler(tauri::generate_handler![set_tray_theme, capture_runtime_status])
+        .invoke_handler(tauri::generate_handler![
+            set_tray_theme,
+            capture_runtime_status
+        ])
         .setup(|app| {
             // Initialize file-based tracing (general + security logs +
             // panic-dump hook) per crates/snk-library/src/logging.rs.

@@ -64,9 +64,7 @@ pub fn open_screen_recording_settings() -> Result<()> {
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("/usr/bin/open")
-            .arg(
-                "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
-            )
+            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
             .spawn()
             .map_err(|e| crate::CaptureError::Os {
                 message: format!("open screen recording settings: {e}"),
@@ -104,5 +102,3 @@ mod tests {
         assert!(screen_recording_granted());
     }
 }
-
-

@@ -26,11 +26,7 @@ pub enum CaptureRuntimeStatus {
 /// Separated from [`classify_capture_runtime`] so tests can inject specific
 /// path shapes without depending on the real process executable path.
 pub fn classify_from_path(exe_path: &std::path::Path) -> CaptureRuntimeStatus {
-    if cfg!(target_os = "macos")
-        && exe_path
-            .to_string_lossy()
-            .contains(".app/Contents/MacOS")
-    {
+    if cfg!(target_os = "macos") && exe_path.to_string_lossy().contains(".app/Contents/MacOS") {
         CaptureRuntimeStatus::BundledApp
     } else {
         CaptureRuntimeStatus::RawDev
@@ -51,18 +47,14 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn bundled_app_path_is_classified_correctly() {
-        let path = Path::new(
-            "/Applications/Snapper Keeper.app/Contents/MacOS/snapper-keeper-app",
-        );
+        let path = Path::new("/Applications/Snapper Keeper.app/Contents/MacOS/snapper-keeper-app");
         assert_eq!(classify_from_path(path), CaptureRuntimeStatus::BundledApp);
     }
 
     #[cfg(target_os = "macos")]
     #[test]
     fn raw_dev_path_is_classified_correctly() {
-        let path = Path::new(
-            "/Users/user/repos/snapper-keeper/target/debug/snapper-keeper-app",
-        );
+        let path = Path::new("/Users/user/repos/snapper-keeper/target/debug/snapper-keeper-app");
         assert_eq!(classify_from_path(path), CaptureRuntimeStatus::RawDev);
     }
 }

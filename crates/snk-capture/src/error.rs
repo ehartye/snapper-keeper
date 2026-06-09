@@ -75,11 +75,9 @@ mod tests {
         let lib_err = snk_library::LibraryError::NotFound { what: "x".into() };
         let wrapped = CaptureError::Library(lib_err);
         assert!(wrapped.to_string().contains("library"));
-        assert!(
-            CaptureError::ScreenRecordingPermissionDenied
-                .to_string()
-                .contains("screen recording")
-        );
+        assert!(CaptureError::ScreenRecordingPermissionDenied
+            .to_string()
+            .contains("screen recording"));
     }
 
     #[test]
