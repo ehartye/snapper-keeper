@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::Result;
 
-
 pub struct GrabResult {
     pub png_bytes: Vec<u8>,
     pub width: u32,
