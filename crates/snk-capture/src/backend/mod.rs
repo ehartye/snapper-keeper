@@ -1,5 +1,6 @@
 #[cfg(target_os = "macos")]
 mod macos_sck;
+#[cfg(not(target_os = "macos"))]
 mod xcap_adapter;
 
 use crate::{
