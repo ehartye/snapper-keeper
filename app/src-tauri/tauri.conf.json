@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Snapper Keeper",
-  "version": "0.2.1",
+  "version": "0.2.2-rc.1",
   "identifier": "com.snapper-keeper.app",
   "build": {
     "beforeDevCommand": "pnpm --filter @snk/app dev",
