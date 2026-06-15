@@ -10,6 +10,24 @@ import { LibraryWindow } from './LibraryWindow';
 import { renderWithQuery } from '../../test/renderWithQuery';
 
 const mockedInvoke = vi.mocked(invoke);
+const navigatorWithUAData = navigator as Navigator & {
+  userAgentData?: { platform?: string };
+};
+
+function mockNavigatorPlatform(platform: string, userAgent: string) {
+  Object.defineProperty(window.navigator, 'platform', {
+    configurable: true,
+    value: platform,
+  });
+  Object.defineProperty(window.navigator, 'userAgent', {
+    configurable: true,
+    value: userAgent,
+  });
+  Object.defineProperty(navigatorWithUAData, 'userAgentData', {
+    configurable: true,
+    value: { platform },
+  });
+}
 
 describe('<LibraryWindow />', () => {
   const renderLibraryWindow = () =>
@@ -21,6 +39,7 @@ describe('<LibraryWindow />', () => {
 
   beforeEach(() => {
     mockedInvoke.mockReset().mockResolvedValue([]);
+    mockNavigatorPlatform('Win32', 'Windows');
     const existing = document.getElementById('modal-root');
     if (!existing) {
       const root = document.createElement('div');
@@ -158,6 +177,95 @@ describe('<LibraryWindow />', () => {
         token: 'tok-xyz',
         monitorId: 1,
         scaleFactor: 1.5,
+      });
+    });
+  });
+
+  it('region hotkey uses the backend display frame on macOS', async () => {
+    mockNavigatorPlatform('MacIntel', 'Mac OS X');
+
+    let regionHandler: ((e: { payload: unknown }) => void) | null = null;
+    vi.mocked(listen).mockImplementation((event, handler) => {
+      if (event === 'hotkey:capture-region') {
+        regionHandler = handler as typeof regionHandler;
+      }
+      return Promise.resolve(() => {});
+    });
+
+    const overlayEmit = vi.fn().mockResolvedValue(undefined);
+    const overlaySetPosition = vi.fn().mockResolvedValue(undefined);
+    const overlaySetSize = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(WebviewWindow.getByLabel).mockImplementation(async (label: string) => {
+      if (label === 'capture-overlay') {
+        return {
+          emit: overlayEmit,
+          setPosition: overlaySetPosition,
+          setSize: overlaySetSize,
+          show: vi.fn().mockResolvedValue(undefined),
+          setFocus: vi.fn().mockResolvedValue(undefined),
+        } as unknown as WebviewWindow;
+      }
+      return null;
+    });
+    vi.mocked(availableMonitors).mockResolvedValue([
+      {
+        name: 'Third',
+        position: { x: 3000, y: 0 },
+        size: { width: 1920, height: 1080 },
+        scaleFactor: 2,
+      },
+      {
+        name: 'First',
+        position: { x: 0, y: 0 },
+        size: { width: 1920, height: 1080 },
+        scaleFactor: 2,
+      },
+      {
+        name: 'Second',
+        position: { x: 1500, y: 0 },
+        size: { width: 1512, height: 982 },
+        scaleFactor: 2,
+      },
+    ]);
+    vi.mocked(cursorPosition).mockResolvedValue({ x: 100, y: 100 });
+
+    mockedInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'plugin:snk-capture|grab_screen_preview') {
+        return Promise.resolve({
+          path: '/tmp/p.png',
+          width: 1,
+          height: 1,
+          token: 'tok-xyz',
+          displayIndex: 1,
+          displayFrame: {
+            x: 1400,
+            y: 0,
+            width: 1512,
+            height: 982,
+            scaleFactor: 2,
+          },
+        });
+      }
+      return Promise.resolve([]);
+    });
+
+    renderLibraryWindow();
+    await waitFor(() => expect(regionHandler).not.toBeNull());
+
+    await act(async () => regionHandler!({ payload: undefined }));
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('plugin:snk-capture|grab_screen_preview');
+      expect(overlaySetPosition).toHaveBeenCalledWith(
+        expect.objectContaining({ x: 1500, y: 0 }),
+      );
+      expect(overlaySetSize).toHaveBeenCalledWith(
+        expect.objectContaining({ width: 1512, height: 982 }),
+      );
+      expect(overlayEmit).toHaveBeenCalledWith('overlay:preview', {
+        path: '/tmp/p.png',
+        token: 'tok-xyz',
+        monitorId: 1,
+        scaleFactor: 2,
       });
     });
   });

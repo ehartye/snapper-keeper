@@ -5,11 +5,23 @@ use serde::{Deserialize, Serialize};
 
 use crate::Result;
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DisplayFrame {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    pub scale_factor: f64,
+}
+
 pub struct GrabResult {
     pub png_bytes: Vec<u8>,
     pub width: u32,
     pub height: u32,
     pub monitor_name: String,
+    pub display_frame: Option<DisplayFrame>,
+    pub display_index: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

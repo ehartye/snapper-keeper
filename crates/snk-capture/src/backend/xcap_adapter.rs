@@ -55,6 +55,8 @@ impl ScreenshotBackend for XcapBackend {
             width: w,
             height: h,
             monitor_name: name,
+            display_frame: None,
+            display_index: None,
         })
     }
 
@@ -69,6 +71,8 @@ impl ScreenshotBackend for XcapBackend {
             width: w,
             height: h,
             monitor_name: name,
+            display_frame: None,
+            display_index: None,
         })
     }
 
@@ -91,6 +95,8 @@ impl ScreenshotBackend for XcapBackend {
             width: w,
             height: h,
             monitor_name,
+            display_frame: None,
+            display_index: None,
         })
     }
 
@@ -110,6 +116,8 @@ impl ScreenshotBackend for XcapBackend {
             width: cw,
             height: ch,
             monitor_name,
+            display_frame: None,
+            display_index: None,
         })
     }
 

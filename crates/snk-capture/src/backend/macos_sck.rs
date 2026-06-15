@@ -1,19 +1,19 @@
-use std::path::PathBuf;
 use std::sync::mpsc;
 
 use block2::RcBlock;
-use image::load_from_memory;
+use image::{codecs::png::PngEncoder, ColorType, ImageEncoder};
 use objc2::rc::Retained;
 use objc2::AnyThread;
 use objc2_core_foundation::{CGPoint, CGRect, CGSize};
-use objc2_foundation::{NSArray, NSError, NSURL};
+use objc2_core_graphics::{CGDataProvider, CGEvent, CGImage};
+use objc2_foundation::{NSArray, NSError};
 use objc2_screen_capture_kit::{
     SCContentFilter, SCDisplay, SCRunningApplication, SCScreenshotConfiguration,
     SCScreenshotManager, SCScreenshotOutput, SCShareableContent, SCWindow,
 };
 
 use super::ScreenshotBackend;
-use crate::grab::{GrabResult, WindowInfo};
+use crate::grab::{DisplayFrame, GrabResult, WindowInfo};
 use crate::{CaptureError, Result};
 
 pub struct ScreenCaptureKitBackend;
@@ -43,18 +43,6 @@ fn current_bundle_id() -> &'static str {
     "com.snapper-keeper.app"
 }
 
-fn temp_capture_path(label: &str) -> PathBuf {
-    std::env::temp_dir().join(format!("snk-sck-{label}-{}.png", uuid::Uuid::now_v7()))
-}
-
-fn read_capture_png(path: &std::path::Path) -> Result<(Vec<u8>, u32, u32)> {
-    let png_bytes = std::fs::read(path).map_err(|e| CaptureError::Os {
-        message: format!("read ScreenCaptureKit screenshot {}: {e}", path.display()),
-    })?;
-    let image = load_from_memory(&png_bytes)?;
-    Ok((png_bytes, image.width(), image.height()))
-}
-
 fn os_error(message: impl Into<String>) -> CaptureError {
     CaptureError::Os {
         message: message.into(),
@@ -65,6 +53,45 @@ fn backend_unavailable(message: impl Into<String>) -> CaptureError {
     CaptureError::BackendUnavailable {
         detail: message.into(),
     }
+}
+
+fn bgra_rows_to_png(
+    data: &[u8],
+    width: usize,
+    height: usize,
+    bytes_per_row: usize,
+) -> Result<(Vec<u8>, u32, u32)> {
+    let expected_row_len = width * 4;
+    if bytes_per_row < expected_row_len {
+        return Err(os_error(format!(
+            "invalid ScreenCaptureKit row stride: bytes_per_row {bytes_per_row} < {expected_row_len}"
+        )));
+    }
+
+    let row_count = data.len() / bytes_per_row;
+    if row_count < height {
+        return Err(os_error(format!(
+            "insufficient ScreenCaptureKit rows: expected at least {height}, got {row_count}"
+        )));
+    }
+
+    let mut rgba = Vec::with_capacity(width * height * 4);
+    for row in data.chunks_exact(bytes_per_row).take(height) {
+        rgba.extend_from_slice(&row[..expected_row_len]);
+    }
+    for bgra in rgba.chunks_exact_mut(4) {
+        bgra.swap(0, 2);
+    }
+
+    let mut png = Vec::new();
+    PngEncoder::new(&mut png).write_image(
+        &rgba,
+        width as u32,
+        height as u32,
+        ColorType::Rgba8.into(),
+    )?;
+
+    Ok((png, width as u32, height as u32))
 }
 
 fn retain_or_error<T: objc2::Message>(ptr: *mut T, kind: &str) -> Result<Retained<T>> {
@@ -83,6 +110,37 @@ fn resolve_requested_display_position(
     displays
         .iter()
         .position(|display| unsafe { display.displayID() } == requested)
+}
+
+fn sorted_displays(content: &SCShareableContent) -> Vec<Retained<SCDisplay>> {
+    let mut displays = unsafe { content.displays() }.to_vec();
+    displays.sort_by(|a, b| {
+        let a_frame = unsafe { a.frame() };
+        let b_frame = unsafe { b.frame() };
+        a_frame
+            .origin
+            .x
+            .total_cmp(&b_frame.origin.x)
+            .then_with(|| a_frame.origin.y.total_cmp(&b_frame.origin.y))
+    });
+    displays
+}
+
+fn current_cursor_location() -> Result<CGPoint> {
+    let event = CGEvent::new(None)
+        .ok_or_else(|| backend_unavailable("failed to create CGEvent for cursor lookup"))?;
+    Ok(CGEvent::location(Some(event.as_ref())))
+}
+
+fn display_for_cursor(displays: &[Retained<SCDisplay>]) -> Option<&Retained<SCDisplay>> {
+    let cursor = current_cursor_location().ok()?;
+    displays.iter().find(|display| {
+        let frame = unsafe { display.frame() };
+        cursor.x >= frame.origin.x
+            && cursor.x < frame.origin.x + frame.size.width
+            && cursor.y >= frame.origin.y
+            && cursor.y < frame.origin.y + frame.size.height
+    })
 }
 
 fn shareable_content_sync() -> Result<Retained<SCShareableContent>> {
@@ -114,10 +172,25 @@ fn shareable_content_sync() -> Result<Retained<SCShareableContent>> {
         .map_err(backend_unavailable)
 }
 
+fn encode_sdr_image(output: &SCScreenshotOutput) -> Result<(Vec<u8>, u32, u32)> {
+    let image = unsafe { output.sdrImage() }
+        .ok_or_else(|| backend_unavailable("ScreenCaptureKit returned no SDR image"))?;
+    let width = CGImage::width(Some(image.as_ref()));
+    let height = CGImage::height(Some(image.as_ref()));
+    let data_provider = CGImage::data_provider(Some(image.as_ref()))
+        .ok_or_else(|| backend_unavailable("ScreenCaptureKit screenshot had no data provider"))?;
+    let data = CGDataProvider::data(Some(data_provider.as_ref()))
+        .ok_or_else(|| backend_unavailable("ScreenCaptureKit screenshot data copy failed"))?;
+    let data =
+        unsafe { std::slice::from_raw_parts(data.byte_ptr(), data.length() as usize) }.to_vec();
+    let bytes_per_row = CGImage::bytes_per_row(Some(image.as_ref()));
+    bgra_rows_to_png(&data, width, height, bytes_per_row)
+}
+
 fn screenshot_output_sync(
     filter: &SCContentFilter,
     config: &SCScreenshotConfiguration,
-) -> Result<()> {
+) -> Result<(Vec<u8>, u32, u32)> {
     let (tx, rx) = mpsc::sync_channel(1);
     let block = RcBlock::new(
         move |output: *mut SCScreenshotOutput, error: *mut NSError| {
@@ -129,7 +202,9 @@ fn screenshot_output_sync(
             } else if output.is_null() {
                 Err("ScreenCaptureKit returned a null screenshot output".to_string())
             } else {
-                Ok(())
+                retain_or_error(output, "screenshot output")
+                    .and_then(|output| encode_sdr_image(output.as_ref()))
+                    .map_err(|err| err.to_string())
             };
             let _ = tx.send(payload);
         },
@@ -181,20 +256,13 @@ fn display_filter(display: &SCDisplay, content: &SCShareableContent) -> Retained
     }
 }
 
-fn config_for_rect(
-    path: &std::path::Path,
-    rect: CGRect,
-    scale: f32,
-) -> Result<Retained<SCScreenshotConfiguration>> {
+fn config_for_rect(rect: CGRect, scale: f32) -> Result<Retained<SCScreenshotConfiguration>> {
     let cfg = unsafe { SCScreenshotConfiguration::new() };
-    let url = NSURL::from_file_path(path)
-        .ok_or_else(|| os_error(format!("build file URL for {}", path.display())))?;
     unsafe {
         cfg.setShowsCursor(false);
         cfg.setSourceRect(rect);
         cfg.setWidth((rect.size.width * scale as f64).round() as isize);
         cfg.setHeight((rect.size.height * scale as f64).round() as isize);
-        cfg.setFileURL(Some(&url));
     }
     Ok(cfg)
 }
@@ -203,25 +271,38 @@ fn display_label(display: &SCDisplay) -> String {
     format!("display-{}", unsafe { display.displayID() })
 }
 
+fn zero_origin_rect(size: CGSize) -> CGRect {
+    CGRect {
+        origin: CGPoint { x: 0.0, y: 0.0 },
+        size,
+    }
+}
+
 fn capture_display_rect(
     display: &SCDisplay,
     content: &SCShareableContent,
     rect: CGRect,
-    label: &str,
+    display_index: usize,
 ) -> Result<GrabResult> {
     let filter = display_filter(display, content);
     let info = unsafe { SCShareableContent::infoForFilter(&filter) };
     let scale = unsafe { info.pointPixelScale() };
-    let path = temp_capture_path(label);
-    let cfg = config_for_rect(&path, rect, scale)?;
-    screenshot_output_sync(&filter, &cfg)?;
-    let (png_bytes, width, height) = read_capture_png(&path)?;
-    let _ = std::fs::remove_file(&path);
+    let cfg = config_for_rect(rect, scale)?;
+    let (png_bytes, width, height) = screenshot_output_sync(&filter, &cfg)?;
+    let frame = unsafe { display.frame() };
     Ok(GrabResult {
         png_bytes,
         width,
         height,
         monitor_name: display_label(display),
+        display_frame: Some(DisplayFrame {
+            x: frame.origin.x,
+            y: frame.origin.y,
+            width: frame.size.width,
+            height: frame.size.height,
+            scale_factor: scale as f64,
+        }),
+        display_index: Some(display_index),
     })
 }
 
@@ -232,19 +313,29 @@ impl ScreenshotBackend for ScreenCaptureKitBackend {
 
     fn grab_monitor(&self, monitor_id: u32) -> Result<GrabResult> {
         let content = shareable_content_sync()?;
-        let displays = unsafe { content.displays() }.to_vec();
+        let displays = sorted_displays(&content);
         if displays.is_empty() {
             return Err(CaptureError::NoMonitors);
         }
-        let pos = resolve_requested_display_position(&displays, monitor_id)
+        let display = if let Some(display) = display_for_cursor(&displays) {
+            display
+        } else {
+            let pos = resolve_requested_display_position(&displays, monitor_id)
+                .ok_or(CaptureError::NoMonitors)?;
+            &displays[pos]
+        };
+        let display_index = displays
+            .iter()
+            .position(
+                |candidate| unsafe { candidate.displayID() } == unsafe { display.displayID() },
+            )
             .ok_or(CaptureError::NoMonitors)?;
-        let display = &displays[pos];
         let info = unsafe {
             let filter = display_filter(display, &content);
             SCShareableContent::infoForFilter(&filter)
         };
-        let rect = unsafe { info.contentRect() };
-        capture_display_rect(display, &content, rect, "display")
+        let rect = zero_origin_rect(unsafe { info.contentRect() }.size);
+        capture_display_rect(display, &content, rect, display_index)
     }
 
     fn grab_window(&self, window_id: u32) -> Result<GrabResult> {
@@ -259,44 +350,50 @@ impl ScreenshotBackend for ScreenCaptureKitBackend {
             SCContentFilter::initWithDesktopIndependentWindow(SCContentFilter::alloc(), &window)
         };
         let info = unsafe { SCShareableContent::infoForFilter(&filter) };
-        let rect = unsafe { info.contentRect() };
+        let rect = zero_origin_rect(unsafe { info.contentRect() }.size);
         let scale = unsafe { info.pointPixelScale() };
-        let path = temp_capture_path("window");
-        let cfg = config_for_rect(&path, rect, scale)?;
-        screenshot_output_sync(&filter, &cfg)?;
-        let (png_bytes, width, height) = read_capture_png(&path)?;
-        let _ = std::fs::remove_file(&path);
+        let cfg = config_for_rect(rect, scale)?;
+        let (png_bytes, width, height) = screenshot_output_sync(&filter, &cfg)?;
         Ok(GrabResult {
             png_bytes,
             width,
             height,
             monitor_name: "window".to_string(),
+            display_frame: None,
+            display_index: None,
         })
     }
 
     fn grab_region(&self, monitor_id: u32, x: u32, y: u32, w: u32, h: u32) -> Result<GrabResult> {
         let content = shareable_content_sync()?;
-        let displays = unsafe { content.displays() }.to_vec();
+        let displays = sorted_displays(&content);
         if displays.is_empty() {
             return Err(CaptureError::NoMonitors);
         }
-        let pos = resolve_requested_display_position(&displays, monitor_id)
+        let display = if let Some(display) = display_for_cursor(&displays) {
+            display
+        } else {
+            let pos = resolve_requested_display_position(&displays, monitor_id)
+                .ok_or(CaptureError::NoMonitors)?;
+            &displays[pos]
+        };
+        let display_index = displays
+            .iter()
+            .position(
+                |candidate| unsafe { candidate.displayID() } == unsafe { display.displayID() },
+            )
             .ok_or(CaptureError::NoMonitors)?;
-        let display = &displays[pos];
-        let filter = display_filter(display, &content);
-        let info = unsafe { SCShareableContent::infoForFilter(&filter) };
-        let display_rect = unsafe { info.contentRect() };
         let region_rect = CGRect {
             origin: CGPoint {
-                x: display_rect.origin.x + x as f64,
-                y: display_rect.origin.y + y as f64,
+                x: x as f64,
+                y: y as f64,
             },
             size: CGSize {
                 width: w as f64,
                 height: h as f64,
             },
         };
-        capture_display_rect(display, &content, region_rect, "region")
+        capture_display_rect(display, &content, region_rect, display_index)
     }
 
     fn list_capturable_windows(&self) -> Result<Vec<WindowInfo>> {
@@ -309,6 +406,9 @@ impl ScreenshotBackend for ScreenCaptureKitBackend {
             let Some(app) = (unsafe { window.owningApplication() }) else {
                 continue;
             };
+            if unsafe { window.windowLayer() } != 0 {
+                continue;
+            }
             let bundle_id = unsafe { app.bundleIdentifier() }.to_string();
             let app_name = unsafe { app.applicationName() }.to_string();
             if should_exclude_own_content(Some(&bundle_id), &app_name, own_bundle_id) {
@@ -324,6 +424,9 @@ impl ScreenshotBackend for ScreenCaptureKitBackend {
             let title = unsafe { window.title() }
                 .map(|s| s.to_string())
                 .unwrap_or_default();
+            if title.trim().is_empty() {
+                continue;
+            }
             out.push(WindowInfo {
                 id: unsafe { window.windowID() },
                 app_name,
@@ -402,5 +505,26 @@ mod tests {
             .collect();
 
         assert_eq!(visible_ids, vec![2]);
+    }
+
+    #[test]
+    fn bgra_rows_to_png_ignores_extra_rows_beyond_reported_height() {
+        let width = 2usize;
+        let height = 2usize;
+        let bytes_per_row = width * 4;
+        let data = vec![
+            0, 0, 255, 255, 0, 255, 0, 255, // row 1: red, green in BGRA
+            255, 0, 0, 255, 255, 255, 255, 255, // row 2: blue, white in BGRA
+            1, 2, 3, 4, 5, 6, 7, 8, // extra unexpected row
+        ];
+
+        let (png, png_w, png_h) = bgra_rows_to_png(&data, width, height, bytes_per_row).unwrap();
+        assert_eq!((png_w, png_h), (2, 2));
+        let img = image::load_from_memory(&png).unwrap().to_rgba8();
+        assert_eq!(img.dimensions(), (2, 2));
+        assert_eq!(img.get_pixel(0, 0).0, [255, 0, 0, 255]);
+        assert_eq!(img.get_pixel(1, 0).0, [0, 255, 0, 255]);
+        assert_eq!(img.get_pixel(0, 1).0, [0, 0, 255, 255]);
+        assert_eq!(img.get_pixel(1, 1).0, [255, 255, 255, 255]);
     }
 }
