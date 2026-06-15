@@ -179,19 +179,29 @@ export function LibraryWindow() {
     })();
   }, [modal]);
 
+  const isCaptureRuntimeProblem = useCallback((e: unknown) => {
+    return (
+      typeof e === 'object' &&
+      e !== null &&
+      'kind' in e &&
+      (e.kind === 'screen-recording-permission-denied' ||
+        e.kind === 'backend-unavailable')
+    );
+  }, []);
+
   const handleFullScreen = useCallback(async () => {
     try {
       const capture = await captureFullScreen();
       await refreshCaptures();
       await showToolbar(capture.id);
     } catch (e: unknown) {
-      if (typeof e === 'object' && e !== null && 'kind' in e && e.kind === 'screen-recording-permission-denied') {
+      if (isCaptureRuntimeProblem(e)) {
         showScreenRecordingAlert();
         return;
       }
       console.error('capture failed', e);
     }
-  }, [refreshCaptures, showToolbar, showScreenRecordingAlert]);
+  }, [isCaptureRuntimeProblem, refreshCaptures, showToolbar, showScreenRecordingAlert]);
 
   const handleRegion = useCallback(async () => {
     try {
@@ -230,13 +240,13 @@ export function LibraryWindow() {
         await overlay.setFocus();
       }
     } catch (e: unknown) {
-      if (typeof e === 'object' && e !== null && 'kind' in e && e.kind === 'screen-recording-permission-denied') {
+      if (isCaptureRuntimeProblem(e)) {
         showScreenRecordingAlert();
         return;
       }
       console.error('region overlay failed', e);
     }
-  }, [showScreenRecordingAlert]);
+  }, [isCaptureRuntimeProblem, showScreenRecordingAlert]);
 
   const handleWindow = useCallback(async () => {
     try {
@@ -252,10 +262,14 @@ export function LibraryWindow() {
       const capture = await captureWindow(target.id);
       await refreshCaptures();
       await showToolbar(capture.id);
-    } catch (e) {
+    } catch (e: unknown) {
+      if (isCaptureRuntimeProblem(e)) {
+        showScreenRecordingAlert();
+        return;
+      }
       console.error('window capture failed', e);
     }
-  }, [refreshCaptures, showToolbar]);
+  }, [isCaptureRuntimeProblem, refreshCaptures, showScreenRecordingAlert, showToolbar]);
 
   const handleTimed = useCallback(async () => {
     setTimeout(async () => {
@@ -263,11 +277,15 @@ export function LibraryWindow() {
         const capture = await captureFullScreen();
         await refreshCaptures();
         await showToolbar(capture.id);
-      } catch (e) {
+      } catch (e: unknown) {
+        if (isCaptureRuntimeProblem(e)) {
+          showScreenRecordingAlert();
+          return;
+        }
         console.error('timed capture failed', e);
       }
     }, 5000);
-  }, [refreshCaptures, showToolbar]);
+  }, [isCaptureRuntimeProblem, refreshCaptures, showScreenRecordingAlert, showToolbar]);
 
   const handleClipboardHistory = useCallback(async () => {
     try {

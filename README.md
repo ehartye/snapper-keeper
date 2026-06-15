@@ -154,7 +154,7 @@ One **Tauri plugin per feature**. Plugins are Rust crates under `crates/`, each 
 crates/
   snk-library/      SQLite + migrations + models + queries + Tauri commands
   snk-hotkeys/      Global hotkey registration + event emission
-  snk-capture/      xcap grabs + orchestrator (region, window, timed, fullscreen)
+  snk-capture/      screenshot backend abstraction + macOS ScreenCaptureKit + Windows/Linux adapters
   snk-annotate/     Annotation save/export Tauri commands
   snk-clipboard/    Clipboard watcher + paste synthesis + caret detection
   snk-ocr/          Native OCR backends (Vision / Windows.Media.Ocr) + async queue

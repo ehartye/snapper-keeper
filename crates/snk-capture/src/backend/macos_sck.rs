@@ -61,6 +61,12 @@ fn os_error(message: impl Into<String>) -> CaptureError {
     }
 }
 
+fn backend_unavailable(message: impl Into<String>) -> CaptureError {
+    CaptureError::BackendUnavailable {
+        detail: message.into(),
+    }
+}
+
 fn retain_or_error<T: objc2::Message>(ptr: *mut T, kind: &str) -> Result<Retained<T>> {
     unsafe { Retained::retain(ptr) }
         .ok_or_else(|| os_error(format!("{kind} callback returned null")))
@@ -104,8 +110,8 @@ fn shareable_content_sync() -> Result<Retained<SCShareableContent>> {
     }
 
     rx.recv()
-        .map_err(|e| os_error(format!("shareable content channel: {e}")))?
-        .map_err(os_error)
+        .map_err(|e| backend_unavailable(format!("shareable content channel: {e}")))?
+        .map_err(backend_unavailable)
 }
 
 fn screenshot_output_sync(
@@ -138,8 +144,8 @@ fn screenshot_output_sync(
     }
 
     rx.recv()
-        .map_err(|e| os_error(format!("screenshot channel: {e}")))?
-        .map_err(os_error)
+        .map_err(|e| backend_unavailable(format!("screenshot channel: {e}")))?
+        .map_err(backend_unavailable)
 }
 
 fn empty_windows_array() -> Retained<NSArray<SCWindow>> {

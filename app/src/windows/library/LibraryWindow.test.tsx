@@ -215,4 +215,31 @@ describe('<LibraryWindow />', () => {
       ).toBeInTheDocument();
     });
   });
+
+  it('shows raw-dev guidance when backend-unavailable is raised on a raw-dev runtime', async () => {
+    mockedInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'plugin:snk-capture|capture_full_screen') {
+        return Promise.reject({
+          kind: 'backend-unavailable',
+          data: { detail: 'ScreenCaptureKit returned no shareable displays' },
+        });
+      }
+      if (cmd === 'capture_runtime_status') {
+        return Promise.resolve('raw-dev');
+      }
+      return Promise.resolve([]);
+    });
+
+    renderLibraryWindow();
+    await act(async () => {
+      fireEvent.click(screen.getByText(/Snap!/i));
+    });
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('capture_runtime_status');
+      expect(
+        screen.getByText(/stop this session and use pnpm dev:mac-capture/i),
+      ).toBeInTheDocument();
+    });
+  });
 });
