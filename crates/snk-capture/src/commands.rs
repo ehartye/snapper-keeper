@@ -28,7 +28,10 @@ const HIDE_SETTLE_DELAY: Duration = Duration::from_millis(150);
 
 #[derive(Default)]
 pub struct PreviewSessionState {
+    #[cfg(target_os = "macos")]
     session: Mutex<Option<PreviewSession>>,
+    #[cfg(not(target_os = "macos"))]
+    session: Mutex<Option<()>>,
 }
 
 #[derive(serde::Deserialize)]
@@ -43,6 +46,7 @@ pub struct CaptureRegionRequest {
     preview_token: Option<String>,
 }
 
+#[cfg(target_os = "macos")]
 #[derive(Clone)]
 struct PreviewSession {
     token: String,
@@ -50,6 +54,7 @@ struct PreviewSession {
     monitor_name: String,
 }
 
+#[cfg(target_os = "macos")]
 fn lock_preview_session_state<'a>(
     preview_state: &'a PreviewSessionState,
 ) -> Result<MutexGuard<'a, Option<PreviewSession>>> {
@@ -58,6 +63,7 @@ fn lock_preview_session_state<'a>(
     })
 }
 
+#[cfg(target_os = "macos")]
 fn store_preview_session(
     preview_state: &PreviewSessionState,
     token: &str,
@@ -72,6 +78,7 @@ fn store_preview_session(
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
 fn preview_session_for_token(
     preview_state: &PreviewSessionState,
     token: &str,
@@ -86,6 +93,7 @@ fn preview_session_for_token(
         })
 }
 
+#[cfg(target_os = "macos")]
 fn clear_preview_session(preview_state: &PreviewSessionState, token: &str) -> Result<()> {
     let mut session = lock_preview_session_state(preview_state)?;
     if session
@@ -97,6 +105,7 @@ fn clear_preview_session(preview_state: &PreviewSessionState, token: &str) -> Re
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
 fn crop_preview_png(
     png_bytes: &[u8],
     monitor_name: &str,
@@ -144,6 +153,7 @@ fn crop_preview_png(
     })
 }
 
+#[cfg(target_os = "macos")]
 fn capture_region_from_preview_session(
     preview_state: &PreviewSessionState,
     preview_token: &str,
@@ -367,7 +377,10 @@ pub fn grab_screen_preview<R: Runtime>(
         message: format!("write preview: {e}"),
     })?;
     let token = mint_preview_token();
+    #[cfg(target_os = "macos")]
     store_preview_session(&preview_state, &token, &result)?;
+    #[cfg(not(target_os = "macos"))]
+    let _ = &preview_state;
     Ok(ScreenPreview {
         path: preview_path.to_string_lossy().into_owned(),
         width: result.width,
