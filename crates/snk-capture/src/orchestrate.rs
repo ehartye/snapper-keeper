@@ -14,6 +14,7 @@ pub fn capture_full_screen(db: &Arc<Db>, library_root: &std::path::Path) -> Resu
         width,
         height,
         monitor_name,
+        ..
     } = grab::grab_primary_monitor()?;
     persist(
         db,
@@ -37,6 +38,7 @@ pub fn capture_window(
         width,
         height,
         monitor_name,
+        ..
     } = grab::grab_window(window_id)?;
     persist(
         db,
@@ -64,6 +66,7 @@ pub fn capture_region(
         width,
         height,
         monitor_name,
+        ..
     } = grab::grab_region(monitor_id, x, y, w, h)?;
     persist(
         db,

@@ -58,6 +58,21 @@ fn os_variant_wire_shape() {
 }
 
 #[test]
+fn backend_unavailable_variant_wire_shape() {
+    let e = CaptureError::BackendUnavailable {
+        detail: "ScreenCaptureKit returned no shareable displays".into(),
+    };
+    let actual = serde_json::to_value(&e).expect("serialize");
+    assert_eq!(
+        actual,
+        json!({
+            "kind": "backend-unavailable",
+            "data": { "detail": "ScreenCaptureKit returned no shareable displays" },
+        })
+    );
+}
+
+#[test]
 fn encode_variant_wire_shape() {
     let e = CaptureError::Encode {
         message: "png encode failed".into(),
