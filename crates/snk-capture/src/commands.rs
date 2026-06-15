@@ -1,15 +1,19 @@
-use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
 
-use image::imageops::crop_imm;
 use snk_library::{plugin::LibraryState, Capture};
 use tauri::{Emitter, Manager, Runtime, State};
 
-use crate::grab::{GrabResult, WindowInfo};
+#[cfg(target_os = "macos")]
+use crate::grab::GrabResult;
+use crate::grab::WindowInfo;
 use crate::window_hider::{TauriWindowManager, WindowVisibilityGuard};
 use crate::{CaptureError, Result};
 #[cfg(target_os = "macos")]
+use image::imageops::crop_imm;
+#[cfg(target_os = "macos")]
 use objc2_core_graphics::CGEvent;
+#[cfg(target_os = "macos")]
+use std::sync::{Mutex, MutexGuard};
 
 const HIDE_OWN_WINDOWS_KEY: &str = "capture.hide_own_windows";
 /// Labels excluded from the visibility guard. The capture overlay
@@ -26,13 +30,15 @@ const EXCLUDE_LABELS: &[&str] = &["capture-overlay"];
 /// stops the ghost reliably.
 const HIDE_SETTLE_DELAY: Duration = Duration::from_millis(150);
 
+#[cfg(target_os = "macos")]
 #[derive(Default)]
 pub struct PreviewSessionState {
-    #[cfg(target_os = "macos")]
     session: Mutex<Option<PreviewSession>>,
-    #[cfg(not(target_os = "macos"))]
-    session: Mutex<Option<()>>,
 }
+
+#[cfg(not(target_os = "macos"))]
+#[derive(Default)]
+pub struct PreviewSessionState;
 
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -460,6 +466,7 @@ mod tests {
         assert!(should_hide_own_windows(&db));
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn crop_preview_png_uses_scale_factor_before_clamping() {
         let mut rgba = Vec::new();
@@ -481,6 +488,7 @@ mod tests {
         assert_eq!(img.get_pixel(1, 1).0, [30, 20, 0, 255]);
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn crop_preview_png_rejects_non_positive_scale_factor() {
         let png = crate::grab::encode_rgba_to_png(&[255, 0, 0, 255], 1, 1).unwrap();
