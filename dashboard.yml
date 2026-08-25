@@ -1,0 +1,5 @@
+title: Snapper Keeper
+blurb: A tool that snaps pictures of your screen and remembers everything you copy.
+tags: [tool, app]
+setup: pnpm install
+run: pnpm --filter @snk/app tauri dev
