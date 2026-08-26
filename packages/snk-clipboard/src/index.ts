@@ -30,12 +30,17 @@ export function toggleClipboardPin(id: string, pinned: boolean): Promise<void> {
   return invoke<void>('plugin:snk-library|toggle_clipboard_pin', { id, pinned });
 }
 
-export function pasteItem(id: string): Promise<void> {
-  return invoke<void>('plugin:snk-clipboard|paste_item', { id });
+export function pasteItem(id: string, targetApp?: SourceApp): Promise<void> {
+  return invoke<void>('plugin:snk-clipboard|paste_item', { id, targetApp });
 }
 
-export function showPopup(): Promise<CaretPosition> {
-  return invoke<CaretPosition>('plugin:snk-clipboard|show_popup');
+export interface PopupContext {
+  caret: CaretPosition;
+  targetApp: SourceApp | null;
+}
+
+export function showPopup(): Promise<PopupContext> {
+  return invoke<PopupContext>('plugin:snk-clipboard|show_popup');
 }
 
 export function detectFrontmostApp(): Promise<SourceApp | null> {

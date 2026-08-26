@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor, act, fireEvent } from '@testing-library/react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 
 import { ClipboardPopup } from './ClipboardPopup';
 import { useClipboardPopupStore } from './store';
@@ -67,6 +68,7 @@ describe('<ClipboardPopup />', () => {
     await waitFor(() => {
       expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-clipboard|paste_item', {
         id: 'cb-2',
+        targetApp: undefined,
       });
     });
   });
@@ -79,6 +81,7 @@ describe('<ClipboardPopup />', () => {
     await waitFor(() => {
       expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-clipboard|paste_item', {
         id: 'cb-3',
+        targetApp: undefined,
       });
     });
   });
@@ -132,6 +135,55 @@ describe('<ClipboardPopup />', () => {
       expect(mockedInvoke).toHaveBeenCalledWith(
         'plugin:snk-clipboard|open_accessibility_settings',
       );
+    });
+  });
+
+  it('passes the preserved target app back into paste_item after popup show', async () => {
+    let showHandler: ((e: { payload: { targetApp: unknown } }) => void) | null = null;
+    vi.mocked(listen).mockImplementation((event, handler) => {
+      if (event === 'clipboard-popup:show') {
+        showHandler = handler as typeof showHandler;
+      }
+      return Promise.resolve(() => {});
+    });
+    mockedInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'plugin:snk-library|list_clipboard_items') {
+        return Promise.resolve(seedItems(5));
+      }
+      if (cmd === 'plugin:snk-clipboard|clipboard_permission_status') {
+        return Promise.resolve({ accessibility_granted: true });
+      }
+      return Promise.resolve([]);
+    });
+
+    renderWithQuery(<ClipboardPopup />);
+    await waitFor(() => expect(showHandler).not.toBeNull());
+
+    await act(async () => {
+      showHandler!({
+        payload: {
+          targetApp: {
+            identifier: 'com.apple.TextEdit',
+            display_name: 'TextEdit',
+            kind: 'macos_bundle_id',
+          },
+        },
+      });
+    });
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: 'Enter' });
+    });
+
+    await waitFor(() => {
+      expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-clipboard|paste_item', {
+        id: 'cb-1',
+        targetApp: {
+          identifier: 'com.apple.TextEdit',
+          display_name: 'TextEdit',
+          kind: 'macos_bundle_id',
+        },
+      });
     });
   });
 

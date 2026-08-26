@@ -13,6 +13,7 @@ import {
   toggleClipboardPin,
   pasteItem,
   showPopup,
+  detectFrontmostApp,
 } from './index';
 
 const mockedInvoke = vi.mocked(invoke);
@@ -66,13 +67,49 @@ describe('@snk/clipboard bindings', () => {
     await pasteItem('x');
     expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-clipboard|paste_item', {
       id: 'x',
+      targetApp: undefined,
     });
   });
 
-  it('showPopup returns a caret position', async () => {
-    mockedInvoke.mockResolvedValue({ x: 100, y: 200 });
-    const pos = await showPopup();
-    expect(pos).toEqual({ x: 100, y: 200 });
+  it('pasteItem forwards an optional target app', async () => {
+    await pasteItem('x', {
+      identifier: 'com.apple.TextEdit',
+      display_name: 'TextEdit',
+      kind: 'macos_bundle_id',
+    });
+    expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-clipboard|paste_item', {
+      id: 'x',
+      targetApp: {
+        identifier: 'com.apple.TextEdit',
+        display_name: 'TextEdit',
+        kind: 'macos_bundle_id',
+      },
+    });
+  });
+
+  it('showPopup returns caret + target app context', async () => {
+    mockedInvoke.mockResolvedValue({
+      caret: { x: 100, y: 200 },
+      targetApp: {
+        identifier: 'com.apple.TextEdit',
+        display_name: 'TextEdit',
+        kind: 'macos_bundle_id',
+      },
+    });
+    const ctx = await showPopup();
+    expect(ctx).toEqual({
+      caret: { x: 100, y: 200 },
+      targetApp: {
+        identifier: 'com.apple.TextEdit',
+        display_name: 'TextEdit',
+        kind: 'macos_bundle_id',
+      },
+    });
     expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-clipboard|show_popup');
+  });
+
+  it('detectFrontmostApp routes through the clipboard plugin', async () => {
+    await detectFrontmostApp();
+    expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-clipboard|detect_frontmost_app');
   });
 });

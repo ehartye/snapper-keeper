@@ -88,6 +88,68 @@ describe('<LibraryWindow />', () => {
     });
   });
 
+  it('clipboard history hotkey captures target app before showing the popup', async () => {
+    let clipboardHandler: ((e: { payload: unknown }) => void) | null = null;
+    vi.mocked(listen).mockImplementation((event, handler) => {
+      if (event === 'hotkey:clipboard-history') {
+        clipboardHandler = handler as typeof clipboardHandler;
+      }
+      return Promise.resolve(() => {});
+    });
+
+    const popupEmit = vi.fn().mockResolvedValue(undefined);
+    const popupSetPosition = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(WebviewWindow.getByLabel).mockImplementation(async (label: string) => {
+      if (label === 'clipboard-popup') {
+        return {
+          emit: popupEmit,
+          setPosition: popupSetPosition,
+          show: vi.fn().mockResolvedValue(undefined),
+          setFocus: vi.fn().mockResolvedValue(undefined),
+        } as unknown as WebviewWindow;
+      }
+      return null;
+    });
+    vi.mocked(availableMonitors).mockResolvedValue([
+      {
+        name: 'Primary',
+        position: { x: 0, y: 0 },
+        size: { width: 1920, height: 1080 },
+        scaleFactor: 2,
+      },
+    ]);
+
+    mockedInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'plugin:snk-clipboard|show_popup') {
+        return Promise.resolve({
+          caret: { x: 500, y: 600 },
+          targetApp: {
+            identifier: 'com.apple.TextEdit',
+            display_name: 'TextEdit',
+            kind: 'macos_bundle_id',
+          },
+        });
+      }
+      return Promise.resolve([]);
+    });
+
+    renderLibraryWindow();
+    await waitFor(() => expect(clipboardHandler).not.toBeNull());
+
+    await act(async () => clipboardHandler!({ payload: undefined }));
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('plugin:snk-clipboard|show_popup');
+      expect(popupSetPosition).toHaveBeenCalled();
+      expect(popupEmit).toHaveBeenCalledWith('clipboard-popup:show', {
+        targetApp: {
+          identifier: 'com.apple.TextEdit',
+          display_name: 'TextEdit',
+          kind: 'macos_bundle_id',
+        },
+      });
+    });
+  });
+
   it('region hotkey grabs a preview and emits overlay:preview with path+token', async () => {
     let regionHandler: ((e: { payload: unknown }) => void) | null = null;
     vi.mocked(listen).mockImplementation((event, handler) => {

@@ -13,6 +13,7 @@ import {
   CLIPBOARD_POPUP_SHOW_EVENT,
   CLIPBOARD_UNAVAILABLE_EVENT,
   CLIPBOARD_AVAILABLE_EVENT,
+  type SourceApp,
 } from '@snk/clipboard';
 
 import { useClipboardPopupStore } from './store';
@@ -22,8 +23,10 @@ export function ClipboardPopup() {
   const items = useClipboardPopupStore((s) => s.items);
   const filter = useClipboardPopupStore((s) => s.filter);
   const selectedIndex = useClipboardPopupStore((s) => s.selectedIndex);
+  const targetApp = useClipboardPopupStore((s) => s.targetApp);
   const setItems = useClipboardPopupStore((s) => s.setItems);
   const setFilter = useClipboardPopupStore((s) => s.setFilter);
+  const setTargetApp = useClipboardPopupStore((s) => s.setTargetApp);
   const moveSelection = useClipboardPopupStore((s) => s.moveSelection);
   const reset = useClipboardPopupStore((s) => s.reset);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -32,6 +35,10 @@ export function ClipboardPopup() {
   // synthetic Cmd+V is silently dropped, so we surface a banner with a deep-link
   // to System Settings. Always false off macOS (the status query reports granted).
   const [needsAccessibility, setNeedsAccessibility] = useState(false);
+
+  interface ClipboardPopupShowPayload {
+    targetApp: SourceApp | null;
+  }
 
   const loadItems = useCallback(
     async (filterText?: string) => {
@@ -50,8 +57,9 @@ export function ClipboardPopup() {
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
-    listen(CLIPBOARD_POPUP_SHOW_EVENT, async () => {
+    listen<ClipboardPopupShowPayload>(CLIPBOARD_POPUP_SHOW_EVENT, async (event) => {
       reset();
+      setTargetApp(event.payload?.targetApp ?? null);
       await loadItems();
       // Re-check on every open so granting the permission and reopening clears
       // the banner without a restart. Clear first so a failed or late status
@@ -70,7 +78,7 @@ export function ClipboardPopup() {
       })
       .catch((e) => console.error('clipboard popup listen failed', e));
     return () => unlisten?.();
-  }, [loadItems, reset]);
+  }, [loadItems, reset, setTargetApp]);
 
   // Track clipboard watcher availability so we can show an offline banner
   // instead of a silently-empty history. Seed from the current status, then
@@ -101,9 +109,10 @@ export function ClipboardPopup() {
     async (id: string) => {
       // The popup must yield focus before the synthetic paste fires, so the
       // keystroke lands in the previously-focused app rather than this window.
+      const pasteTarget = targetApp;
       try {
         await dismiss();
-        await pasteItem(id);
+        await pasteItem(id, pasteTarget ?? undefined);
       } catch (e) {
         if (isAccessibilityRequiredError(e)) {
           // Permission was missing — re-reveal the popup (dismiss hid it) and
@@ -115,7 +124,7 @@ export function ClipboardPopup() {
         }
       }
     },
-    [dismiss],
+    [dismiss, targetApp],
   );
 
   const handleFilterChange = useCallback(

@@ -271,7 +271,8 @@ export function LibraryWindow() {
 
   const handleClipboardHistory = useCallback(async () => {
     try {
-      const pos = await showPopup();
+      const context = await showPopup();
+      const pos = context.caret;
       const popup = await WebviewWindow.getByLabel('clipboard-popup');
       if (!popup) return;
 
@@ -284,7 +285,7 @@ export function LibraryWindow() {
       if (!fallback) {
         // No monitors reported — last-resort placement at 0,0.
         await popup.setPosition(new LogicalPosition(0, 0));
-        await popup.emit(CLIPBOARD_POPUP_SHOW_EVENT, {});
+        await popup.emit(CLIPBOARD_POPUP_SHOW_EVENT, { targetApp: context.targetApp });
         await popup.show();
         await popup.setFocus();
         return;
@@ -333,7 +334,7 @@ export function LibraryWindow() {
       if (y + popupH > monBottom) y = monBottom - popupH;
 
       await popup.setPosition(new LogicalPosition(x, y));
-      await popup.emit(CLIPBOARD_POPUP_SHOW_EVENT, {});
+      await popup.emit(CLIPBOARD_POPUP_SHOW_EVENT, { targetApp: context.targetApp });
       await popup.show();
       await popup.setFocus();
     } catch (e) {

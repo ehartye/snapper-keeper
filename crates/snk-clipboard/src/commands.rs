@@ -1,10 +1,17 @@
 use std::borrow::Cow;
+use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
 use arboard::Clipboard;
 use tauri::{Runtime, State};
 use tracing::info;
+#[cfg(target_os = "macos")]
+use objc2::MainThreadMarker;
+#[cfg(target_os = "macos")]
+use objc2_app_kit::{NSApplication, NSApplicationActivationOptions, NSRunningApplication};
+#[cfg(target_os = "macos")]
+use objc2_foundation::NSString;
 
 use snk_library::clipboard::{self, ClipboardItemKind};
 use snk_library::{settings, LibraryState};
@@ -12,21 +19,101 @@ use snk_library::{settings, LibraryState};
 use crate::caret;
 use crate::paste;
 use crate::skip_set;
-use crate::source_app::{self, SourceApp};
+use crate::source_app::{self, SourceApp, SourceAppKind};
 use crate::{ClipboardError, Result};
 
 /// Wait between writing to the clipboard and synthesizing Ctrl/Cmd+V so the
 /// target app's clipboard listener has time to observe the new content before
 /// the paste keystroke arrives.
 const PASTE_SETTLE: Duration = Duration::from_millis(50);
+const FOCUS_RESTORE_POLL: Duration = Duration::from_millis(20);
+const FOCUS_RESTORE_ATTEMPTS: usize = 25;
 
 const IMAGE_PASTE_ENABLED_KEY: &str = "clipboard.image_paste_enabled";
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PopupContext {
+    pub caret: crate::caret::CaretPosition,
+    pub target_app: Option<SourceApp>,
+}
+
+fn wait_for_focus_restore_with<F, S>(target_app: &SourceApp, mut current: F, mut sleep: S) -> bool
+where
+    F: FnMut() -> Option<SourceApp>,
+    S: FnMut(Duration),
+{
+    for _ in 0..FOCUS_RESTORE_ATTEMPTS {
+        if current().as_ref().is_some_and(|app| {
+            app.kind == target_app.kind && app.identifier_matches(&target_app.identifier)
+        }) {
+            return true;
+        }
+        sleep(FOCUS_RESTORE_POLL);
+    }
+    false
+}
+
+fn restore_paste_target<R: Runtime>(
+    window: &tauri::WebviewWindow<R>,
+    target_app: &SourceApp,
+) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        if target_app.kind != SourceAppKind::MacosBundleId {
+            return Ok(());
+        }
+        let bundle_id = target_app.identifier.clone();
+        let (tx, rx) = mpsc::sync_channel(1);
+        window
+            .run_on_main_thread(move || {
+                let activated = if let Some(mtm) = MainThreadMarker::new() {
+                    let app = NSApplication::sharedApplication(mtm);
+                    let current = NSRunningApplication::currentApplication();
+                    let bundle_id = NSString::from_str(&bundle_id);
+                    let running =
+                        NSRunningApplication::runningApplicationsWithBundleIdentifier(&bundle_id);
+                    if !running.is_empty() {
+                        let target = running.objectAtIndex(0);
+                        app.yieldActivationToApplication(&target);
+                        target.activateFromApplication_options(
+                            &current,
+                            NSApplicationActivationOptions::empty(),
+                        )
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
+                let _ = tx.send(activated);
+            })
+            .map_err(|e| ClipboardError::PasteFailed {
+                reason: format!("schedule focus restore: {e}"),
+            })?;
+        let activated = rx.recv_timeout(Duration::from_millis(250)).unwrap_or(false);
+        if !activated {
+            return Err(ClipboardError::PasteFailed {
+                reason: format!("failed to reactivate {}", target_app.display_name),
+            });
+        }
+        if !wait_for_focus_restore_with(target_app, source_app::current, thread::sleep) {
+            return Err(ClipboardError::PasteFailed {
+                reason: format!("timed out restoring focus to {}", target_app.display_name),
+            });
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (window, target_app);
+    Ok(())
+}
 
 #[tauri::command]
 pub fn paste_item<R: Runtime>(
     state: State<'_, LibraryState>,
     window: tauri::WebviewWindow<R>,
     id: String,
+    target_app: Option<SourceApp>,
 ) -> Result<()> {
     snk_library::authz::authorize(
         &window,
@@ -51,6 +138,10 @@ pub fn paste_item<R: Runtime>(
             // it (within SKIP_TTL). Replaces the old SKIP_NEXT AtomicBool.
             skip_set::mark_emitted(skip_set::hash_content(text.as_bytes()));
             clip.set_text(text)?;
+
+            if let Some(target_app) = target_app.as_ref() {
+                restore_paste_target(&window, target_app)?;
+            }
 
             thread::sleep(PASTE_SETTLE);
 
@@ -103,6 +194,10 @@ pub fn paste_item<R: Runtime>(
                 bytes: Cow::Owned(rgba_bytes),
             })?;
 
+            if let Some(target_app) = target_app.as_ref() {
+                restore_paste_target(&window, target_app)?;
+            }
+
             thread::sleep(PASTE_SETTLE);
 
             paste::synthesize_paste()?;
@@ -115,8 +210,11 @@ pub fn paste_item<R: Runtime>(
 }
 
 #[tauri::command]
-pub fn show_popup<R: Runtime>(_app: tauri::AppHandle<R>) -> Result<crate::caret::CaretPosition> {
-    Ok(caret::resolve_popup_position())
+pub fn show_popup<R: Runtime>(_app: tauri::AppHandle<R>) -> Result<PopupContext> {
+    Ok(PopupContext {
+        caret: caret::resolve_popup_position(),
+        target_app: source_app::current(),
+    })
 }
 
 #[tauri::command]
@@ -146,4 +244,62 @@ pub fn clipboard_permission_status() -> crate::permissions::PermissionStatus {
 #[tauri::command]
 pub fn open_accessibility_settings() -> Result<()> {
     crate::permissions::open_accessibility_settings()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wait_for_focus_restore_stops_when_target_app_returns() {
+        let target = SourceApp {
+            identifier: "com.apple.TextEdit".into(),
+            display_name: "TextEdit".into(),
+            kind: SourceAppKind::MacosBundleId,
+        };
+        let mut calls = 0usize;
+        let mut sleeps = 0usize;
+        let restored = wait_for_focus_restore_with(
+            &target,
+            || {
+                calls += 1;
+                if calls < 3 {
+                    Some(SourceApp {
+                        identifier: "com.snapper-keeper.app".into(),
+                        display_name: "Snapper Keeper".into(),
+                        kind: SourceAppKind::MacosBundleId,
+                    })
+                } else {
+                    Some(target.clone())
+                }
+            },
+            |_| sleeps += 1,
+        );
+        assert!(restored);
+        assert_eq!(calls, 3);
+        assert_eq!(sleeps, 2);
+    }
+
+    #[test]
+    fn wait_for_focus_restore_times_out_when_target_never_returns() {
+        let target = SourceApp {
+            identifier: "com.apple.TextEdit".into(),
+            display_name: "TextEdit".into(),
+            kind: SourceAppKind::MacosBundleId,
+        };
+        let mut sleeps = 0usize;
+        let restored = wait_for_focus_restore_with(
+            &target,
+            || {
+                Some(SourceApp {
+                    identifier: "com.snapper-keeper.app".into(),
+                    display_name: "Snapper Keeper".into(),
+                    kind: SourceAppKind::MacosBundleId,
+                })
+            },
+            |_| sleeps += 1,
+        );
+        assert!(!restored);
+        assert_eq!(sleeps, FOCUS_RESTORE_ATTEMPTS);
+    }
 }
