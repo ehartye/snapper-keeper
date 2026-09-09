@@ -1,6 +1,6 @@
 [package]
 name = "snapper-keeper-app"
-version = "0.2.1"
+version = "0.2.2-rc.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

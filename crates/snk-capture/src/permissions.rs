@@ -2,10 +2,9 @@
 //!
 //! ## Why TCC permission matters
 //!
-//! xcap uses CGWindowListCreateImage under the hood. Without the Screen
-//! Recording TCC grant, that API silently returns black frames — no error,
-//! no prompt — so captures appear blank and the region-overlay backdrop is
-//! a solid black rectangle.
+//! The macOS screenshot backend uses ScreenCaptureKit. Without the Screen
+//! Recording TCC grant, screenshot capture fails and the app cannot
+//! produce preview or final capture pixels.
 //!
 //! ## Why CGPreflightScreenCaptureAccess requires a signed bundle
 //!

@@ -15,8 +15,11 @@ pub enum CaptureError {
     #[error("window not found: {id}")]
     WindowNotFound { id: u32 },
 
-    #[error("xcap error: {message}")]
+    #[error("capture backend error: {message}")]
     Os { message: String },
+
+    #[error("capture backend unavailable: {detail}")]
+    BackendUnavailable { detail: String },
 
     #[error("encode error: {message}")]
     Encode { message: String },
@@ -67,6 +70,11 @@ mod tests {
         }
         .to_string()
         .contains("boom"));
+        assert!(CaptureError::BackendUnavailable {
+            detail: "not supported in this runtime".into()
+        }
+        .to_string()
+        .contains("not supported"));
         assert!(CaptureError::Encode {
             message: "bad png".into()
         }

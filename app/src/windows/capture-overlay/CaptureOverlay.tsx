@@ -3,6 +3,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { captureRegion } from '@snk/capture';
+import { showCaptureToolbar } from '../../lib/captureToolbar';
 
 interface Rect {
   startX: number;
@@ -15,11 +16,13 @@ export function CaptureOverlay() {
   const [rect, setRect] = useState<Rect | null>(null);
   const [dragging, setDragging] = useState(false);
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+  const [previewToken, setPreviewToken] = useState<string | null>(null);
   const [monitorId, setMonitorId] = useState(0);
   const [monitorScaleFactor, setMonitorScaleFactor] = useState<number | null>(null);
 
   const cancel = useCallback(async () => {
     setPreviewSrc(null);
+    setPreviewToken(null);
     setRect(null);
     const win = getCurrentWindow();
     await win.hide();
@@ -46,8 +49,10 @@ export function CaptureOverlay() {
     const y = Math.min(rect.startY, rect.endY);
     const w = Math.abs(rect.endX - rect.startX);
     const h = Math.abs(rect.endY - rect.startY);
+    const token = previewToken;
 
     setPreviewSrc(null);
+    setPreviewToken(null);
     setRect(null);
     const win = getCurrentWindow();
     await win.hide();
@@ -60,22 +65,18 @@ export function CaptureOverlay() {
       const scaleFactor = monitorScaleFactor ?? (window.devicePixelRatio || 1);
       const capture = await captureRegion(
         monitorId,
-        Math.round(x * scaleFactor),
-        Math.round(y * scaleFactor),
-        Math.round(w * scaleFactor),
-        Math.round(h * scaleFactor),
+        Math.round(x),
+        Math.round(y),
+        Math.round(w),
+        Math.round(h),
+        scaleFactor,
+        token ?? undefined,
       );
-      const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
-      const toolbar = await WebviewWindow.getByLabel('capture-toolbar');
-      if (toolbar) {
-        await toolbar.emit('toolbar:show', { captureId: capture.id });
-        await toolbar.show();
-        await toolbar.setFocus();
-      }
+      await showCaptureToolbar(capture.id);
     } catch (e) {
       console.error('region capture failed', e);
     }
-  }, [rect, monitorId, monitorScaleFactor]);
+  }, [rect, monitorId, monitorScaleFactor, previewToken]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -97,6 +98,7 @@ export function CaptureOverlay() {
       const url = `${convertFileSrc(event.payload.path)}?v=${event.payload.token}`;
       setMonitorId(event.payload.monitorId);
       setMonitorScaleFactor(event.payload.scaleFactor);
+      setPreviewToken(event.payload.token);
       setPreviewSrc(null);
       setPreviewSrc(url);
       },

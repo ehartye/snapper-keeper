@@ -23,8 +23,20 @@ export function captureRegion(
   y: number,
   w: number,
   h: number,
+  scaleFactor: number,
+  previewToken?: string,
 ): Promise<Capture> {
-  return invoke<Capture>('plugin:snk-capture|capture_region', { monitorId, x, y, w, h });
+  return invoke<Capture>('plugin:snk-capture|capture_region', {
+    request: {
+      monitorId,
+      x,
+      y,
+      w,
+      h,
+      scaleFactor,
+      ...(previewToken ? { previewToken } : {}),
+    },
+  });
 }
 
 export function listCapturableWindows(): Promise<WindowInfo[]> {
@@ -36,6 +48,14 @@ export interface ScreenPreview {
   width: number;
   height: number;
   token: string;
+  displayFrame: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    scaleFactor: number;
+  } | null;
+  displayIndex: number | null;
 }
 
 export function grabScreenPreview(monitorId?: number): Promise<ScreenPreview> {
@@ -43,6 +63,15 @@ export function grabScreenPreview(monitorId?: number): Promise<ScreenPreview> {
     return invoke<ScreenPreview>('plugin:snk-capture|grab_screen_preview');
   }
   return invoke<ScreenPreview>('plugin:snk-capture|grab_screen_preview', { monitorId });
+}
+
+export interface CursorPosition {
+  x: number;
+  y: number;
+}
+
+export function captureCursorPosition(): Promise<CursorPosition> {
+  return invoke<CursorPosition>('plugin:snk-capture|capture_cursor_position');
 }
 
 export function capturePermissionStatus(): Promise<boolean> {

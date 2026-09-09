@@ -13,6 +13,7 @@ import {
   captureFullScreen,
   captureWindow,
   captureRegion,
+  captureCursorPosition,
   listCapturableWindows,
   grabScreenPreview,
 } from './index';
@@ -44,13 +45,31 @@ describe('@snk/capture bindings', () => {
   });
 
   it('captureRegion sends monitor + rect', async () => {
-    await captureRegion(0, 10, 20, 300, 400);
+    await captureRegion(0, 10, 20, 300, 400, 2);
     expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-capture|capture_region', {
-      monitorId: 0,
-      x: 10,
-      y: 20,
-      w: 300,
-      h: 400,
+      request: {
+        monitorId: 0,
+        x: 10,
+        y: 20,
+        w: 300,
+        h: 400,
+        scaleFactor: 2,
+      },
+    });
+  });
+
+  it('captureRegion forwards the preview token when provided', async () => {
+    await captureRegion(0, 10, 20, 300, 400, 2, 'tok-xyz');
+    expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-capture|capture_region', {
+      request: {
+        monitorId: 0,
+        x: 10,
+        y: 20,
+        w: 300,
+        h: 400,
+        scaleFactor: 2,
+        previewToken: 'tok-xyz',
+      },
     });
   });
 
@@ -68,12 +87,22 @@ describe('@snk/capture bindings', () => {
       width: 800,
       height: 600,
       token: 'tok-abc',
+      displayIndex: 1,
+      displayFrame: {
+        x: 100,
+        y: 200,
+        width: 1440,
+        height: 900,
+        scaleFactor: 2,
+      },
     });
     const p = await grabScreenPreview();
     expect(p.path).toBe('/tmp/x.png');
     expect(p.width).toBe(800);
     expect(p.height).toBe(600);
     expect(p.token).toBe('tok-abc');
+    expect(p.displayIndex).toBe(1);
+    expect(p.displayFrame?.scaleFactor).toBe(2);
     expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-capture|grab_screen_preview');
   });
 
@@ -82,5 +111,10 @@ describe('@snk/capture bindings', () => {
     expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-capture|grab_screen_preview', {
       monitorId: 2,
     });
+  });
+
+  it('captureCursorPosition takes no args', async () => {
+    await captureCursorPosition();
+    expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-capture|capture_cursor_position');
   });
 });

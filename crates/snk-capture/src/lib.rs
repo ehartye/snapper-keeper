@@ -4,6 +4,7 @@
 //! window capture, timed capture, and the floating post-capture toolbar come
 //! in later phases.
 
+mod backend;
 pub mod commands;
 pub mod error;
 pub mod foreground;

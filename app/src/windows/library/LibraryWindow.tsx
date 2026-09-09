@@ -19,6 +19,7 @@ import { CLIPBOARD_HISTORY_EVENT, CLIPBOARD_POPUP_SHOW_EVENT, showPopup } from '
 import { getSetting } from '@snk/library';
 
 import { useModal } from '../../components/Modal';
+import { showCaptureToolbar } from '../../lib/captureToolbar';
 import { queryKeys } from '../../lib/queryKeys';
 import { CaptureGrid } from './CaptureGrid';
 import { ClipboardList } from './ClipboardList';
@@ -31,6 +32,22 @@ interface PluginSetupFailedPayload {
   pluginName: string;
   panicMessage: string;
   diagnosticsMarkdown: string;
+}
+
+function isMacPlatform() {
+  if (typeof navigator === 'undefined') return false;
+  const uaDataPlatform = (
+    navigator as Navigator & { userAgentData?: { platform?: string } }
+  ).userAgentData?.platform;
+  return (
+    /mac/i.test(uaDataPlatform ?? '') ||
+    /Mac|iPhone|iPad|iPod/.test(navigator.platform) ||
+    /\bMac OS\b/.test(navigator.userAgent)
+  );
+}
+
+function sortMonitorsByPosition<T extends { position: { x: number; y: number } }>(monitors: T[]) {
+  return [...monitors].sort((a, b) => a.position.x - b.position.x || a.position.y - b.position.y);
 }
 
 export function LibraryWindow() {
@@ -140,12 +157,7 @@ export function LibraryWindow() {
   }, [modal]);
 
   const showToolbar = useCallback(async (captureId: string) => {
-    const toolbar = await WebviewWindow.getByLabel('capture-toolbar');
-    if (toolbar) {
-      await toolbar.emit('toolbar:show', { captureId });
-      await toolbar.show();
-      await toolbar.setFocus();
-    }
+    await showCaptureToolbar(captureId);
   }, []);
 
   const showScreenRecordingAlert = useCallback(() => {
@@ -179,22 +191,65 @@ export function LibraryWindow() {
     })();
   }, [modal]);
 
+  const isCaptureRuntimeProblem = useCallback((e: unknown) => {
+    return (
+      typeof e === 'object' &&
+      e !== null &&
+      'kind' in e &&
+      (e.kind === 'screen-recording-permission-denied' ||
+        e.kind === 'backend-unavailable')
+    );
+  }, []);
+
   const handleFullScreen = useCallback(async () => {
     try {
       const capture = await captureFullScreen();
       await refreshCaptures();
       await showToolbar(capture.id);
     } catch (e: unknown) {
-      if (typeof e === 'object' && e !== null && 'kind' in e && e.kind === 'screen-recording-permission-denied') {
+      if (isCaptureRuntimeProblem(e)) {
         showScreenRecordingAlert();
         return;
       }
       console.error('capture failed', e);
     }
-  }, [refreshCaptures, showToolbar, showScreenRecordingAlert]);
+  }, [isCaptureRuntimeProblem, refreshCaptures, showToolbar, showScreenRecordingAlert]);
 
   const handleRegion = useCallback(async () => {
     try {
+      if (isMacPlatform()) {
+        const preview = await grabScreenPreview();
+        const monitors = await availableMonitors();
+        const fallback = monitors[0];
+        if (!fallback) {
+          console.warn('no monitors available for region overlay');
+          return;
+        }
+        const overlay = await WebviewWindow.getByLabel('capture-overlay');
+        const sortedMonitors = sortMonitorsByPosition(monitors);
+        const targetMonitor =
+          preview.displayIndex !== null && preview.displayIndex !== undefined
+            ? sortedMonitors[preview.displayIndex] ?? fallback
+            : fallback;
+        if (overlay) {
+          await overlay.setPosition(
+            new PhysicalPosition(targetMonitor.position.x, targetMonitor.position.y),
+          );
+          await overlay.setSize(
+            new PhysicalSize(targetMonitor.size.width, targetMonitor.size.height),
+          );
+          await overlay.emit('overlay:preview', {
+            path: preview.path,
+            token: preview.token,
+            monitorId: preview.displayIndex ?? 0,
+            scaleFactor: preview.displayFrame?.scaleFactor ?? targetMonitor.scaleFactor,
+          });
+          await overlay.show();
+          await overlay.setFocus();
+          return;
+        }
+      }
+
       const monitors = await availableMonitors();
       const fallback = monitors[0];
       if (!fallback) {
@@ -230,13 +285,13 @@ export function LibraryWindow() {
         await overlay.setFocus();
       }
     } catch (e: unknown) {
-      if (typeof e === 'object' && e !== null && 'kind' in e && e.kind === 'screen-recording-permission-denied') {
+      if (isCaptureRuntimeProblem(e)) {
         showScreenRecordingAlert();
         return;
       }
       console.error('region overlay failed', e);
     }
-  }, [showScreenRecordingAlert]);
+  }, [isCaptureRuntimeProblem, showScreenRecordingAlert]);
 
   const handleWindow = useCallback(async () => {
     try {
@@ -252,10 +307,14 @@ export function LibraryWindow() {
       const capture = await captureWindow(target.id);
       await refreshCaptures();
       await showToolbar(capture.id);
-    } catch (e) {
+    } catch (e: unknown) {
+      if (isCaptureRuntimeProblem(e)) {
+        showScreenRecordingAlert();
+        return;
+      }
       console.error('window capture failed', e);
     }
-  }, [refreshCaptures, showToolbar]);
+  }, [isCaptureRuntimeProblem, refreshCaptures, showScreenRecordingAlert, showToolbar]);
 
   const handleTimed = useCallback(async () => {
     setTimeout(async () => {
@@ -263,11 +322,15 @@ export function LibraryWindow() {
         const capture = await captureFullScreen();
         await refreshCaptures();
         await showToolbar(capture.id);
-      } catch (e) {
+      } catch (e: unknown) {
+        if (isCaptureRuntimeProblem(e)) {
+          showScreenRecordingAlert();
+          return;
+        }
         console.error('timed capture failed', e);
       }
     }, 5000);
-  }, [refreshCaptures, showToolbar]);
+  }, [isCaptureRuntimeProblem, refreshCaptures, showScreenRecordingAlert, showToolbar]);
 
   const handleClipboardHistory = useCallback(async () => {
     try {

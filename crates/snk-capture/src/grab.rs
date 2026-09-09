@@ -2,82 +2,26 @@ use std::io::Cursor;
 
 use image::{codecs::png::PngEncoder, ColorType, ImageEncoder};
 use serde::{Deserialize, Serialize};
-use xcap::{Monitor, Window};
 
 use crate::Result;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DisplayFrame {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    pub scale_factor: f64,
+}
 
 pub struct GrabResult {
     pub png_bytes: Vec<u8>,
     pub width: u32,
     pub height: u32,
     pub monitor_name: String,
-}
-
-fn resolve_requested_monitor_position(monitor_ids: &[u32], requested: u32) -> Option<usize> {
-    let index = requested as usize;
-    if index < monitor_ids.len() {
-        return Some(index);
-    }
-    monitor_ids.iter().position(|id| *id == requested)
-}
-
-fn select_monitor(monitor_id: Option<u32>) -> Result<Monitor> {
-    let mut monitors = Monitor::all()?;
-    if monitors.is_empty() {
-        return Err(crate::CaptureError::NoMonitors);
-    }
-
-    if let Some(id) = monitor_id {
-        let monitor_ids: Vec<u32> = monitors
-            .iter()
-            .map(|m| m.id().unwrap_or(u32::MAX))
-            .collect();
-        if let Some(pos) = resolve_requested_monitor_position(&monitor_ids, id) {
-            return Ok(monitors.swap_remove(pos));
-        }
-    }
-
-    if let Some(pos) = monitors
-        .iter()
-        .position(|m| m.is_primary().unwrap_or(false))
-    {
-        return Ok(monitors.swap_remove(pos));
-    }
-
-    monitors.pop().ok_or(crate::CaptureError::NoMonitors)
-}
-
-pub fn grab_primary_monitor() -> Result<GrabResult> {
-    let primary = select_monitor(None)?;
-
-    let image = primary.capture_image()?;
-    let (w, h) = (image.width(), image.height());
-    let name = primary.name().unwrap_or_default();
-
-    let mut buf = Cursor::new(Vec::with_capacity((w * h * 4) as usize / 2));
-    PngEncoder::new(&mut buf).write_image(image.as_raw(), w, h, ColorType::Rgba8.into())?;
-
-    Ok(GrabResult {
-        png_bytes: buf.into_inner(),
-        width: w,
-        height: h,
-        monitor_name: name,
-    })
-}
-
-pub fn grab_monitor(monitor_id: u32) -> Result<GrabResult> {
-    let monitor = select_monitor(Some(monitor_id))?;
-    let image = monitor.capture_image()?;
-    let (w, h) = (image.width(), image.height());
-    let name = monitor.name().unwrap_or_default();
-    let png_bytes = encode_rgba_to_png(image.as_raw(), w, h)?;
-
-    Ok(GrabResult {
-        png_bytes,
-        width: w,
-        height: h,
-        monitor_name: name,
-    })
+    pub display_frame: Option<DisplayFrame>,
+    pub display_index: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -89,73 +33,24 @@ pub struct WindowInfo {
     pub height: u32,
 }
 
-pub fn list_capturable_windows() -> Result<Vec<WindowInfo>> {
-    let windows = Window::all()?;
-    let infos = windows
-        .into_iter()
-        .filter(|w| {
-            !w.is_minimized().unwrap_or(true)
-                && w.width().unwrap_or(0) > 0
-                && w.height().unwrap_or(0) > 0
-        })
-        .map(|w| WindowInfo {
-            id: w.id().unwrap_or(0),
-            app_name: w.app_name().unwrap_or_default(),
-            title: w.title().unwrap_or_default(),
-            width: w.width().unwrap_or(0),
-            height: w.height().unwrap_or(0),
-        })
-        .collect();
-    Ok(infos)
+pub fn grab_primary_monitor() -> Result<GrabResult> {
+    crate::backend::platform_backend().grab_primary_monitor()
+}
+
+pub fn grab_monitor(monitor_id: u32) -> Result<GrabResult> {
+    crate::backend::platform_backend().grab_monitor(monitor_id)
 }
 
 pub fn grab_window(window_id: u32) -> Result<GrabResult> {
-    let windows = Window::all()?;
-    let target = windows
-        .into_iter()
-        .find(|w| w.id().unwrap_or(0) == window_id)
-        .ok_or(crate::CaptureError::WindowNotFound { id: window_id })?;
-
-    let monitor_name = target
-        .current_monitor()
-        .ok()
-        .and_then(|m| m.name().ok())
-        .unwrap_or_default();
-    let image = target.capture_image()?;
-    let (w, h) = (image.width(), image.height());
-
-    let mut buf = Cursor::new(Vec::with_capacity((w * h * 4) as usize / 2));
-    PngEncoder::new(&mut buf).write_image(image.as_raw(), w, h, ColorType::Rgba8.into())?;
-
-    Ok(GrabResult {
-        png_bytes: buf.into_inner(),
-        width: w,
-        height: h,
-        monitor_name,
-    })
+    crate::backend::platform_backend().grab_window(window_id)
 }
 
 pub fn grab_region(monitor_id: u32, x: u32, y: u32, w: u32, h: u32) -> Result<GrabResult> {
-    let mon = select_monitor(Some(monitor_id))?;
+    crate::backend::platform_backend().grab_region(monitor_id, x, y, w, h)
+}
 
-    let monitor_name = mon.name().unwrap_or_default();
-    let full_image = mon.capture_image()?;
-
-    let (x, y, w, h) = clamp_region(full_image.width(), full_image.height(), x, y, w, h)
-        .ok_or_else(|| crate::CaptureError::Os {
-            message: "region has zero area".into(),
-        })?;
-
-    let cropped = image::imageops::crop_imm(&full_image, x, y, w, h).to_image();
-    let (cw, ch) = (cropped.width(), cropped.height());
-    let png_bytes = encode_rgba_to_png(cropped.as_raw(), cw, ch)?;
-
-    Ok(GrabResult {
-        png_bytes,
-        width: cw,
-        height: ch,
-        monitor_name,
-    })
+pub fn list_capturable_windows() -> Result<Vec<WindowInfo>> {
+    crate::backend::platform_backend().list_capturable_windows()
 }
 
 /// Clamp a requested capture region against an image's bounds. Returns
@@ -256,19 +151,5 @@ mod tests {
         for px in img.pixels() {
             assert_eq!(px.0, [0, 0, 255, 255]);
         }
-    }
-
-    #[test]
-    fn resolve_requested_monitor_position_prefers_index_over_id_match() {
-        let ids = vec![1, 2];
-        // requested=1 could mean index 1 (second monitor) or id 1 (first monitor).
-        // We prefer index semantics for frontend callers that pass monitor index.
-        assert_eq!(resolve_requested_monitor_position(&ids, 1), Some(1));
-    }
-
-    #[test]
-    fn resolve_requested_monitor_position_falls_back_to_id_when_index_is_out_of_range() {
-        let ids = vec![42, 77];
-        assert_eq!(resolve_requested_monitor_position(&ids, 77), Some(1));
     }
 }
