@@ -18,7 +18,16 @@ impl CaptureWorker {
             // The blocking job outlives a cancelled IPC future. It must own
             // serialization until persistence, events and window restoration finish.
             let _guard = guard;
-            job()
+            #[cfg(target_os = "macos")]
+            {
+                // Blocking pool threads have no Cocoa run loop to drain temporary
+                // Objective-C objects at the end of each native capture job.
+                objc2::rc::autoreleasepool(|_| job())
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                job()
+            }
         })
         .await
         .map_err(|error| crate::CaptureError::Os {

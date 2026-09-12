@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use snk_library::{plugin::LibraryState, Capture};
+use snk_library::{Capture, LibraryState};
 use tauri::{Emitter, Manager, Runtime, State};
 
 use crate::grab::WindowInfo;
@@ -57,24 +57,27 @@ where
 /// is registered with TCC. Requires the app to run as a signed .app bundle
 /// (`pnpm dev:mac-capture` for development). No-op on non-macOS.
 fn require_screen_recording<R: Runtime>(_app: &tauri::AppHandle<R>) -> Result<()> {
-    if !crate::permissions::screen_recording_granted() {
-        #[cfg(target_os = "macos")]
-        {
-            // Preserve the permission prompt's previous main-thread context;
-            // only the worker waits for it, never the IPC/event-loop caller.
-            let (tx, rx) = std::sync::mpsc::channel();
-            _app.run_on_main_thread(move || {
+    #[cfg(target_os = "macos")]
+    {
+        // Preserve the permission check and prompt's previous main-thread
+        // context; only the blocking worker waits for the response.
+        let (tx, rx) = std::sync::mpsc::channel();
+        _app.run_on_main_thread(move || {
+            let granted = crate::permissions::screen_recording_granted();
+            if !granted {
                 crate::permissions::request_screen_recording_access();
-                let _ = tx.send(());
-            })
-            .map_err(|e| crate::CaptureError::Os {
-                message: format!("dispatch screen recording prompt: {e}"),
-            })?;
-            rx.recv().map_err(|e| crate::CaptureError::Os {
-                message: format!("screen recording prompt response: {e}"),
-            })?;
+            }
+            let _ = tx.send(granted);
+        })
+        .map_err(|e| crate::CaptureError::Os {
+            message: format!("dispatch screen recording permission: {e}"),
+        })?;
+        let granted = rx.recv().map_err(|e| crate::CaptureError::Os {
+            message: format!("screen recording permission response: {e}"),
+        })?;
+        if !granted {
+            return Err(crate::CaptureError::ScreenRecordingPermissionDenied);
         }
-        return Err(crate::CaptureError::ScreenRecordingPermissionDenied);
     }
     Ok(())
 }

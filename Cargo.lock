@@ -4359,6 +4359,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "image",
+ "objc2",
  "serde",
  "serde_json",
  "snk-library",
