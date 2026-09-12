@@ -49,7 +49,9 @@ EXECUTABLE_PATH="$BUNDLE_PATH/Contents/MacOS/snapper-keeper-app"
 echo "→ Building bundled macOS app (debug, unsigned)..."
 (
   cd "$ROOT/app"
-  pnpm exec tauri build \
+  # Match the bundle path below even when the shell has a target-dir override.
+  CARGO_TARGET_DIR="$ROOT/target" pnpm exec tauri build \
+    --target "$TARGET" \
     --debug \
     --bundles app \
     --no-sign \
