@@ -18,6 +18,7 @@ SH
 cat > "$FIXTURE/bin/pnpm" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
+printf 'build\n' >> "$CASE_ROOT/stages"
 [[ "$CASE_FAILURE" != build ]] || exit 17
 target=""
 while (( $# )); do
@@ -40,6 +41,7 @@ set -euo pipefail
 bundle="${!#}"
 [[ -f "$bundle/Contents/MacOS/snapper-keeper-app" ]] || exit 18
 [[ "$1" != --force ]] || {
+  printf 'sign\n' >> "$CASE_ROOT/stages"
   [[ "$CASE_FAILURE" != sign ]] || exit 19
   printf '%s\n' "$bundle" > "$CASE_ROOT/signed"
 }
@@ -56,6 +58,7 @@ chmod +x "$FIXTURE/bin/"*
 failures=0
 run_case() {
   local name="$1" arch="$2" failure="$3" override="$4" target expected exit_code=0
+  local expected_exit expected_stages actual_stages
   export CASE_ROOT="$FIXTURE/$name" CASE_ARCH="$arch" CASE_FAILURE="$failure"
   case "$arch" in
     arm64) target=aarch64-apple-darwin ;;
@@ -75,8 +78,18 @@ run_case() {
   ) > "$CASE_ROOT/output.log" 2>&1 || exit_code=$?
 
   if [[ "$failure" != none || "$target" == unsupported ]]; then
-    if (( exit_code != 0 )) && [[ ! -f "$CASE_ROOT/launched" ]]; then
-      printf 'PASS %s (failure prevented launch)\n' "$name"
+    case "$failure:$target" in
+      build:*) expected_exit=17; expected_stages=build ;;
+      sign:*) expected_exit=19; expected_stages=$'build\nsign' ;;
+      none:unsupported) expected_exit=1; expected_stages='' ;;
+    esac
+    actual_stages="$(cat "$CASE_ROOT/stages" 2>/dev/null || true)"
+    if (( exit_code == expected_exit )) &&
+      [[ "$actual_stages" == "$expected_stages" ]] &&
+      [[ ! -f "$CASE_ROOT/signed" && ! -f "$CASE_ROOT/launched" ]] &&
+      { [[ "$target" != unsupported ]] ||
+        [[ "$(cat "$CASE_ROOT/output.log")" == *"unsupported architecture: $arch"* ]]; }; then
+      printf 'PASS %s (expected exit %s and failure stage; no launch)\n' "$name" "$expected_exit"
       return
     fi
   elif (( exit_code == 0 )) &&
