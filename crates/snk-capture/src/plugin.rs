@@ -1,9 +1,10 @@
 use tauri::plugin::{Builder, TauriPlugin};
-use tauri::Runtime;
+use tauri::{Manager, Runtime};
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::<R>::new("snk-capture")
-        .setup(|_app, _api| {
+        .setup(|app, _api| {
+            app.manage(crate::worker::CaptureWorker::default());
             // Register the app with TCC so the SCK permission prompt appears
             // on first capture attempt rather than silently returning black frames.
             crate::permissions::request_screen_recording_access();

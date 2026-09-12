@@ -5,6 +5,7 @@ use tauri::{Emitter, Manager, Runtime, State};
 
 use crate::grab::WindowInfo;
 use crate::window_hider::{TauriWindowManager, WindowVisibilityGuard};
+use crate::worker::CaptureWorker;
 use crate::Result;
 
 const HIDE_OWN_WINDOWS_KEY: &str = "capture.hide_own_windows";
@@ -55,44 +56,76 @@ where
 /// Screen Recording permission, and trigger the system prompt so the app
 /// is registered with TCC. Requires the app to run as a signed .app bundle
 /// (`pnpm dev:mac-capture` for development). No-op on non-macOS.
-fn require_screen_recording() -> Result<()> {
+fn require_screen_recording<R: Runtime>(_app: &tauri::AppHandle<R>) -> Result<()> {
     if !crate::permissions::screen_recording_granted() {
-        crate::permissions::request_screen_recording_access();
+        #[cfg(target_os = "macos")]
+        {
+            // Preserve the permission prompt's previous main-thread context;
+            // only the worker waits for it, never the IPC/event-loop caller.
+            let (tx, rx) = std::sync::mpsc::channel();
+            _app.run_on_main_thread(move || {
+                crate::permissions::request_screen_recording_access();
+                let _ = tx.send(());
+            })
+            .map_err(|e| crate::CaptureError::Os {
+                message: format!("dispatch screen recording prompt: {e}"),
+            })?;
+            rx.recv().map_err(|e| crate::CaptureError::Os {
+                message: format!("screen recording prompt response: {e}"),
+            })?;
+        }
         return Err(crate::CaptureError::ScreenRecordingPermissionDenied);
     }
     Ok(())
 }
 
 #[tauri::command]
-pub fn capture_full_screen<R: Runtime>(
+pub async fn capture_full_screen<R: Runtime>(
     state: State<'_, LibraryState>,
+    worker: State<'_, CaptureWorker>,
     app: tauri::AppHandle<R>,
 ) -> Result<Capture> {
-    require_screen_recording()?;
-    let capture = with_hidden_own_windows(&app, &state.db, || {
-        crate::orchestrate::capture_full_screen(&state.db, &state.root)
-    })?;
-    let _ = app.emit("capture:saved", &capture.id);
-    Ok(capture)
+    let db = state.db.clone();
+    let root = state.root.clone();
+    worker
+        .run(move || {
+            require_screen_recording(&app)?;
+            let capture = with_hidden_own_windows(&app, &db, || {
+                crate::orchestrate::capture_full_screen(&db, &root)
+            })?;
+            let _ = app.emit("capture:saved", &capture.id);
+            Ok(capture)
+        })
+        .await
 }
 
 #[tauri::command]
-pub fn capture_window<R: Runtime>(
+pub async fn capture_window<R: Runtime>(
     state: State<'_, LibraryState>,
+    worker: State<'_, CaptureWorker>,
     app: tauri::AppHandle<R>,
     window_id: u32,
 ) -> Result<Capture> {
-    require_screen_recording()?;
-    let capture = with_hidden_own_windows(&app, &state.db, || {
-        crate::orchestrate::capture_window(&state.db, &state.root, window_id)
-    })?;
-    let _ = app.emit("capture:saved", &capture.id);
-    Ok(capture)
+    let db = state.db.clone();
+    let root = state.root.clone();
+    worker
+        .run(move || {
+            require_screen_recording(&app)?;
+            let capture = with_hidden_own_windows(&app, &db, || {
+                crate::orchestrate::capture_window(&db, &root, window_id)
+            })?;
+            let _ = app.emit("capture:saved", &capture.id);
+            Ok(capture)
+        })
+        .await
 }
 
 #[tauri::command]
-pub fn capture_region<R: Runtime>(
+// Keep the existing flat IPC arguments; the extra parameter is managed state.
+#[allow(clippy::too_many_arguments)]
+pub async fn capture_region<R: Runtime>(
     state: State<'_, LibraryState>,
+    worker: State<'_, CaptureWorker>,
     app: tauri::AppHandle<R>,
     monitor_id: u32,
     x: u32,
@@ -100,17 +133,23 @@ pub fn capture_region<R: Runtime>(
     w: u32,
     h: u32,
 ) -> Result<Capture> {
-    require_screen_recording()?;
-    let capture = with_hidden_own_windows(&app, &state.db, || {
-        crate::orchestrate::capture_region(&state.db, &state.root, monitor_id, x, y, w, h)
-    })?;
-    let _ = app.emit("capture:saved", &capture.id);
-    Ok(capture)
+    let db = state.db.clone();
+    let root = state.root.clone();
+    worker
+        .run(move || {
+            require_screen_recording(&app)?;
+            let capture = with_hidden_own_windows(&app, &db, || {
+                crate::orchestrate::capture_region(&db, &root, monitor_id, x, y, w, h)
+            })?;
+            let _ = app.emit("capture:saved", &capture.id);
+            Ok(capture)
+        })
+        .await
 }
 
 #[tauri::command]
-pub fn list_capturable_windows() -> Result<Vec<WindowInfo>> {
-    crate::grab::list_capturable_windows()
+pub async fn list_capturable_windows(worker: State<'_, CaptureWorker>) -> Result<Vec<WindowInfo>> {
+    worker.run(crate::grab::list_capturable_windows).await
 }
 
 /// Mint a fresh cache-busting token for one preview write.
@@ -128,49 +167,57 @@ pub struct ScreenPreview {
 }
 
 #[tauri::command]
-pub fn grab_screen_preview<R: Runtime>(
+pub async fn grab_screen_preview<R: Runtime>(
     state: State<'_, LibraryState>,
+    worker: State<'_, CaptureWorker>,
     app: tauri::AppHandle<R>,
     monitor_id: Option<u32>,
 ) -> Result<ScreenPreview> {
-    require_screen_recording()?;
-    // Hide own windows around the grab — same pattern as the three
-    // capture commands above. Without this the preview backdrop the
-    // region overlay shows would include the library/settings/etc.,
-    // making it impossible to draw a region over content underneath.
-    let result = with_hidden_own_windows(&app, &state.db, || {
-        if let Some(monitor_id) = monitor_id {
-            crate::grab::grab_monitor(monitor_id)
-        } else {
-            crate::grab::grab_primary_monitor()
-        }
-    })?;
-    // Preview file lives under `captures/` so it falls inside the
-    // assetProtocol allow scope (`$APPDATA/captures/**`). Tightening the
-    // scope in #84 broke the previous root-of-app-data location: the
-    // overlay backdrop's `convertFileSrc(.preview.png)` URL failed CSP/
-    // scope checks and fell through to a solid black background, which
-    // visually presented as "overlay blocks the images" / blank capture.
-    let dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| crate::CaptureError::Os {
-            message: format!("app data dir: {e}"),
-        })?
-        .join("captures");
-    let preview_path = dir.join(".preview.png");
-    std::fs::create_dir_all(&dir).map_err(|e| crate::CaptureError::Os {
-        message: format!("create dir: {e}"),
-    })?;
-    std::fs::write(&preview_path, &result.png_bytes).map_err(|e| crate::CaptureError::Os {
-        message: format!("write preview: {e}"),
-    })?;
-    Ok(ScreenPreview {
-        path: preview_path.to_string_lossy().into_owned(),
-        width: result.width,
-        height: result.height,
-        token: mint_preview_token(),
-    })
+    let db = state.db.clone();
+    worker
+        .run(move || {
+            require_screen_recording(&app)?;
+            // Hide own windows around the grab — same pattern as the three
+            // capture commands above. Without this the preview backdrop the
+            // region overlay shows would include the library/settings/etc.,
+            // making it impossible to draw a region over content underneath.
+            with_hidden_own_windows(&app, &db, || {
+                let result = if let Some(monitor_id) = monitor_id {
+                    crate::grab::grab_monitor(monitor_id)
+                } else {
+                    crate::grab::grab_primary_monitor()
+                }?;
+                // Preview file lives under `captures/` so it falls inside the
+                // assetProtocol allow scope (`$APPDATA/captures/**`). Tightening the
+                // scope in #84 broke the previous root-of-app-data location: the
+                // overlay backdrop's `convertFileSrc(.preview.png)` URL failed CSP/
+                // scope checks and fell through to a solid black background, which
+                // visually presented as "overlay blocks the images" / blank capture.
+                let dir = app
+                    .path()
+                    .app_data_dir()
+                    .map_err(|e| crate::CaptureError::Os {
+                        message: format!("app data dir: {e}"),
+                    })?
+                    .join("captures");
+                let preview_path = dir.join(".preview.png");
+                std::fs::create_dir_all(&dir).map_err(|e| crate::CaptureError::Os {
+                    message: format!("create dir: {e}"),
+                })?;
+                std::fs::write(&preview_path, &result.png_bytes).map_err(|e| {
+                    crate::CaptureError::Os {
+                        message: format!("write preview: {e}"),
+                    }
+                })?;
+                Ok(ScreenPreview {
+                    path: preview_path.to_string_lossy().into_owned(),
+                    width: result.width,
+                    height: result.height,
+                    token: mint_preview_token(),
+                })
+            })
+        })
+        .await
 }
 
 #[tauri::command]

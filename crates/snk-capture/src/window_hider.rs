@@ -41,7 +41,9 @@ impl<'a, R: Runtime> WindowManager for TauriWindowManager<'a, R> {
 
     fn hide(&self, label: &str) {
         if let Some(win) = self.app.get_webview_window(label) {
-            if let Err(e) = win.hide() {
+            // Setters only enqueue on a worker; the following getter waits for
+            // the event loop to handle the hide before the settle delay begins.
+            if let Err(e) = win.hide().and_then(|()| win.is_visible().map(|_| ())) {
                 warn!(label, error = %e, "failed to hide window for capture");
             }
         }
@@ -49,7 +51,8 @@ impl<'a, R: Runtime> WindowManager for TauriWindowManager<'a, R> {
 
     fn show(&self, label: &str) {
         if let Some(win) = self.app.get_webview_window(label) {
-            if let Err(e) = win.show() {
+            // Do not release capture serialization until restoration is handled.
+            if let Err(e) = win.show().and_then(|()| win.is_visible().map(|_| ())) {
                 warn!(label, error = %e, "failed to restore window after capture");
             }
         }

@@ -12,6 +12,7 @@ pub mod orchestrate;
 pub mod permissions;
 pub mod plugin;
 pub mod window_hider;
+mod worker;
 
 pub use error::{CaptureError, Result};
 pub use foreground::{get_foreground_info, ForegroundInfo};
