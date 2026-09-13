@@ -3,6 +3,7 @@ import { screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { availableMonitors, cursorPosition, getCurrentWindow } from '@tauri-apps/api/window';
+import { LogicalPosition, LogicalSize } from '@tauri-apps/api/dpi';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 
 import { ModalProvider } from '../../components/Modal';
@@ -98,12 +99,15 @@ describe('<LibraryWindow />', () => {
     });
 
     const overlayEmit = vi.fn().mockResolvedValue(undefined);
+    const overlayHide = vi.fn().mockResolvedValue(undefined);
     const overlaySetPosition = vi.fn().mockResolvedValue(undefined);
     const overlaySetSize = vi.fn().mockResolvedValue(undefined);
     vi.mocked(WebviewWindow.getByLabel).mockImplementation(async (label: string) => {
       if (label === 'capture-overlay') {
         return {
           emit: overlayEmit,
+          hide: overlayHide,
+          isVisible: vi.fn().mockResolvedValue(true),
           setPosition: overlaySetPosition,
           setSize: overlaySetSize,
           show: vi.fn().mockResolvedValue(undefined),
@@ -132,9 +136,10 @@ describe('<LibraryWindow />', () => {
       if (cmd === 'plugin:snk-capture|grab_screen_preview') {
         return Promise.resolve({
           path: '/tmp/p.png',
-          width: 1,
-          height: 1,
+          width: 2880,
+          height: 1800,
           token: 'tok-xyz',
+          display: { id: 77, frame: { coordinateSpace: 'logical', x: -1440, y: 100, width: 1440, height: 900 } },
         });
       }
       return Promise.resolve([]);
@@ -145,19 +150,22 @@ describe('<LibraryWindow />', () => {
 
     await act(async () => regionHandler!({ payload: undefined }));
     await waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith('plugin:snk-capture|grab_screen_preview', {
-        monitorId: 1,
-      });
+      expect(invoke).toHaveBeenCalledWith('plugin:snk-capture|grab_screen_preview');
+      expect(overlayHide).toHaveBeenCalledOnce();
+      const grabCall = mockedInvoke.mock.calls.findIndex(([name]) => name === 'plugin:snk-capture|grab_screen_preview');
+      expect(overlayHide.mock.invocationCallOrder[0]).toBeLessThan(mockedInvoke.mock.invocationCallOrder[grabCall]!);
+      expect(availableMonitors).not.toHaveBeenCalled();
+      expect(cursorPosition).not.toHaveBeenCalled();
       expect(WebviewWindow.getByLabel).toHaveBeenCalledWith('capture-overlay');
-      expect(overlaySetPosition).toHaveBeenCalledWith(expect.objectContaining({ x: 1920, y: 0 }));
+      expect(overlaySetPosition).toHaveBeenCalledWith(new LogicalPosition(-1440, 100));
       expect(overlaySetSize).toHaveBeenCalledWith(
-        expect.objectContaining({ width: 2560, height: 1440 }),
+        new LogicalSize(1440, 900),
       );
       expect(overlayEmit).toHaveBeenCalledWith('overlay:preview', {
         path: '/tmp/p.png',
         token: 'tok-xyz',
-        monitorId: 1,
-        scaleFactor: 1.5,
+        width: 2880, height: 1800,
+        display: { id: 77, frame: { coordinateSpace: 'logical', x: -1440, y: 100, width: 1440, height: 900 } },
       });
     });
   });

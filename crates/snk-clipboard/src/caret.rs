@@ -1,15 +1,25 @@
 use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CaretPosition {
-    pub x: i32,
-    pub y: i32,
+    pub x: f64,
+    pub y: f64,
+    pub coordinate_space: &'static str,
 }
 
 /// Last-resort popup origin when neither caret nor cursor APIs return a
 /// usable position — places it near the top-left of the primary screen so
 /// the user can still see and interact with it.
-const POPUP_FALLBACK: CaretPosition = CaretPosition { x: 100, y: 100 };
+const POPUP_FALLBACK: CaretPosition = CaretPosition {
+    x: 100.0,
+    y: 100.0,
+    coordinate_space: if cfg!(target_os = "macos") {
+        "logical"
+    } else {
+        "physical"
+    },
+};
 
 pub fn get_caret_position() -> Option<CaretPosition> {
     #[cfg(target_os = "windows")]
@@ -67,7 +77,11 @@ fn get_caret_windows() -> Option<CaretPosition> {
                 return None;
             }
             let _ = ClientToScreen(info.hwndFocus, &mut pt);
-            return Some(CaretPosition { x: pt.x, y: pt.y });
+            return Some(CaretPosition {
+                x: f64::from(pt.x),
+                y: f64::from(pt.y),
+                coordinate_space: "physical",
+            });
         }
         None
     }
@@ -81,7 +95,11 @@ fn get_cursor_windows() -> Option<CaretPosition> {
     unsafe {
         let mut pt = POINT::default();
         if GetCursorPos(&mut pt).is_ok() {
-            return Some(CaretPosition { x: pt.x, y: pt.y });
+            return Some(CaretPosition {
+                x: f64::from(pt.x),
+                y: f64::from(pt.y),
+                coordinate_space: "physical",
+            });
         }
         None
     }
@@ -103,7 +121,36 @@ fn get_cursor_macos() -> Option<CaretPosition> {
     let event = CGEvent::new(source).ok()?;
     let loc = event.location();
     Some(CaretPosition {
-        x: loc.x as i32,
-        y: loc.y as i32,
+        x: loc.x,
+        y: loc.y,
+        coordinate_space: "logical",
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_anchor_wire_preserves_fractional_logical_points_and_declares_units() {
+        let position = CaretPosition {
+            x: -1440.25,
+            y: 100.5,
+            coordinate_space: "logical",
+        };
+        assert_eq!(
+            serde_json::to_value(position).unwrap(),
+            serde_json::json!({
+                "x": -1440.25, "y": 100.5, "coordinateSpace": "logical"
+            })
+        );
+        assert_eq!(
+            POPUP_FALLBACK.coordinate_space,
+            if cfg!(target_os = "macos") {
+                "logical"
+            } else {
+                "physical"
+            }
+        );
+    }
 }

@@ -16,6 +16,7 @@ export interface ListClipboardQuery {
 }
 
 export interface CaretPosition {
+  coordinateSpace: 'logical' | 'physical';
   x: number;
   y: number;
 }

@@ -49,33 +49,6 @@ pub fn capture_window(
     )
 }
 
-pub fn capture_region(
-    db: &Arc<Db>,
-    library_root: &std::path::Path,
-    monitor_id: u32,
-    x: u32,
-    y: u32,
-    w: u32,
-    h: u32,
-) -> Result<Capture> {
-    let fg = get_foreground_info();
-    let GrabResult {
-        png_bytes,
-        width,
-        height,
-        monitor_name,
-    } = grab::grab_region(monitor_id, x, y, w, h)?;
-    persist(
-        db,
-        library_root,
-        &png_bytes,
-        width,
-        height,
-        Some(monitor_name),
-        fg,
-    )
-}
-
 /// Write a captured PNG to the library on disk and insert the row in SQLite.
 /// Public so it can be unit-tested without a real monitor.
 pub fn persist(

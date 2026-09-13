@@ -18,13 +18,13 @@ export function captureWindow(windowId: number): Promise<Capture> {
 }
 
 export function captureRegion(
-  monitorId: number,
+  previewToken: string,
   x: number,
   y: number,
   w: number,
   h: number,
 ): Promise<Capture> {
-  return invoke<Capture>('plugin:snk-capture|capture_region', { monitorId, x, y, w, h });
+  return invoke<Capture>('plugin:snk-capture|capture_region', { previewToken, x, y, w, h });
 }
 
 export function listCapturableWindows(): Promise<WindowInfo[]> {
@@ -36,6 +36,16 @@ export interface ScreenPreview {
   width: number;
   height: number;
   token: string;
+  display: {
+    id: number;
+    frame: {
+      coordinateSpace: 'logical' | 'physical';
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    };
+  };
 }
 
 export function grabScreenPreview(monitorId?: number): Promise<ScreenPreview> {

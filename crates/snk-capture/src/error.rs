@@ -12,6 +12,12 @@ pub enum CaptureError {
     #[error("no monitors found")]
     NoMonitors,
 
+    #[error("monitor not found: {id}")]
+    MonitorNotFound { id: u32 },
+
+    #[error("preview expired; start a new region capture")]
+    StalePreview,
+
     #[error("window not found: {id}")]
     WindowNotFound { id: u32 },
 
