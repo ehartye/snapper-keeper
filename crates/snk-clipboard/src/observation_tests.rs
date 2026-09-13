@@ -150,7 +150,7 @@ fn pending_and_failed_generation_retry_indefinitely_with_bounded_backoff() {
     assert!(poll_once(&mut source, &mut gate, &mut state, ms(11500), saved).is_some());
 }
 #[test]
-#[serial_test::serial]
+#[serial_test::serial(skip_set)]
 fn torn_snapshot_does_not_consume_own_write_or_mutate_hash_or_persist() {
     let mut source = FakeSource {
         after: Some(1),
@@ -231,7 +231,7 @@ fn failed_retry_does_not_reset_worker_hash_again() {
     );
 }
 #[test]
-#[serial_test::serial]
+#[serial_test::serial(skip_set)]
 fn new_generation_same_content_reaches_existing_row_after_own_write() {
     let tmp = tempfile::tempdir().unwrap();
     let db = Db::open(&tmp.path().join("db")).unwrap();

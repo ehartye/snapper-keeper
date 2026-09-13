@@ -1,5 +1,6 @@
 //! Coherent macOS pasteboard observations. `changeCount` is an ownership generation,
 //! not writer identity; delayed content can become readable without another change.
+//! After completion, mutations that retain that same generation are not re-observed.
 use crate::{
     sensitivity::SensitivityProbe,
     source_app::SourceApp,

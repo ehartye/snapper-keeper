@@ -102,7 +102,7 @@ pub fn start_watcher(db: Arc<Db>, library_root: std::path::PathBuf, sink: Arc<dy
 
 pub(crate) use crate::polling::start_polling;
 
-/// Pure decision cycle. The probe + source-app lookup are injected so
+/// One decision cycle. The probe + source-app lookup are injected so
 /// unit tests can run this without touching the real OS clipboard.
 pub(crate) fn worker_step(
     event: ClipboardEvent,

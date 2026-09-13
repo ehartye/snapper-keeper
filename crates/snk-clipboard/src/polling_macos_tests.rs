@@ -10,7 +10,11 @@ use std::time::Duration;
 struct NamedBoard(Retained<NSPasteboard>);
 impl Drop for NamedBoard {
     fn drop(&mut self) {
-        self.0.releaseGlobally();
+        // objc2-app-kit omits this legacy selector. It takes no arguments and returns void;
+        // only this fixture's uniquely named pasteboard is released from the pasteboard server.
+        unsafe {
+            let _: () = objc2::msg_send![&*self.0, releaseGlobally];
+        }
     }
 }
 struct NamedReader<'a> {
@@ -32,7 +36,7 @@ impl PayloadReader for NamedReader<'_> {
 #[test]
 fn named_pasteboard_delayed_data_retries_same_generation_and_recopy_deduplicates() {
     objc2::rc::autoreleasepool(|_| {
-        let board = NamedBoard(NSPasteboard::withUniqueName());
+        let board = NamedBoard(NSPasteboard::pasteboardWithUniqueName());
         let text_type = NSString::from_str("public.utf8-plain-text");
         let types = NSArray::from_slice(&[&*text_type]);
         // No provider/owner object is supplied; the fixture explicitly fulfills the declaration.
@@ -115,7 +119,7 @@ fn named_pasteboard_delayed_data_retries_same_generation_and_recopy_deduplicates
 #[test]
 fn named_pasteboard_privacy_uses_the_observed_board() {
     objc2::rc::autoreleasepool(|_| {
-        let board = NamedBoard(NSPasteboard::withUniqueName());
+        let board = NamedBoard(NSPasteboard::pasteboardWithUniqueName());
         let text_type = NSString::from_str("public.utf8-plain-text");
         let concealed = NSString::from_str("org.nspasteboard.ConcealedType");
         let types = NSArray::from_slice(&[&*text_type, &*concealed]);

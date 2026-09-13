@@ -245,7 +245,7 @@ fn duplicate_image_event_deduplicates() {
     assert_eq!(second, StepResult::Skipped(SkipReason::DuplicateHash));
 }
 #[test]
-#[serial_test::serial]
+#[serial_test::serial(skip_set)]
 fn own_write_remains_suppressed_after_one_shot_token_is_consumed() {
     let (tmp, db) = fresh_db();
     let mut state = WatcherState::new();
