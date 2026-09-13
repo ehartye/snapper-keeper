@@ -53,11 +53,16 @@ pub(crate) enum StepResult {
 /// Shared per-thread state the watcher carries across cycles.
 pub(crate) struct WatcherState {
     pub last_hash: Option<String>,
+    // At most one unpublished image (including its temporary write) can need cleanup.
+    pending_image: Option<std::path::PathBuf>,
 }
 
 impl WatcherState {
     pub fn new() -> Self {
-        Self { last_hash: None }
+        Self {
+            last_hash: None,
+            pending_image: None,
+        }
     }
 }
 
@@ -95,54 +100,7 @@ pub fn start_watcher(db: Arc<Db>, library_root: std::path::PathBuf, sink: Arc<dy
     }
 }
 
-pub(crate) fn start_polling(
-    db: Arc<Db>,
-    library_root: std::path::PathBuf,
-    interval: std::time::Duration,
-    sink: Arc<dyn HealthSink>,
-) {
-    use crate::sensitivity::OsProbe;
-    use crate::source_app;
-
-    std::thread::spawn(move || {
-        // Retry-with-backoff instead of dying silently on the first failure;
-        // reports availability through the sink so the UI can show a banner.
-        let mut clip = crate::health::open_clipboard_with_backoff(&*sink);
-        let mut state = WatcherState::new();
-        let probe = OsProbe;
-
-        loop {
-            std::thread::sleep(interval);
-            // Skip-set check moved into worker_step (content-hash based,
-            // see SkipReason::OwnWrite). The polling loop no longer
-            // needs its own skip gate.
-
-            // Try text first; image only if text is absent.
-            let event = if let Ok(t) = clip.get_text() {
-                if t.is_empty() {
-                    continue;
-                }
-                ClipboardEvent::Text(t)
-            } else if let Ok(img) = clip.get_image() {
-                if img.bytes.is_empty() {
-                    continue;
-                }
-                let width = img.width;
-                let height = img.height;
-                ClipboardEvent::Image {
-                    bytes: img.bytes.into_owned(),
-                    width,
-                    height,
-                }
-            } else {
-                continue;
-            };
-
-            let source = source_app::current();
-            let _ = worker_step(event, &mut state, &db, &library_root, &probe, source);
-        }
-    });
-}
+pub(crate) use crate::polling::start_polling;
 
 /// Pure decision cycle. The probe + source-app lookup are injected so
 /// unit tests can run this without touching the real OS clipboard.
@@ -154,122 +112,146 @@ pub(crate) fn worker_step(
     probe: &dyn SensitivityProbe,
     source: Option<SourceApp>,
 ) -> StepResult {
-    // First gate: content hash matches a recent self-emission? Skip.
-    // This replaces the previous SKIP_NEXT AtomicBool which could only
-    // skip ONE next event regardless of which event matched.
-    let event_bytes: &[u8] = match &event {
-        ClipboardEvent::Text(t) => t.as_bytes(),
+    worker_step_with_store(event, state, &LibraryStore(db), library_root, probe, source)
+}
+
+/// Persistence boundary allows failures to be exercised without reaching into library tables.
+trait Store {
+    fn blocked(&self, source: &SourceApp) -> bool;
+    fn find(&self, hash: &str) -> snk_library::Result<Option<String>>;
+    fn bump(&self, id: &str) -> snk_library::Result<()>;
+    fn insert(&self, item: NewClipboardItem) -> snk_library::Result<String>;
+    fn evict(&self);
+}
+
+struct LibraryStore<'a>(&'a Db);
+impl Store for LibraryStore<'_> {
+    fn blocked(&self, source: &SourceApp) -> bool {
+        blocklist::matches(self.0, source)
+    }
+    fn find(&self, hash: &str) -> snk_library::Result<Option<String>> {
+        snk_library::clipboard::find_by_hash(self.0, hash).map(|item| item.map(|item| item.id))
+    }
+    fn bump(&self, id: &str) -> snk_library::Result<()> {
+        snk_library::clipboard::bump_timestamp(self.0, id)
+    }
+    fn insert(&self, item: NewClipboardItem) -> snk_library::Result<String> {
+        snk_library::clipboard::insert(self.0, item).map(|item| item.id)
+    }
+    fn evict(&self) {
+        let _ = snk_library::clipboard::evict_unpinned(self.0, MAX_UNPINNED);
+    }
+}
+
+fn worker_step_with_store(
+    event: ClipboardEvent,
+    state: &mut WatcherState,
+    store: &dyn Store,
+    library_root: &Path,
+    probe: &dyn SensitivityProbe,
+    source: Option<SourceApp>,
+) -> StepResult {
+    let hash = hash_of_event(&event);
+    let event_bytes = match &event {
+        ClipboardEvent::Text(text) => text.as_bytes(),
         ClipboardEvent::Image { bytes, .. } => bytes,
     };
-    let event_hash_u64 = skip_set::hash_content(event_bytes);
-    if skip_set::should_skip(event_hash_u64) {
+    if skip_set::should_skip(skip_set::hash_content(event_bytes)) {
         debug!("skipping own clipboard write (hash match)");
+        state.last_hash = Some(hash);
         return StepResult::Skipped(SkipReason::OwnWrite);
     }
-
     if probe.is_sensitive() {
-        // Record the hash so a follow-up identical observation doesn't
-        // re-run the whole pipeline. We compute it cheaply from the event.
-        state.last_hash = Some(hash_of_event(&event));
+        state.last_hash = Some(hash);
         return StepResult::Skipped(SkipReason::SensitiveFlag);
     }
-
     if let Some(ref src) = source {
-        if blocklist::matches(db, src) {
-            state.last_hash = Some(hash_of_event(&event));
+        if store.blocked(src) {
+            state.last_hash = Some(hash);
             return StepResult::Skipped(SkipReason::AppBlocked(src.identifier.clone()));
         }
     }
-
-    match event {
-        ClipboardEvent::Text(text) => {
-            if text.is_empty() {
-                return StepResult::Skipped(SkipReason::EmptyContent);
+    if event_bytes.is_empty() {
+        return StepResult::Skipped(SkipReason::EmptyContent);
+    }
+    if state.last_hash.as_deref() == Some(&hash) {
+        return StepResult::Skipped(SkipReason::DuplicateHash);
+    }
+    // A failure is never acknowledged: the same generation can retry unchanged bytes.
+    let failed = || StepResult::Skipped(SkipReason::PersistFailed);
+    match store.find(&hash) {
+        Err(_) => return failed(),
+        Ok(Some(existing_id)) => {
+            if store.bump(&existing_id).is_err() {
+                return failed();
             }
-            let hash = crate::hasher::hash_text(&text);
-            if state.last_hash.as_deref() == Some(&hash) {
-                return StepResult::Skipped(SkipReason::DuplicateHash);
-            }
-            state.last_hash = Some(hash.clone());
-
-            match snk_library::clipboard::find_by_hash(db, &hash) {
-                Ok(Some(existing)) => {
-                    let _ = snk_library::clipboard::bump_timestamp(db, &existing.id);
-                    StepResult::DedupedTo {
-                        existing_id: existing.id,
-                    }
-                }
-                _ => {
-                    let new_item = NewClipboardItem {
-                        kind: ClipboardItemKind::Text,
-                        text_content: Some(text),
-                        file_path: None,
-                        content_hash: hash,
-                        source_app: source.as_ref().map(|s| s.identifier.clone()),
-                        source_window_title: None,
-                    };
-                    match snk_library::clipboard::insert(db, new_item) {
-                        Ok(item) => {
-                            let _ = snk_library::clipboard::evict_unpinned(db, MAX_UNPINNED);
-                            StepResult::Saved { item_id: item.id }
-                        }
-                        Err(_) => StepResult::Skipped(SkipReason::PersistFailed),
-                    }
-                }
-            }
+            state.last_hash = Some(hash);
+            return StepResult::DedupedTo { existing_id };
         }
+        Ok(None) => {}
+    }
+    let (kind, text_content, file_path) = match event {
+        ClipboardEvent::Text(text) => (ClipboardItemKind::Text, Some(text), None),
         ClipboardEvent::Image {
             bytes,
             width,
             height,
         } => {
-            if bytes.is_empty() {
-                return StepResult::Skipped(SkipReason::EmptyContent);
+            // Never allocate another file while the previous failed attempt still exists.
+            if !cleanup_pending_image(state, library_root) {
+                return failed();
             }
-            // Hash the raw RGBA bytes — consistent with skip_set usage in
-            // paste_item, which also hashes the decoded RGBA before set_image.
-            let hash = crate::hasher::hash_image_bytes(&bytes);
-            if state.last_hash.as_deref() == Some(&hash) {
-                return StepResult::Skipped(SkipReason::DuplicateHash);
+            let Some(png) = encode_rgba_to_png(&bytes, width, height) else {
+                return failed();
+            };
+            let relative = files::clipboard_image_relative_path(&uuid::Uuid::now_v7());
+            state.pending_image = Some(relative.clone());
+            if files::write_atomic(library_root, &relative, &png).is_err() {
+                cleanup_pending_image(state, library_root);
+                return failed();
             }
-            state.last_hash = Some(hash.clone());
+            (ClipboardItemKind::Image, None, Some(relative))
+        }
+    };
+    let image = file_path.is_some();
+    let item = NewClipboardItem {
+        kind,
+        text_content,
+        file_path,
+        content_hash: hash.clone(),
+        source_app: source.map(|source| source.identifier),
+        source_window_title: None,
+    };
+    match store.insert(item) {
+        Ok(item_id) => {
+            if image {
+                state.pending_image = None;
+            }
+            state.last_hash = Some(hash);
+            store.evict();
+            StepResult::Saved { item_id }
+        }
+        Err(_) => {
+            if image {
+                cleanup_pending_image(state, library_root);
+            }
+            failed()
+        }
+    }
+}
 
-            match snk_library::clipboard::find_by_hash(db, &hash) {
-                Ok(Some(existing)) => {
-                    let _ = snk_library::clipboard::bump_timestamp(db, &existing.id);
-                    StepResult::DedupedTo {
-                        existing_id: existing.id,
-                    }
-                }
-                _ => {
-                    let id = uuid::Uuid::now_v7();
-                    let relative = files::clipboard_image_relative_path(&id);
-                    // Encode raw RGBA → PNG so stored files are valid images
-                    // (usable by paste_item and the library "View image" feature).
-                    let png_bytes = match encode_rgba_to_png(&bytes, width, height) {
-                        Some(b) => b,
-                        None => return StepResult::Skipped(SkipReason::PersistFailed),
-                    };
-                    if files::write_atomic(library_root, &relative, &png_bytes).is_err() {
-                        return StepResult::Skipped(SkipReason::PersistFailed);
-                    }
-                    let new_item = NewClipboardItem {
-                        kind: ClipboardItemKind::Image,
-                        text_content: None,
-                        file_path: Some(relative),
-                        content_hash: hash,
-                        source_app: source.as_ref().map(|s| s.identifier.clone()),
-                        source_window_title: None,
-                    };
-                    match snk_library::clipboard::insert(db, new_item) {
-                        Ok(item) => {
-                            let _ = snk_library::clipboard::evict_unpinned(db, MAX_UNPINNED);
-                            StepResult::Saved { item_id: item.id }
-                        }
-                        Err(_) => StepResult::Skipped(SkipReason::PersistFailed),
-                    }
-                }
-            }
+fn cleanup_pending_image(state: &mut WatcherState, root: &Path) -> bool {
+    let Some(relative) = state.pending_image.as_ref() else {
+        return true;
+    };
+    match files::remove_unpublished_clipboard_image(root, relative) {
+        Ok(()) => {
+            state.pending_image = None;
+            true
+        }
+        Err(error) => {
+            tracing::warn!(%error, "failed clipboard image cleanup; retaining pending path");
+            false
         }
     }
 }
@@ -305,251 +287,5 @@ pub(crate) fn encode_rgba_to_png(bytes: &[u8], width: usize, height: usize) -> O
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::sensitivity::FakeProbe;
-    use crate::source_app::{SourceApp, SourceAppKind};
-    use serde_json::json;
-    use snk_library::settings;
-
-    fn fresh_db() -> (tempfile::TempDir, Db) {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("sk.db");
-        let db = Db::open(&path).unwrap();
-        (dir, db)
-    }
-
-    #[test]
-    fn sensitive_flag_skips_without_persisting() {
-        let (tmp, db) = fresh_db();
-        let mut state = WatcherState::new();
-        let result = worker_step(
-            ClipboardEvent::Text("secret".into()),
-            &mut state,
-            &db,
-            tmp.path(),
-            &FakeProbe { answer: true },
-            None,
-        );
-        assert_eq!(result, StepResult::Skipped(SkipReason::SensitiveFlag));
-        assert!(state.last_hash.is_some(), "last_hash should be set on skip");
-
-        let items =
-            snk_library::clipboard::list(&db, snk_library::ListClipboardQuery::default()).unwrap();
-        assert_eq!(
-            items.len(),
-            0,
-            "no row should be inserted on sensitive skip"
-        );
-    }
-
-    #[test]
-    fn blocked_app_skips_without_persisting() {
-        let (tmp, db) = fresh_db();
-        settings::set(
-            &db,
-            "clipboard.app_blocklist",
-            &json!([{
-                "identifier": "1password.exe",
-                "display_name": "1Password",
-                "kind": "windows_exe"
-            }]),
-        )
-        .unwrap();
-        let src = SourceApp {
-            identifier: "1password.exe".into(),
-            display_name: "1Password".into(),
-            kind: SourceAppKind::WindowsExe,
-        };
-        let mut state = WatcherState::new();
-        let result = worker_step(
-            ClipboardEvent::Text("password123".into()),
-            &mut state,
-            &db,
-            tmp.path(),
-            &FakeProbe { answer: false },
-            Some(src.clone()),
-        );
-        assert_eq!(
-            result,
-            StepResult::Skipped(SkipReason::AppBlocked(src.identifier))
-        );
-        let items =
-            snk_library::clipboard::list(&db, snk_library::ListClipboardQuery::default()).unwrap();
-        assert_eq!(items.len(), 0);
-    }
-
-    #[test]
-    fn allowed_text_event_is_saved_with_source_app() {
-        let (tmp, db) = fresh_db();
-        let src = SourceApp {
-            identifier: "code.exe".into(),
-            display_name: "Visual Studio Code".into(),
-            kind: SourceAppKind::WindowsExe,
-        };
-        let mut state = WatcherState::new();
-        let result = worker_step(
-            ClipboardEvent::Text("hello".into()),
-            &mut state,
-            &db,
-            tmp.path(),
-            &FakeProbe { answer: false },
-            Some(src.clone()),
-        );
-        match result {
-            StepResult::Saved { item_id } => {
-                let stored = snk_library::clipboard::get(&db, &item_id).unwrap();
-                assert_eq!(stored.source_app, Some(src.identifier));
-            }
-            other => panic!("expected Saved, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn duplicate_hash_skips_without_re_inserting() {
-        let (tmp, db) = fresh_db();
-        let mut state = WatcherState::new();
-        let probe = FakeProbe { answer: false };
-
-        let first = worker_step(
-            ClipboardEvent::Text("dup".into()),
-            &mut state,
-            &db,
-            tmp.path(),
-            &probe,
-            None,
-        );
-        assert!(matches!(first, StepResult::Saved { .. }));
-
-        let second = worker_step(
-            ClipboardEvent::Text("dup".into()),
-            &mut state,
-            &db,
-            tmp.path(),
-            &probe,
-            None,
-        );
-        assert_eq!(second, StepResult::Skipped(SkipReason::DuplicateHash));
-    }
-
-    #[test]
-    fn empty_text_is_skipped() {
-        let (tmp, db) = fresh_db();
-        let mut state = WatcherState::new();
-        let result = worker_step(
-            ClipboardEvent::Text(String::new()),
-            &mut state,
-            &db,
-            tmp.path(),
-            &FakeProbe { answer: false },
-            None,
-        );
-        assert_eq!(result, StepResult::Skipped(SkipReason::EmptyContent));
-    }
-
-    /// Build a minimal 2×2 RGBA byte vec (4 bytes per pixel, solid red).
-    fn red_2x2_rgba() -> Vec<u8> {
-        [255, 0, 0, 255].repeat(4) // 16 bytes total: 4 pixels × 4 bytes/pixel (RGBA)
-    }
-
-    #[test]
-    fn encode_rgba_to_png_produces_valid_png() {
-        let rgba = red_2x2_rgba();
-        let png = encode_rgba_to_png(&rgba, 2, 2).expect("encode should succeed");
-        // PNG magic bytes: 0x89 50 4E 47 0D 0A 1A 0A
-        assert_eq!(
-            &png[0..8],
-            b"\x89PNG\r\n\x1a\n",
-            "should start with PNG header"
-        );
-    }
-
-    #[test]
-    fn encode_then_decode_round_trips_pixels() {
-        let rgba = red_2x2_rgba();
-        let png = encode_rgba_to_png(&rgba, 2, 2).expect("encode");
-        let img = image::load_from_memory(&png).expect("decode");
-        let decoded = img.to_rgba8().into_raw();
-        assert_eq!(decoded, rgba, "decoded pixels must match original RGBA");
-    }
-
-    #[test]
-    fn encode_rgba_to_png_rejects_mismatched_dimensions() {
-        // 3 bytes cannot form a 2×2 RGBA image (needs 16 bytes).
-        let result = encode_rgba_to_png(&[1, 2, 3], 2, 2);
-        assert!(result.is_none(), "should return None for bad dimensions");
-    }
-
-    #[test]
-    fn image_event_is_saved_as_valid_png_on_disk() {
-        let (tmp, db) = fresh_db();
-        let mut state = WatcherState::new();
-        let rgba = red_2x2_rgba();
-        let result = worker_step(
-            ClipboardEvent::Image {
-                bytes: rgba,
-                width: 2,
-                height: 2,
-            },
-            &mut state,
-            &db,
-            tmp.path(),
-            &FakeProbe { answer: false },
-            None,
-        );
-        let item_id = match result {
-            StepResult::Saved { item_id } => item_id,
-            other => panic!("expected Saved, got {other:?}"),
-        };
-
-        let item = snk_library::clipboard::get(&db, &item_id).unwrap();
-        assert_eq!(item.kind, snk_library::clipboard::ClipboardItemKind::Image);
-
-        // The file must exist and contain a valid PNG.
-        let file_path = item.file_path.expect("image item must have file_path");
-        let full = tmp.path().join(file_path);
-        assert!(full.exists(), "PNG file should be on disk");
-        let bytes = std::fs::read(&full).unwrap();
-        assert_eq!(
-            &bytes[0..8],
-            b"\x89PNG\r\n\x1a\n",
-            "stored file must be a PNG"
-        );
-    }
-
-    #[test]
-    fn duplicate_image_event_deduplicates() {
-        let (tmp, db) = fresh_db();
-        let mut state = WatcherState::new();
-        let rgba = red_2x2_rgba();
-
-        let first = worker_step(
-            ClipboardEvent::Image {
-                bytes: rgba.clone(),
-                width: 2,
-                height: 2,
-            },
-            &mut state,
-            &db,
-            tmp.path(),
-            &FakeProbe { answer: false },
-            None,
-        );
-        assert!(matches!(first, StepResult::Saved { .. }));
-
-        // Same pixels again — should be skipped as DuplicateHash, not insert a second row.
-        let second = worker_step(
-            ClipboardEvent::Image {
-                bytes: rgba,
-                width: 2,
-                height: 2,
-            },
-            &mut state,
-            &db,
-            tmp.path(),
-            &FakeProbe { answer: false },
-            None,
-        );
-        assert_eq!(second, StepResult::Skipped(SkipReason::DuplicateHash));
-    }
-}
+#[path = "watcher_tests.rs"]
+mod tests;

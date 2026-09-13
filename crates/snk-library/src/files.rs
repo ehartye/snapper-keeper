@@ -47,6 +47,35 @@ pub fn write_atomic(library_root: &Path, relative: &Path, bytes: &[u8]) -> Resul
     Ok(full)
 }
 
+/// Remove only a newly allocated, unpublished clipboard PNG and its atomic-write temporary.
+/// Callers must never pass paths belonging to successfully inserted library items.
+pub fn remove_unpublished_clipboard_image(library_root: &Path, relative: &Path) -> Result<()> {
+    use std::path::Component;
+    if !relative.starts_with("clipboard")
+        || relative.extension() != Some(std::ffi::OsStr::new("png"))
+        || relative
+            .components()
+            .any(|part| !matches!(part, Component::Normal(_)))
+    {
+        return Err(crate::LibraryError::io(
+            relative,
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "expected a generated relative clipboard PNG path",
+            ),
+        ));
+    }
+    let full = library_root.join(relative);
+    for path in [full.with_extension("png.tmp"), full] {
+        match std::fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(crate::LibraryError::io(path, error)),
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -105,5 +134,31 @@ mod tests {
         let p = capture_relative_path(&id, "jpg");
         let fname = p.file_name().unwrap().to_string_lossy().into_owned();
         assert_eq!(fname, format!("{id}.jpg"));
+    }
+    #[test]
+    fn cleanup_removes_unpublished_png_and_partial_write_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let relative = clipboard_image_relative_path(&Uuid::now_v7());
+        let full = write_atomic(dir.path(), &relative, b"png").unwrap();
+        std::fs::write(full.with_extension("png.tmp"), b"partial").unwrap();
+        let sibling = full.with_file_name("keep.png");
+        std::fs::write(&sibling, b"keep").unwrap();
+        remove_unpublished_clipboard_image(dir.path(), &relative).unwrap();
+        assert!(!full.exists());
+        assert!(!full.with_extension("png.tmp").exists());
+        assert!(sibling.exists());
+        remove_unpublished_clipboard_image(dir.path(), &relative).unwrap();
+    }
+    #[test]
+    fn cleanup_rejects_paths_outside_clipboard() {
+        let dir = tempfile::tempdir().unwrap();
+        for relative in [
+            "../victim.png",
+            "clipboard/../victim.png",
+            "captures/victim.png",
+            "clipboard/x.txt",
+        ] {
+            assert!(remove_unpublished_clipboard_image(dir.path(), Path::new(relative)).is_err());
+        }
     }
 }

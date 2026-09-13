@@ -100,7 +100,8 @@ pub fn insert(db: &Db, new: NewClipboardItem) -> Result<ClipboardItem> {
         .map(|s| s.to_string());
 
     db.with_conn(|conn| {
-        conn.execute(
+        let tx = conn.unchecked_transaction()?;
+        tx.execute(
             "INSERT INTO clipboard_items
                 (id, kind, text_content, file_path, content_hash, source_app, source_window_title, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -115,16 +116,11 @@ pub fn insert(db: &Db, new: NewClipboardItem) -> Result<ClipboardItem> {
                 created_at,
             ],
         )?;
+        crate::search::index_clipboard_with_conn(&tx, &id, new.text_content.as_deref(),
+            new.source_app.as_deref(), new.source_window_title.as_deref())?;
+        tx.commit()?;
         Ok(())
     })?;
-
-    crate::search::index_clipboard(
-        db,
-        &id,
-        new.text_content.as_deref(),
-        new.source_app.as_deref(),
-        new.source_window_title.as_deref(),
-    )?;
 
     Ok(ClipboardItem {
         id,
@@ -408,5 +404,16 @@ mod tests {
         assert!(ids.contains(&a.id.as_str())); // pinned, kept
         assert!(ids.contains(&c.id.as_str())); // newest unpinned, kept
         assert!(!ids.contains(&b.id.as_str())); // oldest unpinned, evicted
+    }
+    #[test]
+    fn indexing_failure_rolls_back_clipboard_row() {
+        let (_tmp, db) = fresh_db();
+        db.with_conn(|conn| {
+            conn.execute_batch("DROP TABLE clipboard_fts")?;
+            Ok(())
+        })
+        .unwrap();
+        assert!(insert(&db, sample_item("failed-index")).is_err());
+        assert!(find_by_hash(&db, "failed-index").unwrap().is_none());
     }
 }

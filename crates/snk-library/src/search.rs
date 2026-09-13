@@ -53,22 +53,32 @@ pub fn index_clipboard(
     window_title: Option<&str>,
 ) -> Result<()> {
     db.with_conn(|conn| {
-        conn.execute(
-            "DELETE FROM clipboard_fts WHERE clipboard_id = ?1",
-            [clipboard_id],
-        )?;
-        conn.execute(
-            "INSERT INTO clipboard_fts (clipboard_id, text_content, source_app, window_title)
-             VALUES (?1, ?2, ?3, ?4)",
-            rusqlite::params![
-                clipboard_id,
-                text_content.unwrap_or(""),
-                source_app.unwrap_or(""),
-                window_title.unwrap_or(""),
-            ],
-        )?;
-        Ok(())
+        index_clipboard_with_conn(conn, clipboard_id, text_content, source_app, window_title)
     })
+}
+
+pub(crate) fn index_clipboard_with_conn(
+    conn: &rusqlite::Connection,
+    clipboard_id: &str,
+    text_content: Option<&str>,
+    source_app: Option<&str>,
+    window_title: Option<&str>,
+) -> Result<()> {
+    conn.execute(
+        "DELETE FROM clipboard_fts WHERE clipboard_id = ?1",
+        [clipboard_id],
+    )?;
+    conn.execute(
+        "INSERT INTO clipboard_fts (clipboard_id, text_content, source_app, window_title)
+             VALUES (?1, ?2, ?3, ?4)",
+        rusqlite::params![
+            clipboard_id,
+            text_content.unwrap_or(""),
+            source_app.unwrap_or(""),
+            window_title.unwrap_or(""),
+        ],
+    )?;
+    Ok(())
 }
 
 pub fn search(db: &Db, query: &str, limit: u32) -> Result<Vec<SearchResult>> {

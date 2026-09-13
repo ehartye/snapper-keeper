@@ -11,6 +11,7 @@ pub mod permissions;
 mod platform;
 pub mod platform_watcher;
 pub mod plugin;
+mod polling;
 pub mod sensitivity;
 pub mod skip_set;
 pub mod source_app;
