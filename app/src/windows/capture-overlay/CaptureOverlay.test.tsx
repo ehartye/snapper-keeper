@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { ScreenPreview } from '@snk/capture';
 import { CaptureOverlay } from './CaptureOverlay';
 
@@ -66,7 +67,33 @@ describe('preview snapshot readiness', () => {
     fireEvent.load(oldImage);
     await act(async () => drag(container));
     expect(invoke).not.toHaveBeenCalled();
-    expect(screen.getByText(/Loading preview/)).toBeInTheDocument();
+    expect(screen.getByText('Loading preview... | Esc to cancel')).toBeInTheDocument();
+  });
+
+  it('does not show an old save toolbar over a newly arrived preview', async () => {
+    let finishSave!: (value: { id: string }) => void;
+    vi.mocked(invoke).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishSave = resolve;
+        }),
+    );
+    const { container } = render(<CaptureOverlay />);
+    await act(async () => receive({ payload: preview('A') }));
+    const img = container.querySelector('img')!;
+    vi.spyOn(img, 'getBoundingClientRect').mockReturnValue({
+      left: 10,
+      top: 10,
+      width: 200,
+      height: 100,
+    } as DOMRect);
+    fireEvent.load(img);
+    await act(async () => drag(container));
+    expect(invoke).toHaveBeenCalledOnce();
+    await act(async () => receive({ payload: preview('B') }));
+    await act(async () => finishSave({ id: 'saved-A' }));
+    expect(WebviewWindow.getByLabel).not.toHaveBeenCalled();
+    expect(container.querySelector('img')!.src).toContain('v=B');
   });
 
   it('explains an expired snapshot instead of silently losing the selection', async () => {

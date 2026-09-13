@@ -54,13 +54,21 @@ export function CaptureOverlay() {
     setReady(false);
     const win = getCurrentWindow();
     await win.hide();
+    if (activeToken.current !== token) return;
     try {
       const capture = await captureRegion(token, pixels.x, pixels.y, pixels.w, pixels.h);
+      // Saving remains job-owned, but a completed older save must not interrupt
+      // a replacement preview with its toolbar. Recheck across every UI await.
+      if (activeToken.current !== token) return;
       const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+      if (activeToken.current !== token) return;
       const toolbar = await WebviewWindow.getByLabel('capture-toolbar');
+      if (activeToken.current !== token) return;
       if (toolbar) {
         await toolbar.emit('toolbar:show', { captureId: capture.id });
+        if (activeToken.current !== token) return;
         await toolbar.show();
+        if (activeToken.current !== token) return;
         await toolbar.setFocus();
       }
     } catch (e) {
@@ -73,6 +81,7 @@ export function CaptureOverlay() {
           : 'Could not save this region. Press Esc and try again.',
       );
       await win.show();
+      if (activeToken.current !== token) return;
       await win.setFocus();
     }
   };
@@ -154,7 +163,7 @@ export function CaptureOverlay() {
       )}
       <div className="fixed top-4 left-1/2 -translate-x-1/2 text-white text-sm bg-black/60 px-3 py-1 rounded z-20">
         {error ??
-          (ready ? 'Drag to select region � Esc to cancel' : 'Loading preview� � Esc to cancel')}
+          (ready ? 'Drag to select region | Esc to cancel' : 'Loading preview... | Esc to cancel')}
       </div>
     </div>
   );
