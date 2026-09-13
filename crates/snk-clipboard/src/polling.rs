@@ -73,8 +73,10 @@ pub(crate) fn start_polling(
         loop {
             // Each Cocoa observation owns a pool; no autoreleased payload survives sleep.
             objc2::rc::autoreleasepool(|_| {
+                let pasteboard = objc2_app_kit::NSPasteboard::generalPasteboard();
                 let mut source = MacSource {
                     clipboard: &mut clip,
+                    pasteboard: &pasteboard,
                 };
                 poll_once(
                     &mut source,
@@ -92,17 +94,20 @@ pub(crate) fn start_polling(
 }
 
 #[cfg(target_os = "macos")]
-struct MacSource<'a> {
-    clipboard: &'a mut arboard::Clipboard,
+struct MacSource<'a, R> {
+    clipboard: &'a mut R,
+    pasteboard: &'a objc2_app_kit::NSPasteboard,
 }
 
 #[cfg(target_os = "macos")]
-impl crate::observation::ObservationSource for MacSource<'_> {
+impl<R: crate::observation::PayloadReader> crate::observation::ObservationSource
+    for MacSource<'_, R>
+{
     fn generation(&mut self) -> isize {
-        objc2_app_kit::NSPasteboard::generalPasteboard().changeCount()
+        self.pasteboard.changeCount()
     }
     fn sensitive(&mut self) -> bool {
-        crate::sensitivity::is_sensitive()
+        crate::platform::is_sensitive_pasteboard(self.pasteboard)
     }
     fn event(&mut self) -> Option<ClipboardEvent> {
         crate::observation::read_payload(self.clipboard)
@@ -127,3 +132,7 @@ impl crate::observation::PayloadReader for arboard::Clipboard {
         })
     }
 }
+
+#[cfg(all(test, target_os = "macos"))]
+#[path = "polling_macos_tests.rs"]
+mod macos_tests;

@@ -15,6 +15,10 @@ const CONCEALED_TYPES: &[&str] = &[
 
 pub(crate) fn is_sensitive() -> bool {
     let pasteboard: Retained<NSPasteboard> = NSPasteboard::generalPasteboard();
+    is_sensitive_pasteboard(&pasteboard)
+}
+
+pub(crate) fn is_sensitive_pasteboard(pasteboard: &NSPasteboard) -> bool {
     let Some(types) = pasteboard.types() else {
         return false;
     };
