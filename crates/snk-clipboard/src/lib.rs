@@ -6,11 +6,14 @@ pub mod commands;
 pub mod error;
 pub mod hasher;
 pub mod health;
+#[cfg(any(target_os = "macos", test))]
+mod observation;
 pub mod paste;
 pub mod permissions;
 mod platform;
 pub mod platform_watcher;
 pub mod plugin;
+mod polling;
 pub mod sensitivity;
 pub mod skip_set;
 pub mod source_app;
