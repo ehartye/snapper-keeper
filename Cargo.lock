@@ -4358,6 +4358,7 @@ name = "snk-capture"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "core-graphics 0.24.0",
  "image",
  "objc2",
  "serde",
@@ -4370,6 +4371,7 @@ dependencies = [
  "tracing",
  "ts-rs",
  "uuid",
+ "windows 0.61.3",
  "xcap",
 ]
 

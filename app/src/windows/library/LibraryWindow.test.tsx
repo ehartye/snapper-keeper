@@ -3,6 +3,8 @@ import { screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { availableMonitors, cursorPosition, getCurrentWindow } from '@tauri-apps/api/window';
+import { LogicalPosition, LogicalSize } from '@tauri-apps/api/dpi';
+import type { ScreenPreview } from '@snk/capture';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 
 import { ModalProvider } from '../../components/Modal';
@@ -98,12 +100,15 @@ describe('<LibraryWindow />', () => {
     });
 
     const overlayEmit = vi.fn().mockResolvedValue(undefined);
+    const overlayHide = vi.fn().mockResolvedValue(undefined);
     const overlaySetPosition = vi.fn().mockResolvedValue(undefined);
     const overlaySetSize = vi.fn().mockResolvedValue(undefined);
     vi.mocked(WebviewWindow.getByLabel).mockImplementation(async (label: string) => {
       if (label === 'capture-overlay') {
         return {
           emit: overlayEmit,
+          hide: overlayHide,
+          isVisible: vi.fn().mockResolvedValue(true),
           setPosition: overlaySetPosition,
           setSize: overlaySetSize,
           show: vi.fn().mockResolvedValue(undefined),
@@ -132,9 +137,10 @@ describe('<LibraryWindow />', () => {
       if (cmd === 'plugin:snk-capture|grab_screen_preview') {
         return Promise.resolve({
           path: '/tmp/p.png',
-          width: 1,
-          height: 1,
+          width: 2880,
+          height: 1800,
           token: 'tok-xyz',
+          display: { id: 77, frame: { coordinateSpace: 'logical', x: -1440, y: 100, width: 1440, height: 900 } },
         });
       }
       return Promise.resolve([]);
@@ -145,21 +151,66 @@ describe('<LibraryWindow />', () => {
 
     await act(async () => regionHandler!({ payload: undefined }));
     await waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith('plugin:snk-capture|grab_screen_preview', {
-        monitorId: 1,
-      });
+      expect(invoke).toHaveBeenCalledWith('plugin:snk-capture|grab_screen_preview');
+      expect(overlayHide).toHaveBeenCalledOnce();
+      const grabCall = mockedInvoke.mock.calls.findIndex(([name]) => name === 'plugin:snk-capture|grab_screen_preview');
+      expect(overlayHide.mock.invocationCallOrder[0]).toBeLessThan(mockedInvoke.mock.invocationCallOrder[grabCall]!);
+      expect(availableMonitors).not.toHaveBeenCalled();
+      expect(cursorPosition).not.toHaveBeenCalled();
       expect(WebviewWindow.getByLabel).toHaveBeenCalledWith('capture-overlay');
-      expect(overlaySetPosition).toHaveBeenCalledWith(expect.objectContaining({ x: 1920, y: 0 }));
+      expect(overlaySetPosition).toHaveBeenCalledWith(new LogicalPosition(-1440, 100));
       expect(overlaySetSize).toHaveBeenCalledWith(
-        expect.objectContaining({ width: 2560, height: 1440 }),
+        new LogicalSize(1440, 900),
       );
       expect(overlayEmit).toHaveBeenCalledWith('overlay:preview', {
         path: '/tmp/p.png',
         token: 'tok-xyz',
-        monitorId: 1,
-        scaleFactor: 1.5,
+        width: 2880, height: 1800,
+        display: { id: 77, frame: { coordinateSpace: 'logical', x: -1440, y: 100, width: 1440, height: 900 } },
       });
     });
+  });
+
+  it('coalesces region hotkeys until the complete preview display lifecycle finishes', async () => {
+    let regionHandler: ((e: { payload: unknown }) => Promise<void>) | null = null;
+    vi.mocked(listen).mockImplementation((event, handler) => {
+      if (event === 'hotkey:capture-region') regionHandler = handler as typeof regionHandler;
+      return Promise.resolve(() => {});
+    });
+    const preview: ScreenPreview = {
+      path: '/tmp/p.png', width: 2880, height: 1800, token: 'A',
+      display: { id: 77, frame: { coordinateSpace: 'logical', x: 0, y: 0, width: 1440, height: 900 } },
+    };
+    let resolvePreview!: (value: ScreenPreview) => void;
+    const pendingPreview = new Promise<ScreenPreview>(resolve => { resolvePreview = resolve; });
+    let resolveFocus!: () => void;
+    const pendingFocus = new Promise<void>(resolve => { resolveFocus = resolve; });
+    const grab = vi.fn().mockImplementationOnce(() => pendingPreview).mockResolvedValue(preview);
+    const focus = vi.fn().mockImplementationOnce(() => pendingFocus).mockResolvedValue(undefined);
+    const show = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(WebviewWindow.getByLabel).mockResolvedValue({
+      isVisible: vi.fn().mockResolvedValue(false), hide: vi.fn().mockResolvedValue(undefined),
+      setPosition: vi.fn().mockResolvedValue(undefined), setSize: vi.fn().mockResolvedValue(undefined),
+      emit: vi.fn().mockResolvedValue(undefined), show, setFocus: focus,
+    } as unknown as WebviewWindow);
+    mockedInvoke.mockImplementation(cmd => cmd === 'plugin:snk-capture|grab_screen_preview' ? grab() : Promise.resolve([]));
+    renderLibraryWindow();
+    await waitFor(() => expect(regionHandler).not.toBeNull());
+    let firstRun!: Promise<void>;
+    await act(async () => { firstRun = regionHandler!({ payload: undefined }); });
+    await waitFor(() => expect(grab).toHaveBeenCalledOnce());
+    await act(async () => { void regionHandler!({ payload: undefined }); });
+    expect(grab).toHaveBeenCalledOnce();
+    expect(show).not.toHaveBeenCalled();
+    await act(async () => { resolvePreview(preview); });
+    await waitFor(() => expect(focus).toHaveBeenCalledOnce());
+    // Admission stays closed after grabbing, through geometry, show and focus.
+    await act(async () => { void regionHandler!({ payload: undefined }); });
+    expect(grab).toHaveBeenCalledOnce();
+    await act(async () => { resolveFocus(); await firstRun; });
+    await act(async () => { await regionHandler!({ payload: undefined }); });
+    expect(grab).toHaveBeenCalledTimes(2);
+    expect(show).toHaveBeenCalledTimes(2);
   });
 
   it('shows a plugin startup failure modal with copy diagnostics action', async () => {

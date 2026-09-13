@@ -6,6 +6,7 @@ use xcap::{Monitor, Window};
 
 use crate::Result;
 
+#[derive(Clone)]
 pub struct GrabResult {
     pub png_bytes: Vec<u8>,
     pub width: u32,
@@ -14,27 +15,24 @@ pub struct GrabResult {
 }
 
 fn resolve_requested_monitor_position(monitor_ids: &[u32], requested: u32) -> Option<usize> {
-    let index = requested as usize;
-    if index < monitor_ids.len() {
-        return Some(index);
-    }
     monitor_ids.iter().position(|id| *id == requested)
 }
 
-fn select_monitor(monitor_id: Option<u32>) -> Result<Monitor> {
+pub(crate) fn select_monitor(monitor_id: Option<u32>) -> Result<Monitor> {
     let mut monitors = Monitor::all()?;
     if monitors.is_empty() {
         return Err(crate::CaptureError::NoMonitors);
     }
 
     if let Some(id) = monitor_id {
-        let monitor_ids: Vec<u32> = monitors
+        let monitor_ids = monitors
             .iter()
-            .map(|m| m.id().unwrap_or(u32::MAX))
-            .collect();
+            .map(Monitor::id)
+            .collect::<std::result::Result<Vec<_>, _>>()?;
         if let Some(pos) = resolve_requested_monitor_position(&monitor_ids, id) {
             return Ok(monitors.swap_remove(pos));
         }
+        return Err(crate::CaptureError::MonitorNotFound { id });
     }
 
     if let Some(pos) = monitors
@@ -135,29 +133,6 @@ pub fn grab_window(window_id: u32) -> Result<GrabResult> {
     })
 }
 
-pub fn grab_region(monitor_id: u32, x: u32, y: u32, w: u32, h: u32) -> Result<GrabResult> {
-    let mon = select_monitor(Some(monitor_id))?;
-
-    let monitor_name = mon.name().unwrap_or_default();
-    let full_image = mon.capture_image()?;
-
-    let (x, y, w, h) = clamp_region(full_image.width(), full_image.height(), x, y, w, h)
-        .ok_or_else(|| crate::CaptureError::Os {
-            message: "region has zero area".into(),
-        })?;
-
-    let cropped = image::imageops::crop_imm(&full_image, x, y, w, h).to_image();
-    let (cw, ch) = (cropped.width(), cropped.height());
-    let png_bytes = encode_rgba_to_png(cropped.as_raw(), cw, ch)?;
-
-    Ok(GrabResult {
-        png_bytes,
-        width: cw,
-        height: ch,
-        monitor_name,
-    })
-}
-
 /// Clamp a requested capture region against an image's bounds. Returns
 /// `None` when the resulting region would have zero area (so callers can
 /// surface a single error). Public so it can be unit-tested without a real
@@ -192,14 +167,6 @@ pub fn encode_rgba_to_png(rgba: &[u8], w: u32, h: u32) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn grab_region_rejects_zero_area() {
-        // Width 0 → zero-area region must be rejected even if the monitor
-        // resolves (we fall back to the primary monitor for unknown ids).
-        let result = grab_region(0, 0, 0, 0, 100);
-        assert!(result.is_err());
-    }
 
     #[test]
     fn clamp_region_returns_none_for_zero_dimensions() {
@@ -259,16 +226,17 @@ mod tests {
     }
 
     #[test]
-    fn resolve_requested_monitor_position_prefers_index_over_id_match() {
+    fn resolve_requested_monitor_position_uses_native_id_even_when_it_is_an_index() {
         let ids = vec![1, 2];
-        // requested=1 could mean index 1 (second monitor) or id 1 (first monitor).
-        // We prefer index semantics for frontend callers that pass monitor index.
-        assert_eq!(resolve_requested_monitor_position(&ids, 1), Some(1));
+        // Native id 1 must not be confused with enumeration index 1.
+        assert_eq!(resolve_requested_monitor_position(&ids, 1), Some(0));
     }
 
     #[test]
-    fn resolve_requested_monitor_position_falls_back_to_id_when_index_is_out_of_range() {
+    fn resolve_requested_monitor_position_survives_reordering_and_rejects_unknown() {
         let ids = vec![42, 77];
         assert_eq!(resolve_requested_monitor_position(&ids, 77), Some(1));
+        assert_eq!(resolve_requested_monitor_position(&[77, 42], 42), Some(1));
+        assert_eq!(resolve_requested_monitor_position(&[77, 42], 0), None);
     }
 }

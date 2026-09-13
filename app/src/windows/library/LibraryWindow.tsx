@@ -1,10 +1,10 @@
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { LogicalPosition, PhysicalPosition, PhysicalSize } from '@tauri-apps/api/dpi';
-import { availableMonitors, cursorPosition, getCurrentWindow } from '@tauri-apps/api/window';
+import { clipboardPosition, overlayGeometry } from '../../lib/displayGeometry';
+import { availableMonitors, getCurrentWindow } from '@tauri-apps/api/window';
 
 import {
   CAPTURE_FULL_SCREEN_EVENT,
@@ -34,6 +34,7 @@ interface PluginSetupFailedPayload {
 }
 
 export function LibraryWindow() {
+  const regionOpening = useRef(false);
   const queryClient = useQueryClient();
   const modal = useModal();
   const [selection, setSelection] = useState<SidebarSelection>({
@@ -194,38 +195,25 @@ export function LibraryWindow() {
   }, [refreshCaptures, showToolbar, showScreenRecordingAlert]);
 
   const handleRegion = useCallback(async () => {
+    // Coalesce hotkeys for the entire opening lifecycle. Serializing only the
+    // native grabs still lets an earlier caller show its overlay during the next
+    // grab. A later hotkey can replace the preview once display/focus finishes.
+    if (regionOpening.current) return;
+    regionOpening.current = true;
     try {
-      const monitors = await availableMonitors();
-      const fallback = monitors[0];
-      if (!fallback) {
-        console.warn('no monitors available for region overlay');
-        return;
-      }
-      const cursor = await cursorPosition();
-      const monitorIndex = Math.max(
-        monitors.findIndex(
-          (m) =>
-            cursor.x >= m.position.x &&
-            cursor.x < m.position.x + m.size.width &&
-            cursor.y >= m.position.y &&
-            cursor.y < m.position.y + m.size.height,
-        ),
-        0,
-      );
-      const monitor = monitors[monitorIndex] ?? fallback;
-      const preview = await grabScreenPreview(monitorIndex);
       const overlay = await WebviewWindow.getByLabel('capture-overlay');
       if (overlay) {
-        await overlay.setPosition(
-          new PhysicalPosition(monitor.position.x, monitor.position.y),
-        );
-        await overlay.setSize(new PhysicalSize(monitor.size.width, monitor.size.height));
-        await overlay.emit('overlay:preview', {
-          path: preview.path,
-          token: preview.token,
-          monitorId: monitorIndex,
-          scaleFactor: monitor.scaleFactor,
-        });
+        // A repeated hotkey must not snapshot the previous overlay, even when
+        // hide_own_windows is disabled. Only replacements need this extra settle.
+        if (await overlay.isVisible()) {
+          await overlay.hide();
+          await new Promise(resolve => setTimeout(resolve, 150));
+        }
+        const preview = await grabScreenPreview();
+        const geometry = overlayGeometry(preview.display.frame);
+        await overlay.setPosition(geometry.position);
+        await overlay.setSize(geometry.size);
+        await overlay.emit('overlay:preview', preview);
         await overlay.show();
         await overlay.setFocus();
       }
@@ -235,6 +223,8 @@ export function LibraryWindow() {
         return;
       }
       console.error('region overlay failed', e);
+    } finally {
+      regionOpening.current = false;
     }
   }, [showScreenRecordingAlert]);
 
@@ -275,64 +265,8 @@ export function LibraryWindow() {
       const popup = await WebviewWindow.getByLabel('clipboard-popup');
       if (!popup) return;
 
-      // Anchor the popup to the monitor that actually contains the caret —
-      // window.screen only knows about the primary monitor and doesn't
-      // exclude the taskbar / dock, so the old logic let the popup hang
-      // into the taskbar area or off-screen on multi-monitor setups.
       const monitors = await availableMonitors();
-      const fallback = monitors[0];
-      if (!fallback) {
-        // No monitors reported — last-resort placement at 0,0.
-        await popup.setPosition(new LogicalPosition(0, 0));
-        await popup.emit(CLIPBOARD_POPUP_SHOW_EVENT, {});
-        await popup.show();
-        await popup.setFocus();
-        return;
-      }
-      const monitor =
-        monitors.find(
-          (m) =>
-            pos.x >= m.position.x &&
-            pos.x < m.position.x + m.size.width &&
-            pos.y >= m.position.y &&
-            pos.y < m.position.y + m.size.height,
-        ) ?? fallback;
-
-      // Work in logical pixels (the popup window is sized in logical px per
-      // tauri.conf.json). Tauri's Monitor reports position/size in PHYSICAL
-      // pixels, so divide by scaleFactor.
-      const sf = monitor.scaleFactor;
-      const caretX = pos.x / sf;
-      const caretY = pos.y / sf;
-      const monLeft = monitor.position.x / sf;
-      const monTop = monitor.position.y / sf;
-      const monRight = monLeft + monitor.size.width / sf;
-      // Reserve ~50px at the bottom for the Windows taskbar / macOS dock —
-      // Tauri's Monitor doesn't expose work-area separately, so this is a
-      // heuristic. Conservative for the common case (taskbar 40-48px).
-      const monBottom = monTop + monitor.size.height / sf - 50;
-
-      const popupW = 380;
-      const popupH = 480;
-      const pad = 8;
-
-      let x = caretX;
-      let y = caretY + pad;
-
-      // Flip above the caret if the popup would clip below.
-      if (y + popupH > monBottom) y = caretY - popupH - pad;
-
-      // Clamp horizontally to the monitor.
-      if (x + popupW > monRight) x = monRight - popupW - pad;
-      if (x < monLeft + pad) x = monLeft + pad;
-
-      // Vertical safety: clamp to monitor; if the popup is somehow still too
-      // tall to fit (sub-popup-height monitor), anchor to the bottom of the
-      // work area so the filter input + first items stay visible.
-      if (y < monTop + pad) y = monTop + pad;
-      if (y + popupH > monBottom) y = monBottom - popupH;
-
-      await popup.setPosition(new LogicalPosition(x, y));
+      await popup.setPosition(clipboardPosition(pos, monitors));
       await popup.emit(CLIPBOARD_POPUP_SHOW_EVENT, {});
       await popup.show();
       await popup.setFocus();

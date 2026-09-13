@@ -43,10 +43,10 @@ describe('@snk/capture bindings', () => {
     });
   });
 
-  it('captureRegion sends monitor + rect', async () => {
-    await captureRegion(0, 10, 20, 300, 400);
+  it('captureRegion sends preview token + pixel rect', async () => {
+    await captureRegion('preview-A', 10, 20, 300, 400);
     expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-capture|capture_region', {
-      monitorId: 0,
+      previewToken: 'preview-A',
       x: 10,
       y: 20,
       w: 300,
@@ -57,9 +57,7 @@ describe('@snk/capture bindings', () => {
   it('listCapturableWindows takes no args', async () => {
     mockedInvoke.mockResolvedValue([]);
     await listCapturableWindows();
-    expect(mockedInvoke).toHaveBeenCalledWith(
-      'plugin:snk-capture|list_capturable_windows',
-    );
+    expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-capture|list_capturable_windows');
   });
 
   it('grabScreenPreview returns the preview struct including token', async () => {

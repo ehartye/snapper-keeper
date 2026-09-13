@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use snk_library::{Capture, LibraryState};
-use tauri::{Emitter, Manager, Runtime, State};
+use tauri::{Emitter, Runtime, State};
 
 use crate::grab::WindowInfo;
 use crate::window_hider::{TauriWindowManager, WindowVisibilityGuard};
@@ -9,18 +9,15 @@ use crate::worker::CaptureWorker;
 use crate::Result;
 
 const HIDE_OWN_WINDOWS_KEY: &str = "capture.hide_own_windows";
-/// Labels excluded from the visibility guard. The capture overlay
-/// is already hidden by the React frontend before invoking
-/// capture_region (see CaptureOverlay.tsx); we exclude it to avoid
-/// racing the frontend's existing hide.
+/// The frontend owns the capture overlay lifecycle. Region crops operate on
+/// the stored preview, so they do not hide windows or grab the desktop again.
 const EXCLUDE_LABELS: &[&str] = &["capture-overlay"];
 /// Delay between hiding our windows and grabbing pixels. Lets the
 /// compositor unmap the windows before xcap reads the framebuffer.
 /// 50ms left captured windows ghosting on real hardware — the hide
 /// had returned but the OS compositor hadn't finished re-painting
 /// the underlying content. 150ms matches the proven-reliable
-/// self-hide delay the overlay uses in `CaptureOverlay.tsx` and
-/// stops the ghost reliably.
+/// compositor settling delay established during native capture testing.
 const HIDE_SETTLE_DELAY: Duration = Duration::from_millis(150);
 
 fn should_hide_own_windows(db: &snk_library::Db) -> bool {
@@ -130,7 +127,7 @@ pub async fn capture_region<R: Runtime>(
     state: State<'_, LibraryState>,
     worker: State<'_, CaptureWorker>,
     app: tauri::AppHandle<R>,
-    monitor_id: u32,
+    preview_token: String,
     x: u32,
     y: u32,
     w: u32,
@@ -139,11 +136,17 @@ pub async fn capture_region<R: Runtime>(
     let db = state.db.clone();
     let root = state.root.clone();
     worker
-        .run(move || {
-            require_screen_recording(&app)?;
-            let capture = with_hidden_own_windows(&app, &db, || {
-                crate::orchestrate::capture_region(&db, &root, monitor_id, x, y, w, h)
-            })?;
+        .run_with_preview(move |session| {
+            let (pixels, foreground) = session.crop(&preview_token, x, y, w, h)?;
+            let capture = crate::orchestrate::persist(
+                &db,
+                &root,
+                &pixels.png_bytes,
+                pixels.width,
+                pixels.height,
+                Some(pixels.monitor_name),
+                foreground,
+            )?;
             let _ = app.emit("capture:saved", &capture.id);
             Ok(capture)
         })
@@ -155,19 +158,7 @@ pub async fn list_capturable_windows(worker: State<'_, CaptureWorker>) -> Result
     worker.run(crate::grab::list_capturable_windows).await
 }
 
-/// Mint a fresh cache-busting token for one preview write.
-/// UUIDv7 is monotonic so two consecutive calls always differ.
-fn mint_preview_token() -> String {
-    uuid::Uuid::now_v7().to_string()
-}
-
-#[derive(serde::Serialize)]
-pub struct ScreenPreview {
-    pub path: String,
-    pub width: u32,
-    pub height: u32,
-    pub token: String,
-}
+pub use crate::preview::ScreenPreview;
 
 #[tauri::command]
 pub async fn grab_screen_preview<R: Runtime>(
@@ -177,48 +168,42 @@ pub async fn grab_screen_preview<R: Runtime>(
     monitor_id: Option<u32>,
 ) -> Result<ScreenPreview> {
     let db = state.db.clone();
+    let root = state.root.clone();
     worker
-        .run(move || {
+        .run_with_preview(move |session| {
             require_screen_recording(&app)?;
-            // Hide own windows around the grab — same pattern as the three
-            // capture commands above. Without this the preview backdrop the
-            // region overlay shows would include the library/settings/etc.,
-            // making it impossible to draw a region over content underneath.
-            with_hidden_own_windows(&app, &db, || {
-                let result = if let Some(monitor_id) = monitor_id {
-                    crate::grab::grab_monitor(monitor_id)
-                } else {
-                    crate::grab::grab_primary_monitor()
-                }?;
-                // Preview file lives under `captures/` so it falls inside the
-                // assetProtocol allow scope (`$APPDATA/captures/**`). Tightening the
-                // scope in #84 broke the previous root-of-app-data location: the
-                // overlay backdrop's `convertFileSrc(.preview.png)` URL failed CSP/
-                // scope checks and fell through to a solid black background, which
-                // visually presented as "overlay blocks the images" / blank capture.
-                let dir = app
-                    .path()
-                    .app_data_dir()
-                    .map_err(|e| crate::CaptureError::Os {
-                        message: format!("app data dir: {e}"),
-                    })?
-                    .join("captures");
-                let preview_path = dir.join(".preview.png");
-                std::fs::create_dir_all(&dir).map_err(|e| crate::CaptureError::Os {
-                    message: format!("create dir: {e}"),
-                })?;
-                std::fs::write(&preview_path, &result.png_bytes).map_err(|e| {
-                    crate::CaptureError::Os {
-                        message: format!("write preview: {e}"),
-                    }
-                })?;
-                Ok(ScreenPreview {
-                    path: preview_path.to_string_lossy().into_owned(),
-                    width: result.width,
-                    height: result.height,
-                    token: mint_preview_token(),
+            // Resolve identity, geometry and source before hiding any windows. The
+            // same native monitor supplies the pixels; no frontend enumeration join.
+            let monitor = crate::display::select_preview_monitor(monitor_id)?;
+            let display = crate::display::describe(&monitor)?;
+            let foreground = crate::foreground::get_foreground_info();
+            let pixels = with_hidden_own_windows(&app, &db, || {
+                let image = monitor.capture_image()?;
+                Ok::<_, crate::CaptureError>(crate::grab::GrabResult {
+                    png_bytes: crate::grab::encode_rgba_to_png(
+                        image.as_raw(),
+                        image.width(),
+                        image.height(),
+                    )?,
+                    width: image.width(),
+                    height: image.height(),
+                    monitor_name: monitor.name().unwrap_or_default(),
                 })
-            })
+            })?;
+            let path = snk_library::files::write_atomic(
+                &root,
+                std::path::Path::new("captures/.preview.png"),
+                &pixels.png_bytes,
+            )?;
+            let preview = ScreenPreview {
+                path: path.to_string_lossy().into_owned(),
+                width: pixels.width,
+                height: pixels.height,
+                token: uuid::Uuid::now_v7().to_string(),
+                display,
+            };
+            session.replace(preview.token.clone(), pixels, foreground);
+            Ok(preview)
         })
         .await
 }
@@ -236,15 +221,6 @@ pub fn open_screen_recording_settings() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn mint_preview_token_yields_unique_strings() {
-        let a = mint_preview_token();
-        let b = mint_preview_token();
-        assert_ne!(a, b, "two calls must return different tokens");
-        assert!(!a.is_empty());
-        assert!(!b.is_empty());
-    }
 
     #[test]
     fn should_hide_own_windows_defaults_to_true_when_setting_missing() {
