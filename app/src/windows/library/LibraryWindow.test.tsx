@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { availableMonitors, cursorPosition, getCurrentWindow } from '@tauri-apps/api/window';
 import { LogicalPosition, LogicalSize } from '@tauri-apps/api/dpi';
+import type { ScreenPreview } from '@snk/capture';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 
 import { ModalProvider } from '../../components/Modal';
@@ -168,6 +169,48 @@ describe('<LibraryWindow />', () => {
         display: { id: 77, frame: { coordinateSpace: 'logical', x: -1440, y: 100, width: 1440, height: 900 } },
       });
     });
+  });
+
+  it('coalesces region hotkeys until the complete preview display lifecycle finishes', async () => {
+    let regionHandler: ((e: { payload: unknown }) => Promise<void>) | null = null;
+    vi.mocked(listen).mockImplementation((event, handler) => {
+      if (event === 'hotkey:capture-region') regionHandler = handler as typeof regionHandler;
+      return Promise.resolve(() => {});
+    });
+    const preview: ScreenPreview = {
+      path: '/tmp/p.png', width: 2880, height: 1800, token: 'A',
+      display: { id: 77, frame: { coordinateSpace: 'logical', x: 0, y: 0, width: 1440, height: 900 } },
+    };
+    let resolvePreview!: (value: ScreenPreview) => void;
+    const pendingPreview = new Promise<ScreenPreview>(resolve => { resolvePreview = resolve; });
+    let resolveFocus!: () => void;
+    const pendingFocus = new Promise<void>(resolve => { resolveFocus = resolve; });
+    const grab = vi.fn().mockImplementationOnce(() => pendingPreview).mockResolvedValue(preview);
+    const focus = vi.fn().mockImplementationOnce(() => pendingFocus).mockResolvedValue(undefined);
+    const show = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(WebviewWindow.getByLabel).mockResolvedValue({
+      isVisible: vi.fn().mockResolvedValue(false), hide: vi.fn().mockResolvedValue(undefined),
+      setPosition: vi.fn().mockResolvedValue(undefined), setSize: vi.fn().mockResolvedValue(undefined),
+      emit: vi.fn().mockResolvedValue(undefined), show, setFocus: focus,
+    } as unknown as WebviewWindow);
+    mockedInvoke.mockImplementation(cmd => cmd === 'plugin:snk-capture|grab_screen_preview' ? grab() : Promise.resolve([]));
+    renderLibraryWindow();
+    await waitFor(() => expect(regionHandler).not.toBeNull());
+    let firstRun!: Promise<void>;
+    await act(async () => { firstRun = regionHandler!({ payload: undefined }); });
+    await waitFor(() => expect(grab).toHaveBeenCalledOnce());
+    await act(async () => { void regionHandler!({ payload: undefined }); });
+    expect(grab).toHaveBeenCalledOnce();
+    expect(show).not.toHaveBeenCalled();
+    await act(async () => { resolvePreview(preview); });
+    await waitFor(() => expect(focus).toHaveBeenCalledOnce());
+    // Admission stays closed after grabbing, through geometry, show and focus.
+    await act(async () => { void regionHandler!({ payload: undefined }); });
+    expect(grab).toHaveBeenCalledOnce();
+    await act(async () => { resolveFocus(); await firstRun; });
+    await act(async () => { await regionHandler!({ payload: undefined }); });
+    expect(grab).toHaveBeenCalledTimes(2);
+    expect(show).toHaveBeenCalledTimes(2);
   });
 
   it('shows a plugin startup failure modal with copy diagnostics action', async () => {

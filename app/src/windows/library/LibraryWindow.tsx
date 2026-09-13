@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -34,6 +34,7 @@ interface PluginSetupFailedPayload {
 }
 
 export function LibraryWindow() {
+  const regionOpening = useRef(false);
   const queryClient = useQueryClient();
   const modal = useModal();
   const [selection, setSelection] = useState<SidebarSelection>({
@@ -194,6 +195,11 @@ export function LibraryWindow() {
   }, [refreshCaptures, showToolbar, showScreenRecordingAlert]);
 
   const handleRegion = useCallback(async () => {
+    // Coalesce hotkeys for the entire opening lifecycle. Serializing only the
+    // native grabs still lets an earlier caller show its overlay during the next
+    // grab. A later hotkey can replace the preview once display/focus finishes.
+    if (regionOpening.current) return;
+    regionOpening.current = true;
     try {
       const overlay = await WebviewWindow.getByLabel('capture-overlay');
       if (overlay) {
@@ -217,6 +223,8 @@ export function LibraryWindow() {
         return;
       }
       console.error('region overlay failed', e);
+    } finally {
+      regionOpening.current = false;
     }
   }, [showScreenRecordingAlert]);
 
