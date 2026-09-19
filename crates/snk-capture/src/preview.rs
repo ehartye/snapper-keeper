@@ -76,7 +76,7 @@ mod tests {
     #[test]
     fn preview_wire_keeps_native_geometry_separate_from_png_pixels() {
         let preview = ScreenPreview {
-            path: "captures/.preview.png".into(),
+            path: "captures/preview.png".into(),
             token: "A".into(),
             width: 2880,
             height: 1800,
