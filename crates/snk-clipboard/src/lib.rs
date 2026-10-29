@@ -9,6 +9,8 @@ pub mod health;
 #[cfg(any(target_os = "macos", test))]
 mod observation;
 pub mod paste;
+#[cfg(any(target_os = "windows", test))]
+mod paste_flow;
 pub mod permissions;
 mod platform;
 pub mod platform_watcher;

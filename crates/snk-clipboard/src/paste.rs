@@ -1,9 +1,53 @@
 use crate::Result;
 
-pub fn synthesize_paste() -> Result<()> {
+#[cfg(target_os = "windows")]
+#[path = "paste_windows.rs"]
+mod windows;
+
+pub struct PasteTarget {
+    #[cfg(target_os = "windows")]
+    inner: windows::Target,
+}
+
+pub fn capture_target<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<()> {
     #[cfg(target_os = "windows")]
     {
-        synthesize_paste_windows()
+        use tauri::Manager;
+        windows::capture(
+            app.get_webview_window("clipboard-popup")
+                .and_then(|w| w.hwnd().ok()),
+        )?;
+    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = app;
+    Ok(())
+}
+
+pub fn prepare_paste<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) -> Result<PasteTarget> {
+    #[cfg(target_os = "windows")]
+    {
+        let popup = window
+            .hwnd()
+            .map_err(|e| crate::ClipboardError::PasteFailed {
+                reason: e.to_string(),
+            })?;
+        Ok(PasteTarget {
+            inner: windows::prepare(popup)?,
+        })
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = window;
+        Ok(PasteTarget {})
+    }
+}
+
+pub fn synthesize_paste(target: &PasteTarget) -> Result<()> {
+    #[cfg(not(target_os = "windows"))]
+    let _ = target;
+    #[cfg(target_os = "windows")]
+    {
+        windows::synthesize(target.inner)
     }
     #[cfg(target_os = "macos")]
     {
@@ -21,67 +65,6 @@ pub fn synthesize_paste() -> Result<()> {
             reason: "unsupported platform".into(),
         })
     }
-}
-
-#[cfg(target_os = "windows")]
-fn synthesize_paste_windows() -> Result<()> {
-    use windows::Win32::UI::Input::KeyboardAndMouse::{
-        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VIRTUAL_KEY,
-    };
-
-    const VK_CONTROL: VIRTUAL_KEY = VIRTUAL_KEY(0x11);
-    const VK_V: VIRTUAL_KEY = VIRTUAL_KEY(0x56);
-
-    let inputs = [
-        INPUT {
-            r#type: INPUT_KEYBOARD,
-            Anonymous: INPUT_0 {
-                ki: KEYBDINPUT {
-                    wVk: VK_CONTROL,
-                    ..Default::default()
-                },
-            },
-        },
-        INPUT {
-            r#type: INPUT_KEYBOARD,
-            Anonymous: INPUT_0 {
-                ki: KEYBDINPUT {
-                    wVk: VK_V,
-                    ..Default::default()
-                },
-            },
-        },
-        INPUT {
-            r#type: INPUT_KEYBOARD,
-            Anonymous: INPUT_0 {
-                ki: KEYBDINPUT {
-                    wVk: VK_V,
-                    dwFlags: KEYEVENTF_KEYUP,
-                    ..Default::default()
-                },
-            },
-        },
-        INPUT {
-            r#type: INPUT_KEYBOARD,
-            Anonymous: INPUT_0 {
-                ki: KEYBDINPUT {
-                    wVk: VK_CONTROL,
-                    dwFlags: KEYEVENTF_KEYUP,
-                    ..Default::default()
-                },
-            },
-        },
-    ];
-
-    unsafe {
-        let sent = SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
-        if sent != 4 {
-            return Err(crate::ClipboardError::PasteFailed {
-                reason: format!("SendInput returned {sent}, expected 4"),
-            });
-        }
-    }
-    Ok(())
 }
 
 #[cfg(target_os = "macos")]

@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor, act, fireEvent } from '@testing-library/react';
 import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { listen } from '@tauri-apps/api/event';
+import { CLIPBOARD_POPUP_SHOW_EVENT } from '@snk/clipboard';
 
 import { ClipboardPopup } from './ClipboardPopup';
 import { useClipboardPopupStore } from './store';
@@ -103,10 +106,10 @@ describe('<ClipboardPopup />', () => {
       fireEvent.keyDown(window, { key: 'p', ctrlKey: true });
     });
     await waitFor(() => {
-      expect(mockedInvoke).toHaveBeenCalledWith(
-        'plugin:snk-library|toggle_clipboard_pin',
-        { id: 'cb-1', pinned: true },
-      );
+      expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-library|toggle_clipboard_pin', {
+        id: 'cb-1',
+        pinned: true,
+      });
     });
   });
 
@@ -129,9 +132,7 @@ describe('<ClipboardPopup />', () => {
       fireEvent.click(screen.getByText(/open settings/i));
     });
     await waitFor(() => {
-      expect(mockedInvoke).toHaveBeenCalledWith(
-        'plugin:snk-clipboard|open_accessibility_settings',
-      );
+      expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-clipboard|open_accessibility_settings');
     });
   });
 
@@ -143,5 +144,75 @@ describe('<ClipboardPopup />', () => {
     await waitFor(() => {
       expect(useClipboardPopupStore.getState().items.length).toBe(0);
     });
+  });
+
+  it('keeps the popup focused until the backend has checked selection-key release', async () => {
+    renderWithQuery(<ClipboardPopup />);
+    await act(async () => {
+      fireEvent.keyDown(window, { key: 'Enter' });
+    });
+    expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-clipboard|paste_item', { id: 'cb-1' });
+    expect(getCurrentWindow().hide).not.toHaveBeenCalled();
+  });
+
+  it('shows a retry message and restores popup focus after a Windows paste failure', async () => {
+    mockedInvoke.mockImplementation((cmd: string) =>
+      cmd === 'plugin:snk-clipboard|paste_item'
+        ? Promise.reject({
+            kind: 'paste-failed',
+            data: { reason: 'Windows blocked automatic paste.' },
+          })
+        : Promise.resolve([]),
+    );
+    renderWithQuery(<ClipboardPopup />);
+    await act(async () => {
+      fireEvent.keyDown(window, { key: 'Enter' });
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Windows blocked automatic paste.');
+      expect(getCurrentWindow().show).toHaveBeenCalled();
+      expect(getCurrentWindow().setFocus).toHaveBeenCalled();
+    });
+    expect(screen.getByText('item 1')).toBeInTheDocument();
+  });
+  it('does not issue a second paste while the first selection is pending', async () => {
+    let complete: () => void = () => {};
+    mockedInvoke.mockImplementation((cmd: string) =>
+      cmd === 'plugin:snk-clipboard|paste_item'
+        ? new Promise<void>((resolve) => {
+            complete = resolve;
+          })
+        : Promise.resolve([]),
+    );
+    renderWithQuery(<ClipboardPopup />);
+    await act(async () => {
+      fireEvent.keyDown(window, { key: 'Enter' });
+      fireEvent.keyDown(window, { key: 'Enter', repeat: true });
+    });
+    expect(
+      mockedInvoke.mock.calls.filter(([cmd]) => cmd === 'plugin:snk-clipboard|paste_item'),
+    ).toHaveLength(1);
+    await act(async () => complete());
+  });
+
+  it('clears a previous paste error when history is reopened', async () => {
+    mockedInvoke.mockImplementation((cmd: string) =>
+      cmd === 'plugin:snk-clipboard|paste_item'
+        ? Promise.reject({ kind: 'paste-failed', data: { reason: 'Old paste failure.' } })
+        : Promise.resolve([]),
+    );
+    renderWithQuery(<ClipboardPopup />);
+    await act(async () => {
+      fireEvent.keyDown(window, { key: 'Enter' });
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent('Old paste failure.');
+    const onShow = vi
+      .mocked(listen)
+      .mock.calls.find(([event]) => event === CLIPBOARD_POPUP_SHOW_EVENT)?.[1];
+    expect(onShow).toBeDefined();
+    await act(async () => {
+      await onShow!({ event: CLIPBOARD_POPUP_SHOW_EVENT, id: 0, payload: {} });
+    });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });
