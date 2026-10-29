@@ -35,6 +35,7 @@ pub fn paste_item<R: Runtime>(
         &id,
     )?;
     let item = clipboard::get(&state.db, &id)?;
+    let target = paste::prepare_paste(&window)?;
 
     match item.kind {
         ClipboardItemKind::Text => {
@@ -52,9 +53,11 @@ pub fn paste_item<R: Runtime>(
             skip_set::mark_emitted(skip_set::hash_content(text.as_bytes()));
             clip.set_text(text)?;
 
+            window.hide().map_err(|e| ClipboardError::PasteFailed {
+                reason: e.to_string(),
+            })?;
             thread::sleep(PASTE_SETTLE);
-
-            paste::synthesize_paste()?;
+            paste::synthesize_paste(&target)?;
             clipboard::bump_timestamp(&state.db, &id)?;
 
             info!(id = %id, kind = "text", "pasted clipboard item");
@@ -103,9 +106,11 @@ pub fn paste_item<R: Runtime>(
                 bytes: Cow::Owned(rgba_bytes),
             })?;
 
+            window.hide().map_err(|e| ClipboardError::PasteFailed {
+                reason: e.to_string(),
+            })?;
             thread::sleep(PASTE_SETTLE);
-
-            paste::synthesize_paste()?;
+            paste::synthesize_paste(&target)?;
             clipboard::bump_timestamp(&state.db, &id)?;
 
             info!(id = %id, kind = "image", width, height, "pasted clipboard item");
@@ -116,6 +121,7 @@ pub fn paste_item<R: Runtime>(
 
 #[tauri::command]
 pub fn show_popup<R: Runtime>(_app: tauri::AppHandle<R>) -> Result<crate::caret::CaretPosition> {
+    paste::capture_target(&_app)?;
     Ok(caret::resolve_popup_position())
 }
 

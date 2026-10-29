@@ -28,6 +28,8 @@ export function ClipboardPopup() {
   const reset = useClipboardPopupStore((s) => s.reset);
   const inputRef = useRef<HTMLInputElement>(null);
   const [offline, setOffline] = useState(false);
+  const [pasteError, setPasteError] = useState<string | null>(null);
+  const pastePending = useRef(false);
   // macOS only: auto-paste needs Accessibility (TCC). When it isn't granted the
   // synthetic Cmd+V is silently dropped, so we surface a banner with a deep-link
   // to System Settings. Always false off macOS (the status query reports granted).
@@ -51,6 +53,7 @@ export function ClipboardPopup() {
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     listen(CLIPBOARD_POPUP_SHOW_EVENT, async () => {
+      setPasteError(null);
       reset();
       await loadItems();
       // Re-check on every open so granting the permission and reopening clears
@@ -99,25 +102,35 @@ export function ClipboardPopup() {
 
   const handlePaste = useCallback(
     async (id: string) => {
-      // The popup must yield focus before the synthetic paste fires, so the
-      // keystroke lands in the previously-focused app rather than this window.
+      if (pastePending.current) return;
+      pastePending.current = true;
+      setPasteError(null);
       try {
-        await dismiss();
+        // Native code keeps the popup focused until selection keys are released,
+        // then hides it and restores the captured destination before pasting.
         await pasteItem(id);
+        reset();
       } catch (e) {
         if (isAccessibilityRequiredError(e)) {
-          // Permission was missing — re-reveal the popup (dismiss hid it) and
-          // show the actionable banner instead of failing silently.
           setNeedsAccessibility(true);
-          await getCurrentWindow().show();
         } else {
-          console.error('paste failed', e);
+          const error = e as { kind?: string; data?: { reason?: unknown } } | null;
+          setPasteError(
+            error?.kind === 'paste-failed' && typeof error.data?.reason === 'string'
+              ? error.data.reason
+              : 'Could not paste. Reopen clipboard history from the destination and try again.',
+          );
         }
+        const win = getCurrentWindow();
+        await win.show();
+        await win.setFocus();
+        inputRef.current?.focus();
+      } finally {
+        pastePending.current = false;
       }
     },
-    [dismiss],
+    [reset],
   );
-
   const handleFilterChange = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
       const val = e.target.value;
@@ -132,8 +145,11 @@ export function ClipboardPopup() {
   useEffect(() => {
     const handler = async (e: globalThis.KeyboardEvent) => {
       // Snapshot the latest state at the moment the key was pressed.
-      const { items: liveItems, selectedIndex: liveIdx, filter: liveFilter } =
-        useClipboardPopupStore.getState();
+      const {
+        items: liveItems,
+        selectedIndex: liveIdx,
+        filter: liveFilter,
+      } = useClipboardPopupStore.getState();
 
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -160,12 +176,7 @@ export function ClipboardPopup() {
       // so OS shortcuts still work, and skip if the filter input is focused
       // and the user is editing — but only when the filter already has
       // content (so empty-filter quick-pick still works).
-      if (
-        !e.ctrlKey &&
-        !e.altKey &&
-        !e.metaKey &&
-        /^[1-9]$/.test(e.key)
-      ) {
+      if (!e.ctrlKey && !e.altKey && !e.metaKey && /^[1-9]$/.test(e.key)) {
         const isEditingFilter =
           document.activeElement === inputRef.current && liveFilter.length > 0;
         if (isEditingFilter) return;
@@ -225,6 +236,11 @@ export function ClipboardPopup() {
           clipboard offline — retrying…
         </div>
       )}
+      {pasteError && (
+        <div role="alert" className="px-3 py-2 text-xs text-accent border-b border-border">
+          {pasteError}
+        </div>
+      )}
       {needsAccessibility && (
         <div className="px-3 py-1.5 bg-accent/10 text-accent text-[10px] font-display uppercase tracking-wider border-b border-border flex items-center justify-between gap-2">
           <span>accessibility needed to paste</span>
@@ -243,9 +259,7 @@ export function ClipboardPopup() {
       )}
       <div className="flex-1 overflow-y-auto">
         {items.length === 0 ? (
-          <div className="px-3 py-6 text-xs text-fg-muted text-center">
-            nothing copied yet
-          </div>
+          <div className="px-3 py-6 text-xs text-fg-muted text-center">nothing copied yet</div>
         ) : (
           items.map((item, i) => (
             <ClipboardPopupItem
