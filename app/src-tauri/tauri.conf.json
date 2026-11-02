@@ -89,9 +89,13 @@
         "scope": {
           "allow": [
             "$APPDATA/captures/**",
+            "$APPDATA/captures/preview.png",
+            "$APPDATA/captures/.preview.png",
             "$APPDATA/clipboard/**",
             "$APPDATA/annotations/**",
             "$APPLOCALDATA/captures/**",
+            "$APPLOCALDATA/captures/preview.png",
+            "$APPLOCALDATA/captures/.preview.png",
             "$APPLOCALDATA/clipboard/**",
             "$APPLOCALDATA/annotations/**"
           ],

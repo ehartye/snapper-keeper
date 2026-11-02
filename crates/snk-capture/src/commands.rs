@@ -192,7 +192,7 @@ pub async fn grab_screen_preview<R: Runtime>(
             })?;
             let path = snk_library::files::write_atomic(
                 &root,
-                std::path::Path::new("captures/.preview.png"),
+                std::path::Path::new("captures/preview.png"),
                 &pixels.png_bytes,
             )?;
             let preview = ScreenPreview {
