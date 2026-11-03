@@ -1,4 +1,4 @@
-function isMacPlatform() {
+export function isMacPlatform() {
   if (typeof navigator === 'undefined') return false;
   const uaDataPlatform = (
     navigator as Navigator & { userAgentData?: { platform?: string } }

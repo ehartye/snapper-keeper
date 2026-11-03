@@ -58,6 +58,7 @@ fn build(
         .invoke_handler(tauri::generate_handler![
             snk_clipboard::commands::paste_item,
             snk_clipboard::commands::clipboard_status,
+            snk_clipboard::copy_capture::copy_capture_image,
         ])
         .build(mock_context(noop_assets()))
         .unwrap();
@@ -112,4 +113,30 @@ fn paste_item_from_unauthorized_window_is_rejected() {
     assert_eq!(err["kind"], "unauthorized");
     assert_eq!(err["data"]["window"], "library");
     assert_eq!(err["data"]["command"], "paste_item");
+}
+
+#[test]
+fn copy_capture_image_unknown_id_from_toolbar() {
+    let (_tmp, _app, wv) = build("capture-toolbar");
+    let err = invoke(
+        &wv,
+        "copy_capture_image",
+        serde_json::json!({ "captureId": "does-not-exist" }),
+    )
+    .expect_err("missing capture must error");
+    assert_eq!(err["kind"], "library", "expected not-found, got {err}");
+}
+
+#[test]
+fn copy_capture_image_from_library_window_is_rejected() {
+    let (_tmp, _app, wv) = build("library");
+    let err = invoke(
+        &wv,
+        "copy_capture_image",
+        serde_json::json!({ "captureId": "does-not-exist" }),
+    )
+    .expect_err("unauthorized window must be rejected");
+    assert_eq!(err["kind"], "unauthorized");
+    assert_eq!(err["data"]["window"], "library");
+    assert_eq!(err["data"]["command"], "copy_capture_image");
 }

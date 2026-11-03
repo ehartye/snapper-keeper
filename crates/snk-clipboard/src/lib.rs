@@ -3,6 +3,7 @@
 pub mod blocklist;
 pub mod caret;
 pub mod commands;
+pub mod copy_capture;
 pub mod error;
 pub mod hasher;
 pub mod health;

@@ -12,6 +12,7 @@ import {
   getClipboardItem,
   toggleClipboardPin,
   pasteItem,
+  copyCaptureImage,
   showPopup,
 } from './index';
 
@@ -66,6 +67,13 @@ describe('@snk/clipboard bindings', () => {
     await pasteItem('x');
     expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-clipboard|paste_item', {
       id: 'x',
+    });
+  });
+
+  it('copyCaptureImage sends the capture id to the clipboard plugin', async () => {
+    await copyCaptureImage('cap-1');
+    expect(mockedInvoke).toHaveBeenCalledWith('plugin:snk-clipboard|copy_capture_image', {
+      captureId: 'cap-1',
     });
   });
 

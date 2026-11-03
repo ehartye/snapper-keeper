@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getVersion } from '@tauri-apps/api/app';
 import { appDataDir, appLogDir } from '@tauri-apps/api/path';
 import { listen } from '@tauri-apps/api/event';
-import { openPath, openUrl } from '@tauri-apps/plugin-opener';
+import { openPath, openUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
 
 import {
   checkForUpdate,
@@ -17,6 +17,7 @@ import { SettingsSection } from '../../components/SettingsSection';
 import { SettingRow } from '../../components/SettingRow';
 import { Button } from '../../components/Button';
 import { useModal } from '../../components/Modal';
+import { isMacPlatform } from '../../lib/shortcuts';
 import { isStoreEdition } from '../../lib/storeEdition';
 import { useSetting } from './useSetting';
 
@@ -96,6 +97,17 @@ export function AboutSection() {
   const [status, setStatus] = useState<UpdateStatus>({ kind: 'idle' });
   const [lastCheck, setLastCheck] = useState<number | null>(null);
   const [restartPrompted, setRestartPrompted] = useState(false);
+  const [openError, setOpenError] = useState<'data' | 'log' | null>(null);
+
+  async function openDirectory(path: string, directory: 'data' | 'log') {
+    try {
+      // macOS treats these .app-suffixed directories as application bundles.
+      await (isMacPlatform() ? revealItemInDir(path) : openPath(path));
+      setOpenError(null);
+    } catch {
+      setOpenError(directory);
+    }
+  }
 
   useEffect(() => {
     if (storeEdition) return;
@@ -168,21 +180,35 @@ export function AboutSection() {
       <SettingRow label="Data directory" description={dataDirQ.data ?? ''}>
         <Button
           variant="secondary"
-          onClick={() => dataDirQ.data && void openPath(dataDirQ.data)}
+          onClick={async () => {
+            if (dataDirQ.data) await openDirectory(dataDirQ.data, 'data');
+          }}
           disabled={!dataDirQ.data}
         >
           Open
         </Button>
       </SettingRow>
+      {openError === 'data' && (
+        <p role="alert" className="text-[11px] text-danger py-2">
+          Could not open the data directory.
+        </p>
+      )}
       <SettingRow label="Log directory" description={logDirQ.data ?? ''}>
         <Button
           variant="secondary"
-          onClick={() => logDirQ.data && void openPath(logDirQ.data)}
+          onClick={async () => {
+            if (logDirQ.data) await openDirectory(logDirQ.data, 'log');
+          }}
           disabled={!logDirQ.data}
         >
           Open
         </Button>
       </SettingRow>
+      {openError === 'log' && (
+        <p role="alert" className="text-[11px] text-danger py-2">
+          Could not open the log directory.
+        </p>
+      )}
       <SettingRow
         label="Fingerprint"
         description="Updater public key identifier (verify against release notes)"

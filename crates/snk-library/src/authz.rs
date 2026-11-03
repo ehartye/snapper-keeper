@@ -21,6 +21,7 @@ pub const HARD_DELETE_CAPTURE_WINDOWS: &[&str] = &["library"];
 pub const PURGE_TRASH_WINDOWS: &[&str] = &["library"];
 pub const SET_SETTING_WINDOWS: &[&str] = &["library", "settings"];
 pub const PASTE_ITEM_WINDOWS: &[&str] = &["clipboard-popup"];
+pub const COPY_CAPTURE_IMAGE_WINDOWS: &[&str] = &["capture-toolbar"];
 
 /// Returned when a window invokes a destructive command it is not allowed to.
 /// Each crate converts this into its own typed `Unauthorized` error variant
@@ -111,12 +112,21 @@ mod tests {
     }
 
     #[test]
+    fn copy_capture_image_allows_only_toolbar() {
+        assert!(is_authorized("capture-toolbar", COPY_CAPTURE_IMAGE_WINDOWS));
+        for win in ["library", "settings", "clipboard-popup"] {
+            assert!(!is_authorized(win, COPY_CAPTURE_IMAGE_WINDOWS));
+        }
+    }
+
+    #[test]
     fn unknown_window_is_denied_everywhere() {
         for allowed in [
             HARD_DELETE_CAPTURE_WINDOWS,
             PURGE_TRASH_WINDOWS,
             SET_SETTING_WINDOWS,
             PASTE_ITEM_WINDOWS,
+            COPY_CAPTURE_IMAGE_WINDOWS,
         ] {
             assert!(!is_authorized("totally-unknown", allowed));
             assert!(!is_authorized("", allowed));

@@ -1,5 +1,6 @@
 const COMMANDS: &[&str] = &[
     "paste_item",
+    "copy_capture_image",
     "show_popup",
     "detect_frontmost_app",
     "clipboard_status",

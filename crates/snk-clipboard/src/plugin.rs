@@ -34,6 +34,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::<R>::new("snk-clipboard")
         .invoke_handler(tauri::generate_handler![
             crate::commands::paste_item,
+            crate::copy_capture::copy_capture_image,
             crate::commands::show_popup,
             crate::commands::detect_frontmost_app,
             crate::commands::clipboard_status,

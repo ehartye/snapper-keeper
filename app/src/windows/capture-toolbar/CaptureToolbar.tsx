@@ -3,6 +3,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { LogicalSize } from '@tauri-apps/api/dpi';
 import { listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { copyCaptureImage } from '@snk/clipboard';
 import { softDeleteCapture } from '@snk/library';
 
 interface ToolbarPayload {
@@ -11,19 +12,41 @@ interface ToolbarPayload {
 
 export function CaptureToolbar() {
   const [captureId, setCaptureId] = useState<string | null>(null);
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'pending' | 'copied' | 'failed'>('idle');
   const rootRef = useRef<HTMLDivElement>(null);
+  // Invalidate results from copies belonging to a previous toolbar session.
+  const generationRef = useRef(0);
+  const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearDismissTimer = useCallback(() => {
+    if (dismissTimerRef.current !== null) {
+      clearTimeout(dismissTimerRef.current);
+      dismissTimerRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    let disposed = false;
     listen<ToolbarPayload>('toolbar:show', (event) => {
+      if (disposed) return;
+      generationRef.current += 1;
+      clearDismissTimer();
+      setCopyStatus('idle');
       setCaptureId(event.payload.captureId);
     })
       .then((fn) => {
-        unlisten = fn;
+        if (disposed) fn();
+        else unlisten = fn;
       })
       .catch((e) => console.error('toolbar listen failed', e));
-    return () => unlisten?.();
-  }, []);
+    return () => {
+      disposed = true;
+      generationRef.current += 1;
+      clearDismissTimer();
+      unlisten?.();
+    };
+  }, [clearDismissTimer]);
 
   // Resize the window to fit the toolbar exactly. Re-runs whenever the layout
   // could change (mount, theme/font swap, content edits).
@@ -42,10 +65,13 @@ export function CaptureToolbar() {
   }, []);
 
   const dismiss = useCallback(async () => {
+    generationRef.current += 1;
+    clearDismissTimer();
+    setCopyStatus('idle');
+    setCaptureId(null);
     const win = getCurrentWindow();
     await win.hide();
-    setCaptureId(null);
-  }, []);
+  }, [clearDismissTimer]);
 
   const handleAnnotate = useCallback(async () => {
     if (!captureId) {
@@ -62,8 +88,24 @@ export function CaptureToolbar() {
   }, [captureId, dismiss]);
 
   const handleCopy = useCallback(async () => {
-    await dismiss();
-  }, [dismiss]);
+    clearDismissTimer();
+    if (!captureId) {
+      setCopyStatus('failed');
+      return;
+    }
+    setCopyStatus('pending');
+    const generation = generationRef.current;
+    try {
+      await copyCaptureImage(captureId);
+      if (generation !== generationRef.current) return;
+      setCopyStatus('copied');
+      dismissTimerRef.current = setTimeout(() => void dismiss(), 1500);
+    } catch (e) {
+      if (generation !== generationRef.current) return;
+      setCopyStatus('failed');
+      console.error('copy failed', e);
+    }
+  }, [captureId, clearDismissTimer, dismiss]);
 
   const handleSave = useCallback(async () => {
     await dismiss();
@@ -102,9 +144,10 @@ export function CaptureToolbar() {
       </button>
       <button
         onClick={handleCopy}
+        disabled={copyStatus === 'pending'}
         className="px-3 py-1 text-[11px] uppercase tracking-wider text-fg hover:bg-surface-2 rounded-lg"
       >
-        copy
+        {copyStatus === 'copied' ? 'Copied ✓' : copyStatus === 'failed' ? 'Copy failed' : 'copy'}
       </button>
       <button
         onClick={handleSave}

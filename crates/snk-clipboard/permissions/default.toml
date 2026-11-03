@@ -1,3 +1,3 @@
 [default]
-description = "Default permissions for snk-clipboard: allows paste, popup, frontmost-app detection, clipboard-status reads, permission-status reads, and opening accessibility settings."
-permissions = ["allow-paste-item", "allow-show-popup", "allow-detect-frontmost-app", "allow-clipboard-status", "allow-clipboard-permission-status", "allow-open-accessibility-settings"]
+description = "Default permissions for snk-clipboard: allows paste, capture copying, popup, frontmost-app detection, clipboard-status reads, permission-status reads, and opening accessibility settings."
+permissions = ["allow-paste-item", "allow-copy-capture-image", "allow-show-popup", "allow-detect-frontmost-app", "allow-clipboard-status", "allow-clipboard-permission-status", "allow-open-accessibility-settings"]
