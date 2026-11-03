@@ -1,7 +1,7 @@
 # Capture toolbar Copy and Settings folder Open buttons work
 
 ## Goal and outcome
-Two controls that look functional but do nothing start working. The "copy" button in the strip that appears after a capture places the captured image on the system clipboard and confirms it. The "Open" buttons for the Data directory and Log directory in Settings → About open those folders in the OS file manager, and show an error when they cannot.
+Two controls that look functional but do nothing start working. The "copy" button in the strip that appears after a capture places the captured image on the system clipboard and confirms it. The "Open" buttons for the Data directory and Log directory in Settings → About show those folders in the OS file manager (on macOS, revealed in their parent folder in Finder; on other platforms, opened directly), and show an error when they cannot.
 
 ## Context and current behavior
 - `handleCopy` in `app/src/windows/capture-toolbar/CaptureToolbar.tsx` (lines 64-66) only calls `dismiss()`. No command, plugin or browser clipboard API is involved, and the toolbar has no status or error text. The toolbar knows its capture only as `captureId`, received in the `toolbar:show` event payload (`CaptureToolbar.tsx` lines 9-19).
@@ -11,31 +11,37 @@ Two controls that look functional but do nothing start working. The "copy" butto
 - A Tauri 2 plugin command needs three coordinated entries: the `invoke_handler` list in `crates/snk-clipboard/src/plugin.rs`, the `COMMANDS` array in `crates/snk-clipboard/build.rs`, and a permission grant (`crates/snk-clipboard/permissions/default.toml` plus the window's capability file). Missing entries fail only at runtime with `not allowed by ACL`. Windows that lack the capability grant are rejected by that ACL before the handler runs; the `authz` allow-list then restricts windows that do hold the grant.
 - The Settings About rows call `void openPath(dir)` with `appDataDir()` and `appLogDir()` (`app/src/windows/settings/AboutSection.tsx` lines 171 and 180). Errors are discarded.
 - `app/src-tauri/capabilities/settings.json` grants `opener:allow-open-path` with no path scope. In `tauri-plugin-opener` 2.5.4 (`src/commands.rs` lines 44-68, `src/scope.rs` lines 126-139) an empty scope denies every path with `ForbiddenPath`, so both buttons are rejected silently.
-- For identifier `com.snapper-keeper.app` on macOS, `appDataDir()` is `$APPDATA` (`~/Library/Application Support/com.snapper-keeper.app`) and `appLogDir()` is `$APPLOG` (`~/Library/Logs/com.snapper-keeper.app`). The opener runs `/usr/bin/open -- <path>`, which opens directories.
+- For identifier `com.snapper-keeper.app` on macOS, `appDataDir()` is `$APPDATA` (`~/Library/Application Support/com.snapper-keeper.app`) and `appLogDir()` is `$APPLOG` (`~/Library/Logs/com.snapper-keeper.app`). The opener runs `/usr/bin/open -- <path>`.
+- Verified on macOS: both directory names end in `.app`, so `/usr/bin/open -- <dir>` (also `<dir>/.`) treats them as applications and fails with "The application cannot be opened because its executable is missing", and `open -a Finder -- <dir>` shows no window. The opener plugin only spawns `open` and reports success, so the buttons stay silent. `/usr/bin/open -R <dir>` succeeds and shows the directory selected in its parent folder window. `revealItemInDir` is granted by `opener:default` and has no path scope check. Opening the directory directly works on Windows and Linux.
+- With the scoped permission in place, a probe that boots the app's real Tauri context and invokes `open_path` from the `settings` window returns success for both directories, and denies `/etc` and every path from the `library` window; the macOS failure is therefore in what `open` does with `.app` directory names, not in the permission.
 - Existing wording to reuse: the clipboard list shows "Copied ✓" and "copy failed"; the annotate bar flashes its copy confirmation for 1.5 seconds.
 
 ## Scope and non-goals
 ### In scope
 - A `copy_capture_image` command in `snk-clipboard`, callable only from the `capture-toolbar` window, with its TypeScript binding.
 - The toolbar Copy button calling it, with success and failure feedback.
-- A scoped opener permission for the Settings window and inline error feedback on the two Open buttons.
+- A scoped opener permission for the Settings window and inline error feedback on the two Open buttons, with the macOS reveal behavior described in the goal.
 
 ### Non-goals
 - The `capture.auto_copy` setting, which no capture flow consumes today.
 - The toolbar Save button, which also only dismisses.
 - Recording the copied capture in clipboard history.
-- Opener permission changes for the `library` and `capture-toolbar` windows, and any reveal-in-folder behavior.
+- Opener permission changes for the `library` and `capture-toolbar` windows, listing or selecting a file inside the directory, and a custom Rust command for revealing directories.
 - Changes to paste behavior, `paste_item`, the Windows paste files, or new `ClipboardError` variants.
 
 ## Acceptance criteria
 
 | ID | Requirement | Failure outcome | Files | Verification command | Depends on |
 |---|---|---|---|---|---|
-| AC-01 | When the user clicks Open on the Data directory row, the system shall call the opener's open-path command with the app data directory. | The button does nothing. | app/src/windows/settings/AboutSection.tsx, app/src/windows/settings/AboutSection.test.tsx | pnpm --filter @snk/app exec vitest run src/windows/settings/AboutSection.test.tsx -t "opens the data directory" | none |
-| AC-02 | When the user clicks Open on the Log directory row, the system shall call the opener's open-path command with the app log directory. | The button does nothing. | app/src/windows/settings/AboutSection.tsx, app/src/windows/settings/AboutSection.test.tsx | pnpm --filter @snk/app exec vitest run src/windows/settings/AboutSection.test.tsx -t "opens the log directory" | none |
+| AC-01 | When the user clicks Open on the Data directory row on macOS, the system shall call the opener's reveal-item-in-dir command with the app data directory and shall not call open-path. | The button does nothing because macOS treats the `.app`-named directory as an application. | app/src/windows/settings/AboutSection.tsx, app/src/windows/settings/AboutSection.test.tsx, app/src/lib/shortcuts.ts | pnpm --filter @snk/app exec vitest run src/windows/settings/AboutSection.test.tsx -t "reveals the data directory on macOS" | none |
+| AC-02 | When the user clicks Open on the Log directory row on macOS, the system shall call the opener's reveal-item-in-dir command with the app log directory and shall not call open-path. | The button does nothing because macOS treats the `.app`-named directory as an application. | app/src/windows/settings/AboutSection.tsx, app/src/windows/settings/AboutSection.test.tsx, app/src/lib/shortcuts.ts | pnpm --filter @snk/app exec vitest run src/windows/settings/AboutSection.test.tsx -t "reveals the log directory on macOS" | none |
+| AC-44 | When the user clicks Open on the Data directory row on a platform other than macOS, the system shall call the opener's open-path command with the app data directory. | The folder does not open on Windows or Linux. | app/src/windows/settings/AboutSection.tsx, app/src/windows/settings/AboutSection.test.tsx | pnpm --filter @snk/app exec vitest run src/windows/settings/AboutSection.test.tsx -t "opens the data directory off macOS" | none |
+| AC-45 | When the user clicks Open on the Log directory row on a platform other than macOS, the system shall call the opener's open-path command with the app log directory. | The folder does not open on Windows or Linux. | app/src/windows/settings/AboutSection.tsx, app/src/windows/settings/AboutSection.test.tsx | pnpm --filter @snk/app exec vitest run src/windows/settings/AboutSection.test.tsx -t "opens the log directory off macOS" | none |
 | AC-03 | When opening the data directory fails, the system shall show the alert text "Could not open the data directory." | The failure is silent. | app/src/windows/settings/AboutSection.tsx, app/src/windows/settings/AboutSection.test.tsx | pnpm --filter @snk/app exec vitest run src/windows/settings/AboutSection.test.tsx -t "alert when the data directory cannot be opened" | AC-01 |
 | AC-04 | When opening the log directory fails, the system shall show the alert text "Could not open the log directory." | The failure is silent. | app/src/windows/settings/AboutSection.tsx, app/src/windows/settings/AboutSection.test.tsx | pnpm --filter @snk/app exec vitest run src/windows/settings/AboutSection.test.tsx -t "alert when the log directory cannot be opened" | AC-02 |
 | AC-05 | When a directory opens successfully, the system shall show no alert. | A stale error is displayed after a good open. | app/src/windows/settings/AboutSection.tsx, app/src/windows/settings/AboutSection.test.tsx | pnpm --filter @snk/app exec vitest run src/windows/settings/AboutSection.test.tsx -t "no alert when a directory opens" | AC-01 |
+| AC-46 | When revealing the data directory fails on macOS, the system shall show the alert text "Could not open the data directory." | The macOS failure is silent. | app/src/windows/settings/AboutSection.tsx, app/src/windows/settings/AboutSection.test.tsx | pnpm --filter @snk/app exec vitest run src/windows/settings/AboutSection.test.tsx -t "alert when revealing the data directory fails on macOS" | AC-01 |
+| AC-47 | When revealing the log directory fails on macOS, the system shall show the alert text "Could not open the log directory." | The macOS failure is silent. | app/src/windows/settings/AboutSection.tsx, app/src/windows/settings/AboutSection.test.tsx | pnpm --filter @snk/app exec vitest run src/windows/settings/AboutSection.test.tsx -t "alert when revealing the log directory fails on macOS" | AC-02 |
 | AC-06 | The settings capability shall grant `opener:allow-open-path` with an allow list containing `$APPDATA`, `$APPDATA/**`, `$APPLOG` and `$APPLOG/**`. | The opener rejects both directories with `ForbiddenPath`. | app/src-tauri/capabilities/settings.json, app/src/windows/settings/openerCapability.test.ts | pnpm --filter @snk/app exec vitest run src/windows/settings/openerCapability.test.ts -t "scopes open-path to the app data and log directories" | none |
 | AC-07 | The settings capability shall allow no `opener:allow-open-path` paths beyond those four entries. | The settings window can open arbitrary paths. | app/src-tauri/capabilities/settings.json, app/src/windows/settings/openerCapability.test.ts | pnpm --filter @snk/app exec vitest run src/windows/settings/openerCapability.test.ts -t "allows no other open-path entries" | AC-06 |
 | AC-08 | The application build script shall accept the edited capability files. | The app fails to build. | app/src-tauri/capabilities/settings.json, app/src-tauri/capabilities/library.json | cargo check -p snapper-keeper-app | AC-06, AC-22 |
@@ -90,7 +96,8 @@ Two controls that look functional but do nothing start working. The "copy" butto
 - Tauri command `plugin:snk-clipboard|copy_capture_image` takes `{ captureId: string }` and returns nothing on success. Errors are `ClipboardError`: `library` for an unknown or deleted capture, `unauthorized` for the `library` window (which holds the shared capability but is not in the authorization list), `paste-failed` with a `reason` for path, read or decode failures, and `access` when the clipboard cannot be opened or the image write fails. Windows without the capability grant are rejected by the Tauri ACL before the handler runs.
 - TypeScript: `copyCaptureImage(captureId: string): Promise<void>` exported from `@snk/clipboard`.
 - Toolbar copy button labels: "copy" (idle), "Copied ✓" (success), "Copy failed" (failure).
-- Settings alerts: "Could not open the data directory." and "Could not open the log directory.", rendered with `role="alert"` beneath the failing row.
+- Settings alerts: "Could not open the data directory." and "Could not open the log directory.", rendered with `role="alert"` beneath the failing row, for failures of either the reveal call or the open-path call.
+- Platform choice: `isMacPlatform()` in `app/src/lib/shortcuts.ts` is exported and decides between reveal (macOS) and open-path (other platforms).
 
 ## Edge cases and errors
 - A capture that was soft-deleted before Copy returns the `library` not-found error and the toolbar shows "Copy failed" (AC-17, AC-29).
@@ -99,9 +106,9 @@ Two controls that look functional but do nothing start working. The "copy" butto
 - Pressing Escape during the 1500 ms confirmation dismisses the toolbar through the existing key handler.
 - A new `toolbar:show` while a status, pending copy or dismissal timer exists resets the status and drops the earlier results (AC-33, AC-34, AC-35).
 - The data or log directory path has not loaded yet: the Open button stays disabled, as today.
-- The opener receives a path outside `$APPDATA` and `$APPLOG`: the permission scope denies it (AC-07).
+- The opener's open-path command, used on platforms other than macOS, receives a path outside `$APPDATA` and `$APPLOG`: the permission scope denies it (AC-07). The macOS reveal command has no path scope; the About section passes it only the two directories it resolves itself.
 
 ## Definition of done
 - Every acceptance criterion passes its mapped verification.
 - Independent review passes and the user approves the spec.
-- The user installs a local build from the merged branch, clicks both Open buttons in Settings → About and sees Finder open at each folder, then takes a capture, clicks copy, and pastes the image into another app.
+- The user installs a local build from the merged branch, clicks both Open buttons in Settings → About and sees Finder show each folder selected in its parent folder, then takes a capture, clicks copy, and pastes the image into another app.
