@@ -19,6 +19,7 @@ struct TestSystem {
     running_default: bool,
     frontmost: RefCell<VecDeque<Option<i32>>>,
     frontmost_default: Option<i32>,
+    cached_frontmost_override: Option<i32>,
     calls: RefCell<Vec<String>>,
     send_error: Option<&'static str>,
     keys_blocked_until_pause: bool,
@@ -36,6 +37,7 @@ impl Default for TestSystem {
             running_default: true,
             frontmost: RefCell::default(),
             frontmost_default: Some(PID),
+            cached_frontmost_override: None,
             calls: RefCell::default(),
             send_error: None,
             keys_blocked_until_pause: false,
@@ -77,6 +79,10 @@ impl MacSystem for TestSystem {
     }
 
     fn frontmost_pid(&self) -> Option<i32> {
+        self.cached_frontmost_override.or(self.frontmost_default)
+    }
+
+    fn live_frontmost_pid(&self) -> Option<i32> {
         self.log("frontmost");
         if self.focus_blocked_until_pause && !self.paused.get() {
             return Some(5);
@@ -216,6 +222,16 @@ fn reactivates_running_target() {
             "cmd-v",
         ]
     );
+}
+
+#[test]
+fn paste_uses_live_foreground_instead_of_cached_frontmost() {
+    let sys = TestSystem {
+        cached_frontmost_override: Some(5),
+        ..Default::default()
+    };
+    synthesize(&sys, Some(PID)).unwrap();
+    assert_eq!(sys.calls().last().map(String::as_str), Some("cmd-v"));
 }
 
 #[test]

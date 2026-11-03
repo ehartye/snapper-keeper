@@ -7,7 +7,12 @@ use crate::{ClipboardError, Result};
 pub(crate) trait MacSystem {
     fn accessibility_granted(&self) -> bool;
     fn keys_released(&self) -> bool;
+    #[cfg_attr(
+        not(target_os = "macos"),
+        allow(dead_code, reason = "Only native macOS capture reads AppKit state")
+    )]
     fn frontmost_pid(&self) -> Option<i32>;
+    fn live_frontmost_pid(&self) -> Option<i32>;
     #[cfg_attr(
         not(target_os = "macos"),
         allow(dead_code, reason = "Only native macOS capture needs its process id")
@@ -44,7 +49,7 @@ impl<S: MacSystem> PasteDesktop for MacDesktop<'_, S> {
     }
 
     fn target_foreground(&self) -> bool {
-        self.sys.frontmost_pid() == Some(self.pid)
+        self.sys.live_frontmost_pid() == Some(self.pid)
     }
 
     fn keys_released(&self) -> bool {
@@ -127,13 +132,63 @@ impl MacSystem for RealMac {
             .map(|application| application.processIdentifier())
     }
 
+    fn live_frontmost_pid(&self) -> Option<i32> {
+        use core_foundation::array::CFArray;
+        use core_foundation::base::{CFType, TCFType};
+        use core_foundation::dictionary::CFDictionary;
+        use core_foundation::number::CFNumber;
+        use core_foundation::string::CFString;
+        use core_graphics::window::{
+            copy_window_info, kCGNullWindowID, kCGWindowLayer, kCGWindowListExcludeDesktopElements,
+            kCGWindowListOptionOnScreenOnly, kCGWindowOwnerPID,
+        };
+
+        let windows = copy_window_info(
+            kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements,
+            kCGNullWindowID,
+        )?;
+        // Safety: CoreGraphics returns an array of Core Foundation window dictionaries.
+        let windows =
+            unsafe { CFArray::<CFType>::wrap_under_get_rule(windows.as_concrete_TypeRef()) };
+        // Safety: these framework constants are valid Core Foundation strings.
+        let (layer_key, pid_key) = unsafe {
+            (
+                CFString::wrap_under_get_rule(kCGWindowLayer).into_CFType(),
+                CFString::wrap_under_get_rule(kCGWindowOwnerPID).into_CFType(),
+            )
+        };
+        for window in windows.iter() {
+            let Some(window) = window.downcast::<CFDictionary>() else {
+                continue;
+            };
+            // Safety: CoreGraphics window dictionaries contain Core Foundation keys and values.
+            let window = unsafe {
+                CFDictionary::<CFType, CFType>::wrap_under_get_rule(window.as_concrete_TypeRef())
+            };
+            let number = |key| window.find(key)?.downcast::<CFNumber>()?.to_i32();
+            if number(&layer_key) == Some(0) {
+                return number(&pid_key);
+            }
+        }
+        None
+    }
+
     fn own_pid(&self) -> i32 {
         std::process::id() as i32
     }
 
     fn is_running(&self, pid: i32) -> bool {
-        objc2_app_kit::NSRunningApplication::runningApplicationWithProcessIdentifier(pid)
-            .is_some_and(|app| !app.isTerminated())
+        extern "C" {
+            fn kill(pid: i32, sig: i32) -> i32;
+        }
+
+        const EPERM: i32 = 1;
+        if pid <= 0 {
+            return false;
+        }
+        // Safety: signal 0 only probes process existence and sends no signal.
+        (unsafe { kill(pid, 0) == 0 })
+            || std::io::Error::last_os_error().raw_os_error() == Some(EPERM)
     }
 
     fn activate(&self, pid: i32) {
@@ -147,16 +202,8 @@ impl MacSystem for RealMac {
     fn pause(&self) {
         #[cfg(not(test))]
         {
-            use core_foundation::runloop::{kCFRunLoopDefaultMode, CFRunLoop};
-            use std::time::Duration;
-
-            // Pump the run loop so AppKit can update its cached application state.
-            // Safety: the Core Foundation default mode is a valid run loop mode.
-            CFRunLoop::run_in_mode(
-                unsafe { kCFRunLoopDefaultMode },
-                Duration::from_millis(10),
-                false,
-            );
+            // A nested run loop deadlocks tao's main-thread observer; paste reads state live.
+            std::thread::sleep(std::time::Duration::from_millis(10));
         }
     }
 
