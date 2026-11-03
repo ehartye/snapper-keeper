@@ -1,9 +1,17 @@
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum PasteChord {
     CtrlV,
+    #[cfg_attr(
+        target_os = "macos",
+        allow(dead_code, reason = "Windows-only terminal paste chord")
+    )]
     ShiftInsert,
 }
 
+#[cfg_attr(
+    target_os = "macos",
+    allow(dead_code, reason = "Windows-only foreground-window class detection")
+)]
 pub(crate) fn chord_for_class(class: &str) -> PasteChord {
     match class {
         "CASCADIA_HOSTING_WINDOW_CLASS" | "ConsoleWindowClass" | "mintty" => {

@@ -7,6 +7,8 @@ mod windows;
 pub struct PasteTarget {
     #[cfg(target_os = "windows")]
     inner: windows::Target,
+    #[cfg(target_os = "macos")]
+    inner: Option<i32>,
 }
 
 pub fn capture_target<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<()> {
@@ -18,7 +20,30 @@ pub fn capture_target<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<()
                 .and_then(|w| w.hwnd().ok()),
         )?;
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    {
+        use crate::paste_macos::MacSystem;
+        use tauri::Manager;
+
+        let system = crate::paste_macos::RealMac;
+        let popup_visible = app
+            .get_webview_window("clipboard-popup")
+            .and_then(|window| window.is_visible().ok())
+            .unwrap_or(false);
+        let mut target =
+            crate::paste_macos::TARGET
+                .lock()
+                .map_err(|_| crate::ClipboardError::PasteFailed {
+                    reason: "Paste target state unavailable.".into(),
+                })?;
+        crate::paste_macos::capture(
+            popup_visible,
+            system.frontmost_pid(),
+            system.own_pid(),
+            &mut target,
+        );
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     let _ = app;
     Ok(())
 }
@@ -35,7 +60,14 @@ pub fn prepare_paste<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) -> Res
             inner: windows::prepare(popup)?,
         })
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    {
+        let _ = window;
+        Ok(PasteTarget {
+            inner: crate::paste_macos::prepare_target(&crate::paste_macos::RealMac)?,
+        })
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
         let _ = window;
         Ok(PasteTarget {})
@@ -43,7 +75,7 @@ pub fn prepare_paste<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) -> Res
 }
 
 pub fn synthesize_paste(target: &PasteTarget) -> Result<()> {
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     let _ = target;
     #[cfg(target_os = "windows")]
     {
@@ -51,13 +83,7 @@ pub fn synthesize_paste(target: &PasteTarget) -> Result<()> {
     }
     #[cfg(target_os = "macos")]
     {
-        // Posting the synthetic Cmd+V is silently dropped by macOS unless the
-        // process holds Accessibility permission. Check first and surface a
-        // typed error the popup can act on, rather than no-op'ing invisibly.
-        if !crate::permissions::accessibility_granted() {
-            return Err(crate::ClipboardError::AccessibilityRequired);
-        }
-        synthesize_paste_macos()
+        crate::paste_macos::synthesize(&crate::paste_macos::RealMac, target.inner)
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
@@ -65,38 +91,4 @@ pub fn synthesize_paste(target: &PasteTarget) -> Result<()> {
             reason: "unsupported platform".into(),
         })
     }
-}
-
-#[cfg(target_os = "macos")]
-fn synthesize_paste_macos() -> Result<()> {
-    use core_graphics::event::{CGEvent, CGEventFlags, CGKeyCode};
-    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
-
-    let source = CGEventSource::new(CGEventSourceStateID::CombinedSessionState).map_err(|_| {
-        crate::ClipboardError::PasteFailed {
-            reason: "failed to create CGEventSource".into(),
-        }
-    })?;
-
-    // 'v' key is keycode 9
-    let key_v: CGKeyCode = 9;
-
-    let key_down = CGEvent::new_keyboard_event(source.clone(), key_v, true).map_err(|_| {
-        crate::ClipboardError::PasteFailed {
-            reason: "failed to create key-down event".into(),
-        }
-    })?;
-    key_down.set_flags(CGEventFlags::CGEventFlagCommand);
-
-    let key_up = CGEvent::new_keyboard_event(source, key_v, false).map_err(|_| {
-        crate::ClipboardError::PasteFailed {
-            reason: "failed to create key-up event".into(),
-        }
-    })?;
-    key_up.set_flags(CGEventFlags::CGEventFlagCommand);
-
-    key_down.post(core_graphics::event::CGEventTapLocation::HID);
-    key_up.post(core_graphics::event::CGEventTapLocation::HID);
-
-    Ok(())
 }
