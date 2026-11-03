@@ -35,6 +35,7 @@
     "snk-library:allow-list-clipboard-items",
     "snk-library:allow-toggle-clipboard-pin",
     "snk-clipboard:allow-show-popup",
+    "snk-clipboard:allow-copy-capture-image",
     "snk-capture:default",
     "opener:default",
     "opener:allow-open-path",

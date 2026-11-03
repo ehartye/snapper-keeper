@@ -34,6 +34,10 @@ export function pasteItem(id: string): Promise<void> {
   return invoke<void>('plugin:snk-clipboard|paste_item', { id });
 }
 
+export function copyCaptureImage(captureId: string): Promise<void> {
+  return invoke<void>('plugin:snk-clipboard|copy_capture_image', { captureId });
+}
+
 export function showPopup(): Promise<CaretPosition> {
   return invoke<CaretPosition>('plugin:snk-clipboard|show_popup');
 }

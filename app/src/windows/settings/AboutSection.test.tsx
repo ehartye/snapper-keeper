@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getVersion } from '@tauri-apps/api/app';
+import { openPath } from '@tauri-apps/plugin-opener';
 
 import { ModalProvider } from '../../components/Modal';
 import { isStoreEdition } from '../../lib/storeEdition';
@@ -36,6 +37,7 @@ beforeEach(() => {
   mockedListen.mockReset().mockResolvedValue(() => {});
   mockedIsStoreEdition.mockReturnValue(false);
   vi.mocked(getVersion).mockClear();
+  vi.mocked(openPath).mockReset().mockResolvedValue(undefined);
 
   const existing = document.getElementById('modal-root');
   if (existing) existing.remove();
@@ -233,21 +235,63 @@ describe('<AboutSection />', () => {
     });
   });
 
-  it('clicking Open on a path row calls openPath', async () => {
+  async function clickOpen(path: string) {
+    const pathElement = await screen.findByText(path);
+    const row = pathElement.closest('div.flex')!;
+    await act(async () => {
+      fireEvent.click(within(row).getByRole('button', { name: 'Open' }));
+    });
+  }
+
+  it('opens the data directory', async () => {
     setStatusResponses();
-    const { openPath } = await import('@tauri-apps/plugin-opener');
     renderAbout();
-    // Wait for the data-dir path to render — that signals useQuery has
-    // resolved and the Open button is no longer disabled. Without this,
-    // CI's slower scheduler clicks the button while dataDirQ.data is
-    // still undefined, the onClick short-circuits, and openPath is
-    // never called.
-    await screen.findByText('/mock/data');
-    const openButtons = screen.getAllByRole('button', { name: /Open/i });
-    expect(openButtons.length).toBeGreaterThanOrEqual(2);
-    fireEvent.click(openButtons[0]!);
+    await clickOpen('/mock/data');
     await waitFor(() => {
-      expect(openPath).toHaveBeenCalled();
+      expect(openPath).toHaveBeenCalledWith('/mock/data');
+    });
+  });
+
+  it('opens the log directory', async () => {
+    setStatusResponses();
+    renderAbout();
+    await clickOpen('/mock/log');
+    await waitFor(() => {
+      expect(openPath).toHaveBeenCalledWith('/mock/log');
+    });
+  });
+
+  it('shows an alert when the data directory cannot be opened', async () => {
+    setStatusResponses();
+    vi.mocked(openPath).mockRejectedValueOnce(new Error('denied'));
+    renderAbout();
+    await clickOpen('/mock/data');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not open the data directory.',
+    );
+  });
+
+  it('shows an alert when the log directory cannot be opened', async () => {
+    setStatusResponses();
+    vi.mocked(openPath).mockRejectedValueOnce(new Error('denied'));
+    renderAbout();
+    await clickOpen('/mock/log');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not open the log directory.',
+    );
+  });
+
+  it('shows no alert when a directory opens', async () => {
+    setStatusResponses();
+    vi.mocked(openPath).mockRejectedValueOnce(new Error('denied'));
+    renderAbout();
+    await clickOpen('/mock/data');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not open the data directory.',
+    );
+    await clickOpen('/mock/log');
+    await waitFor(() => {
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
   });
 });
