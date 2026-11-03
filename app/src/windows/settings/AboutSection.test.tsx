@@ -3,9 +3,10 @@ import { act, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getVersion } from '@tauri-apps/api/app';
-import { openPath } from '@tauri-apps/plugin-opener';
+import { openPath, revealItemInDir } from '@tauri-apps/plugin-opener';
 
 import { ModalProvider } from '../../components/Modal';
+import { isMacPlatform } from '../../lib/shortcuts';
 import { isStoreEdition } from '../../lib/storeEdition';
 import { AboutSection } from './AboutSection';
 import { renderWithQuery } from '../../test/renderWithQuery';
@@ -22,6 +23,12 @@ vi.mock('@tauri-apps/api/path', () => ({
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openPath: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn().mockResolvedValue(undefined),
+  revealItemInDir: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../../lib/shortcuts', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../lib/shortcuts')>(),
+  isMacPlatform: vi.fn(() => false),
 }));
 
 vi.mock('../../lib/storeEdition', () => ({
@@ -37,7 +44,9 @@ beforeEach(() => {
   mockedListen.mockReset().mockResolvedValue(() => {});
   mockedIsStoreEdition.mockReturnValue(false);
   vi.mocked(getVersion).mockClear();
+  vi.mocked(isMacPlatform).mockReset().mockReturnValue(false);
   vi.mocked(openPath).mockReset().mockResolvedValue(undefined);
+  vi.mocked(revealItemInDir).mockReset().mockResolvedValue(undefined);
 
   const existing = document.getElementById('modal-root');
   if (existing) existing.remove();
@@ -243,22 +252,43 @@ describe('<AboutSection />', () => {
     });
   }
 
-  it('opens the data directory', async () => {
+  it('reveals the data directory on macOS', async () => {
+    setStatusResponses();
+    renderAbout();
+    await screen.findByText('/mock/data');
+    vi.mocked(isMacPlatform).mockReturnValue(true);
+    await clickOpen('/mock/data');
+    expect(revealItemInDir).toHaveBeenCalledWith('/mock/data');
+    expect(openPath).not.toHaveBeenCalled();
+  });
+
+  it('reveals the log directory on macOS', async () => {
+    setStatusResponses();
+    vi.mocked(isMacPlatform).mockReturnValue(true);
+    renderAbout();
+    await clickOpen('/mock/log');
+    expect(revealItemInDir).toHaveBeenCalledWith('/mock/log');
+    expect(openPath).not.toHaveBeenCalled();
+  });
+
+  it('opens the data directory off macOS', async () => {
     setStatusResponses();
     renderAbout();
     await clickOpen('/mock/data');
     await waitFor(() => {
       expect(openPath).toHaveBeenCalledWith('/mock/data');
     });
+    expect(revealItemInDir).not.toHaveBeenCalled();
   });
 
-  it('opens the log directory', async () => {
+  it('opens the log directory off macOS', async () => {
     setStatusResponses();
     renderAbout();
     await clickOpen('/mock/log');
     await waitFor(() => {
       expect(openPath).toHaveBeenCalledWith('/mock/log');
     });
+    expect(revealItemInDir).not.toHaveBeenCalled();
   });
 
   it('shows an alert when the data directory cannot be opened', async () => {
@@ -274,6 +304,28 @@ describe('<AboutSection />', () => {
   it('shows an alert when the log directory cannot be opened', async () => {
     setStatusResponses();
     vi.mocked(openPath).mockRejectedValueOnce(new Error('denied'));
+    renderAbout();
+    await clickOpen('/mock/log');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not open the log directory.',
+    );
+  });
+
+  it('shows an alert when revealing the data directory fails on macOS', async () => {
+    setStatusResponses();
+    vi.mocked(isMacPlatform).mockReturnValue(true);
+    vi.mocked(revealItemInDir).mockRejectedValueOnce(new Error('denied'));
+    renderAbout();
+    await clickOpen('/mock/data');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not open the data directory.',
+    );
+  });
+
+  it('shows an alert when revealing the log directory fails on macOS', async () => {
+    setStatusResponses();
+    vi.mocked(isMacPlatform).mockReturnValue(true);
+    vi.mocked(revealItemInDir).mockRejectedValueOnce(new Error('denied'));
     renderAbout();
     await clickOpen('/mock/log');
     expect(await screen.findByRole('alert')).toHaveTextContent(

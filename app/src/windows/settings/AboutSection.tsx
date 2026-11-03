@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getVersion } from '@tauri-apps/api/app';
 import { appDataDir, appLogDir } from '@tauri-apps/api/path';
 import { listen } from '@tauri-apps/api/event';
-import { openPath, openUrl } from '@tauri-apps/plugin-opener';
+import { openPath, openUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
 
 import {
   checkForUpdate,
@@ -17,6 +17,7 @@ import { SettingsSection } from '../../components/SettingsSection';
 import { SettingRow } from '../../components/SettingRow';
 import { Button } from '../../components/Button';
 import { useModal } from '../../components/Modal';
+import { isMacPlatform } from '../../lib/shortcuts';
 import { isStoreEdition } from '../../lib/storeEdition';
 import { useSetting } from './useSetting';
 
@@ -100,7 +101,8 @@ export function AboutSection() {
 
   async function openDirectory(path: string, directory: 'data' | 'log') {
     try {
-      await openPath(path);
+      // macOS treats these .app-suffixed directories as application bundles.
+      await (isMacPlatform() ? revealItemInDir(path) : openPath(path));
       setOpenError(null);
     } catch {
       setOpenError(directory);
